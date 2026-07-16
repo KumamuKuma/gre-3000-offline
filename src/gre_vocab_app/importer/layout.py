@@ -1,12 +1,15 @@
 import re
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 from .types import ParserState, RawWordRow, TextSpan
 
 
 COLUMN_BOUNDS = (0.0, 95.0, 180.0, 315.0, 380.0, 596.0)
 HEADWORD = re.compile(r"^[A-Za-z][A-Za-z .'-]*$")
+COMBINED_HEADWORD_PHONETIC = re.compile(
+    r"^([A-Za-z][A-Za-z .'-]*?)\s+(\[[^\n]+\])$"
+)
 SECTION = re.compile(r"(补充重点单词\s*)?list\s*(\d+)", re.IGNORECASE)
 SUPPLEMENT = re.compile(r"补充重点单词")
 MAIN_HEADER = re.compile(r"张巍|镇考|乱序版")
@@ -26,6 +29,21 @@ def extract_page_spans(page) -> list[TextSpan]:
                         TextSpan(x0, y0, x1, y1, text, item["size"])
                     )
     return result
+
+
+def extract_page_row_boundaries(page) -> tuple[float, ...]:
+    minimum_width = float(page.rect.width) * 0.8
+    candidates = sorted(
+        float(drawing["rect"].y0)
+        for drawing in page.get_drawings()
+        if drawing["rect"].width > minimum_width
+        and drawing["rect"].height < 1.0
+    )
+    boundaries: list[float] = []
+    for candidate in candidates:
+        if not boundaries or candidate - boundaries[-1] > 0.5:
+            boundaries.append(candidate)
+    return tuple(boundaries)
 
 
 def _column(x0: float) -> int | None:
@@ -52,10 +70,90 @@ def _center_y(span: TextSpan) -> float:
     return (span.y0 + span.y1) / 2
 
 
+def _merge_wrapped_anchors(anchors: list[TextSpan]) -> list[TextSpan]:
+    merged: list[TextSpan] = []
+    for anchor in anchors:
+        if not merged or anchor.y0 >= merged[-1].y1:
+            merged.append(anchor)
+            continue
+
+        previous = merged[-1]
+        same_line = (
+            abs(_center_y(previous) - _center_y(anchor))
+            <= HEADER_LINE_TOLERANCE
+        )
+        separated = anchor.x0 > previous.x1 + 1.0
+        separator = " " if same_line and separated else ""
+        merged[-1] = TextSpan(
+            x0=min(previous.x0, anchor.x0),
+            y0=min(previous.y0, anchor.y0),
+            x1=max(previous.x1, anchor.x1),
+            y1=max(previous.y1, anchor.y1),
+            text=f"{previous.text}{separator}{anchor.text}",
+            size=max(previous.size, anchor.size),
+        )
+    return merged
+
+
+def _split_combined_headword_phonetic(spans: Iterable[TextSpan]) -> list[TextSpan]:
+    result: list[TextSpan] = []
+    for span in spans:
+        match = (
+            COMBINED_HEADWORD_PHONETIC.fullmatch(span.text)
+            if span.x0 < COLUMN_BOUNDS[1]
+            else None
+        )
+        if match is None:
+            result.append(span)
+            continue
+
+        headword, phonetic = match.groups()
+        result.extend(
+            (
+                TextSpan(
+                    span.x0,
+                    span.y0,
+                    min(span.x1, COLUMN_BOUNDS[1] - 1.0),
+                    span.y1,
+                    headword,
+                    span.size,
+                ),
+                TextSpan(
+                    COLUMN_BOUNDS[1] + 1.0,
+                    span.y0,
+                    max(span.x1, COLUMN_BOUNDS[1] + 2.0),
+                    span.y1,
+                    phonetic,
+                    span.size,
+                ),
+            )
+        )
+    return result
+
+
+def _physical_row_bounds(
+    anchor: TextSpan, row_boundaries: Sequence[float]
+) -> tuple[float, float] | None:
+    center = _center_y(anchor)
+    lower = [boundary for boundary in row_boundaries if boundary < center]
+    upper = [boundary for boundary in row_boundaries if boundary > center]
+    if not lower or not upper:
+        return None
+    return max(lower), min(upper)
+
+
 def group_spans_into_rows(
-    spans: list[TextSpan], page_number: int, state: ParserState
+    spans: list[TextSpan],
+    page_number: int,
+    state: ParserState,
+    *,
+    row_boundaries: Sequence[float] = (),
 ) -> tuple[list[RawWordRow], ParserState]:
-    usable = [span for span in spans if 38 <= span.y0 <= 810 and span.size <= 25]
+    usable = [
+        span
+        for span in _split_combined_headword_phonetic(spans)
+        if 38 <= span.y0 <= 810 and span.size <= 25
+    ]
     section_events: list[tuple[float, str]] = []
     for span in usable:
         match = SECTION.search(span.text)
@@ -95,7 +193,7 @@ def group_spans_into_rows(
             for y in header_centers
         )
     ]
-    anchors = sorted(
+    anchor_spans = sorted(
         [
             span
             for span in content
@@ -103,6 +201,7 @@ def group_spans_into_rows(
         ],
         key=_center_y,
     )
+    anchors = _merge_wrapped_anchors(anchor_spans)
 
     rows: list[RawWordRow] = []
     current_section = state.section
@@ -112,16 +211,18 @@ def group_spans_into_rows(
             if event_y <= _center_y(anchor):
                 current_section = event_section
 
-        start_y = (
+        midpoint_start = (
             (_center_y(anchors[index - 1]) + _center_y(anchor)) / 2
             if index
             else 38
         )
-        end_y = (
+        midpoint_end = (
             (_center_y(anchor) + _center_y(anchors[index + 1])) / 2
             if index + 1 < len(anchors)
             else 810
         )
+        physical_bounds = _physical_row_bounds(anchor, row_boundaries)
+        start_y, end_y = physical_bounds or (midpoint_start, midpoint_end)
         buckets: list[list[TextSpan]] = [[] for _ in range(5)]
         for item in content:
             center_y = _center_y(item)
@@ -129,7 +230,9 @@ def group_spans_into_rows(
             if column is not None and start_y <= center_y < end_y:
                 buckets[column].append(item)
 
-        columns = tuple(_join_cell(bucket) for bucket in buckets)
+        columns = (anchor.text,) + tuple(
+            _join_cell(bucket) for bucket in buckets[1:]
+        )
         flags = ("missing_phonetic",) if not columns[1] else ()
         rows.append(
             RawWordRow(

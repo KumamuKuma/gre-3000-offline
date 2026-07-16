@@ -3,6 +3,7 @@ import os
 import fitz
 import pytest
 
+from gre_vocab_app.importer import layout as layout_module
 from gre_vocab_app.importer.layout import extract_page_spans, group_spans_into_rows
 from gre_vocab_app.importer.types import ParserState, TextSpan
 
@@ -73,6 +74,89 @@ def test_assigns_leading_cell_lines_to_nearest_headword_row():
     assert rows[0].columns[4] == "first example\nfirst example detail"
     assert rows[1].columns[2] == "second definition"
     assert rows[1].columns[4] == "second example\nsecond example detail"
+
+
+def test_merges_overlapping_wrapped_headword_spans_without_merging_next_word():
+    spans = [
+        TextSpan(19, 70, 92, 87, "anthropocentri", 10),
+        TextSpan(19, 81, 36, 98, "sm", 10),
+        TextSpan(100, 70, 160, 87, "[ˌænθrəpəˈsentrɪz", 10),
+        TextSpan(100, 81, 124, 98, "əm]", 10),
+        TextSpan(188, 70, 300, 87, "n. a belief that considers", 10),
+        TextSpan(188, 81, 300, 98, "human beings as central", 10),
+        TextSpan(19, 140, 72, 157, "creed", 10),
+        TextSpan(100, 140, 160, 157, "[krid]", 10),
+        TextSpan(188, 140, 300, 157, "n. a set of beliefs", 10),
+    ]
+
+    rows, state = group_spans_into_rows(
+        spans,
+        page_number=40,
+        state=ParserState(next_order=412, section="list4"),
+    )
+
+    assert [row.columns[0] for row in rows] == ["anthropocentrism", "creed"]
+    assert rows[0].columns[1] == "[ˌænθrəpəˈsentrɪz\nəm]"
+    assert rows[0].columns[2] == (
+        "n. a belief that considers\nhuman beings as central"
+    )
+    assert [row.source_order for row in rows] == [412, 413]
+    assert state.next_order == 414
+
+
+def test_explicit_row_bands_prevent_short_row_from_absorbing_neighbors():
+    spans = [
+        TextSpan(19, 50, 70, 67, "alpha", 10),
+        TextSpan(100, 50, 150, 67, "[a]", 10),
+        TextSpan(384, 55, 500, 66, "alpha example", 10),
+        TextSpan(384, 90, 500, 101, "alpha tail", 10),
+        TextSpan(19, 110, 70, 127, "beta", 10),
+        TextSpan(100, 110, 150, 127, "[b]", 10),
+        TextSpan(384, 105, 500, 116, "beta example", 10),
+        TextSpan(19, 170, 70, 187, "gamma", 10),
+        TextSpan(100, 170, 150, 187, "[g]", 10),
+        TextSpan(384, 165, 500, 176, "gamma example", 10),
+    ]
+
+    rows, _ = group_spans_into_rows(
+        spans,
+        page_number=110,
+        state=ParserState(next_order=1, section="list12"),
+        row_boundaries=(40.0, 100.0, 160.0, 220.0),
+    )
+
+    assert [row.columns[4] for row in rows] == [
+        "alpha example\nalpha tail",
+        "beta example",
+        "gamma example",
+    ]
+
+
+def test_splits_combined_headword_and_phonetic_span_into_one_real_row():
+    spans = [
+        TextSpan(
+            19,
+            70,
+            176,
+            87,
+            "heterogeneous [ˌhetərəˈdʒi:niəs]",
+            10,
+        ),
+        TextSpan(188, 70, 300, 87, "adj. made up of parts", 10),
+        TextSpan(19, 130, 80, 147, "oppressive", 10),
+        TextSpan(100, 130, 160, 147, "[əˈpresɪv]", 10),
+        TextSpan(188, 130, 300, 147, "adj. very cruel", 10),
+    ]
+
+    rows, _ = group_spans_into_rows(
+        spans,
+        page_number=119,
+        state=ParserState(next_order=1, section="list13"),
+        row_boundaries=(40.0, 100.0, 160.0),
+    )
+
+    assert [row.columns[0] for row in rows] == ["heterogeneous", "oppressive"]
+    assert rows[0].columns[1] == "[ˌhetərəˈdʒi:niəs]"
 
 
 def test_updates_section_for_split_mid_page_supplement_header():
@@ -152,3 +236,105 @@ def test_real_pdf_sample_pages_have_five_column_rows(page_index):
     assert rows
     assert all(len(row.columns) == 5 for row in rows)
     assert all(row.columns[0] for row in rows)
+
+
+@pytest.mark.parametrize(
+    "page_index, complete_headword, continuation",
+    [
+        (7, "unconscionable", "e"),
+        (39, "anthropocentrism", "sm"),
+        (104, "half-formulated", "formulated"),
+    ],
+)
+def test_real_pdf_wrapped_headword_has_one_anchor_row(
+    page_index, complete_headword, continuation
+):
+    source = os.environ.get("GRE_SOURCE_PDF")
+    if not source:
+        pytest.skip("GRE_SOURCE_PDF is not configured")
+
+    with fitz.open(source) as document:
+        spans = extract_page_spans(document[page_index])
+    rows, _ = group_spans_into_rows(
+        spans,
+        page_number=page_index + 1,
+        state=ParserState(next_order=1, section="sample"),
+    )
+    headwords = [row.columns[0] for row in rows]
+
+    assert complete_headword in headwords
+    assert continuation not in headwords
+
+
+def _real_pdf_rows(page_index):
+    source = os.environ.get("GRE_SOURCE_PDF")
+    if not source:
+        pytest.skip("GRE_SOURCE_PDF is not configured")
+
+    with fitz.open(source) as document:
+        page = document[page_index]
+        spans = extract_page_spans(page)
+        boundaries = layout_module.extract_page_row_boundaries(page)
+    rows, _ = group_spans_into_rows(
+        spans,
+        page_number=page_index + 1,
+        state=ParserState(next_order=1, section="sample"),
+        row_boundaries=boundaries,
+    )
+    return {row.columns[0]: row for row in rows}
+
+
+def test_real_pdf_row_bands_recover_bottom_translation():
+    rows = _real_pdf_rows(8)
+
+    assert rows["fluctuate"].columns[4] == (
+        "Body temperature can fluctuate if you\n"
+        "are ill.\n"
+        "人患病后体温可能会上下波动。"
+    )
+
+
+def test_real_pdf_row_bands_keep_comestible_and_neighbors_separate():
+    rows = _real_pdf_rows(13)
+
+    assert rows["occult"].columns[4].endswith("过同样的情景似的。")
+    assert rows["comestible"].columns[4] == (
+        "Ethyl lactate is one kind of comestible\n"
+        "synthetic spicery.\n"
+        "乳酸乙酯是一种食用合成香料。"
+    )
+    assert rows["embed"].columns[4].startswith("They used to kind of embed it")
+
+
+def test_real_pdf_short_slump_row_does_not_absorb_either_neighbor():
+    rows = _real_pdf_rows(109)
+
+    assert rows["belabor"].columns[4].endswith("解这件事的重要性")
+    assert rows["slump"].columns[4] == (
+        "Sales have slumped this year.\n今年销售量锐减。"
+    )
+    assert rows["elemental"].columns[4].startswith(
+        "Learning to control one of the most ele"
+    )
+    assert rows["aboriginal"].columns[4].startswith(
+        "The lndians are the aboriginal"
+    )
+
+
+def test_real_pdf_combined_headword_phonetic_restores_missing_row_and_neighbors():
+    rows = _real_pdf_rows(118)
+
+    assert rows["heterogeneous"].columns == (
+        "heterogeneous",
+        "[ˌhetərəˈdʒi:niəs]",
+        "adj. made up of parts that\nare different\n各种各样的",
+        "disparate,\ndissimilar",
+        "America has a very heterogeneous\npopulation.\n美国人口是由不同种族组成的。",
+    )
+    assert "adj. made up of parts" not in rows["halfhearted"].columns[2]
+    assert rows["oppressive"].columns[2].startswith(
+        "(1)adj. very cruel or unfair"
+    )
+    assert "are different" not in rows["oppressive"].columns[2]
+    assert rows["oppressive"].columns[3] == ""
+    assert not rows["oppressive"].columns[4].startswith("美国人口")

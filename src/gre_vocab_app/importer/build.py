@@ -15,7 +15,11 @@ import fitz
 from gre_vocab_app.db.schema import CONTENT_SCHEMA, CONTENT_SCHEMA_VERSION
 
 from .audit import write_audit
-from .layout import extract_page_spans, group_spans_into_rows
+from .layout import (
+    extract_page_row_boundaries,
+    extract_page_spans,
+    group_spans_into_rows,
+)
 from .normalize import WordDraft, normalize_row
 from .types import ParserState
 
@@ -129,10 +133,12 @@ def _extract(pdf_path: Path) -> tuple[list[WordDraft], int]:
             raise ValueError("encrypted PDF requires a password")
         page_count = len(document)
         for page_index in range(4, page_count):
+            page = document[page_index]
             rows, state = group_spans_into_rows(
-                extract_page_spans(document[page_index]),
+                extract_page_spans(page),
                 page_number=page_index + 1,
                 state=state,
+                row_boundaries=extract_page_row_boundaries(page),
             )
             entries.extend(normalize_row(row) for row in rows)
     return entries, page_count

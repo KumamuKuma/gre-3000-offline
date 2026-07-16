@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtTextToSpeech import QTextToSpeech, QVoice
 
 
@@ -33,6 +33,8 @@ class QtSpeechBackend(QObject):
         super().__init__(parent)
         self._engine: QTextToSpeech | None = None
         self._voices_by_name: dict[str, QVoice] = {}
+        self._pending_errors: list[tuple[str, str]] = []
+        self._retain_errors = True
         try:
             engines = list(QTextToSpeech.availableEngines())
             preferred = next(
@@ -43,7 +45,7 @@ class QtSpeechBackend(QObject):
                 self._engine = QTextToSpeech(preferred, self)
                 self._engine.errorOccurred.connect(self._on_engine_error)
         except (RuntimeError, TypeError) as error:
-            self.errorOccurred.emit(
+            self._report_error(
                 "朗读服务初始化失败，请检查 Windows 语音设置。",
                 f"QTextToSpeech initialization failed: {error}",
             )
@@ -69,7 +71,15 @@ class QtSpeechBackend(QObject):
             )
         )
         self._voices_by_name = {}
-        for option in options:
+        selection_order = sorted(
+            options,
+            key=lambda option: (
+                option.name.casefold(),
+                not option.locale.replace("_", "-").casefold().startswith("en"),
+                option.locale.casefold(),
+            ),
+        )
+        for option in selection_order:
             self._voices_by_name.setdefault(
                 option.name, discovered[(option.name, option.locale)]
             )
@@ -79,7 +89,7 @@ class QtSpeechBackend(QObject):
         try:
             return self._discover_voices()
         except (RuntimeError, TypeError) as error:
-            self.errorOccurred.emit(
+            self._report_error(
                 "无法读取 Windows 语音列表。",
                 f"QTextToSpeech voice discovery failed: {error}",
             )
@@ -97,7 +107,7 @@ class QtSpeechBackend(QObject):
             self._engine.setVoice(voice)
             return True
         except (RuntimeError, TypeError) as error:
-            self.errorOccurred.emit(
+            self._report_error(
                 "无法切换朗读语音。",
                 f"QTextToSpeech setVoice failed for {name!r}: {error}",
             )
@@ -117,10 +127,21 @@ class QtSpeechBackend(QObject):
         self, reason: QTextToSpeech.ErrorReason, message: str
     ) -> None:
         detail = message or (self._engine.errorString() if self._engine else "")
-        self.errorOccurred.emit(
+        self._report_error(
             "朗读失败，请检查 Windows 语音设置。",
             f"QTextToSpeech {reason.name}: {detail}",
         )
+
+    def _report_error(self, user_message: str, technical: str) -> None:
+        if self._retain_errors:
+            self._pending_errors.append((user_message, technical))
+        self.errorOccurred.emit(user_message, technical)
+
+    def take_pending_errors(self) -> tuple[tuple[str, str], ...]:
+        errors = tuple(self._pending_errors)
+        self._pending_errors.clear()
+        self._retain_errors = False
+        return errors
 
 
 class SpeechService(QObject):
@@ -131,14 +152,20 @@ class SpeechService(QObject):
     ):
         super().__init__(parent)
         self._backend = backend or QtSpeechBackend(self)
+        self._pending_errors: list[tuple[str, str]] = []
+        self._error_flush_scheduled = False
+        backend_error = getattr(self._backend, "errorOccurred", None)
+        if backend_error is not None and hasattr(backend_error, "connect"):
+            backend_error.connect(self._relay_error)
+        take_pending = getattr(self._backend, "take_pending_errors", None)
+        if callable(take_pending):
+            for user_message, technical in take_pending():
+                self._queue_error(user_message, technical)
         self._voices = tuple(
             voice
             for voice in self._backend.voices()
             if voice.locale.replace("_", "-").casefold().startswith("en")
         )
-        backend_error = getattr(self._backend, "errorOccurred", None)
-        if backend_error is not None and hasattr(backend_error, "connect"):
-            backend_error.connect(self._relay_error)
 
     @property
     def available(self) -> bool:
@@ -174,10 +201,22 @@ class SpeechService(QObject):
             return False
 
     def _relay_error(self, user_message: str, technical: str) -> None:
-        self.errorOccurred.emit(user_message, technical)
+        self._queue_error(user_message, technical)
 
     def _emit_exception(self, user_message: str, error: Exception) -> None:
-        self.errorOccurred.emit(
+        self._queue_error(
             user_message, f"{type(error).__name__}: {error}"
         )
 
+    def _queue_error(self, user_message: str, technical: str) -> None:
+        self._pending_errors.append((user_message, technical))
+        if not self._error_flush_scheduled:
+            self._error_flush_scheduled = True
+            QTimer.singleShot(0, self._flush_errors)
+
+    def _flush_errors(self) -> None:
+        errors = tuple(self._pending_errors)
+        self._pending_errors.clear()
+        self._error_flush_scheduled = False
+        for user_message, technical in errors:
+            self.errorOccurred.emit(user_message, technical)

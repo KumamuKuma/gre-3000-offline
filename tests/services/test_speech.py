@@ -1,3 +1,5 @@
+from PySide6.QtCore import QObject, Signal
+
 from gre_vocab_app.services.speech import SpeechService, VoiceOption
 
 
@@ -62,3 +64,29 @@ def test_backend_failure_emits_user_and_technical_error(qtbot):
     assert "朗读" in user_message
     assert "synthetic engine failure" in technical
 
+
+class FailingDiscoveryBackend(QObject):
+    errorOccurred = Signal(str, str)
+    available = True
+
+    def voices(self):
+        self.errorOccurred.emit("无法读取语音列表。", "voice discovery exploded")
+        return ()
+
+    def select_voice(self, _name):
+        return False
+
+    def set_rate(self, _value):
+        return None
+
+    def say(self, _text):
+        return False
+
+
+def test_discovery_error_is_delivered_after_service_construction(qtbot):
+    service = SpeechService(backend=FailingDiscoveryBackend())
+
+    with qtbot.waitSignal(service.errorOccurred) as signal:
+        pass
+
+    assert signal.args == ["无法读取语音列表。", "voice discovery exploded"]

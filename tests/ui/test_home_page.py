@@ -41,15 +41,28 @@ def test_home_action_buttons_and_result_selection_emit_domain_values(
     assert page.results.count() == 2
     assert sample_word.definition_zh in page.results.item(0).text()
 
-    page.results.setCurrentRow(1)
     with qtbot.waitSignal(page.wordSelected) as selected:
-        page.results.itemActivated.emit(page.results.item(1))
+        page.results.setCurrentRow(1)
     assert selected.args == [other]
 
     page.search_edit.setText("missing")
     page.set_results([])
     assert page.results.count() == 0
     assert page.no_results_label.isVisible()
+
+
+def test_clearing_search_immediately_clears_stale_empty_state(qtbot):
+    page = HomePage()
+    qtbot.addWidget(page)
+    page.show()
+    page.search_edit.setText("missing")
+    page.set_results([])
+    assert page.no_results_label.isVisible()
+
+    page.search_edit.clear()
+
+    assert page.no_results_label.isHidden()
+    assert page.results.count() == 0
 
 
 def test_ctrl_f_focuses_home_search(qtbot):

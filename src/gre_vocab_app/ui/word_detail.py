@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -21,9 +24,18 @@ class WordDetail(QWidget):
         self._word: WordEntry | None = None
         self._revealed = True
 
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        content = QWidget()
+        content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        root = QVBoxLayout(content)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(14)
+        root.setSizeConstraint(QLayout.SetMinAndMaxSize)
 
         word_card = QWidget(objectName="wordCard")
         word_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -70,6 +82,8 @@ class WordDetail(QWidget):
         meaning_layout.addWidget(self.example_zh_label)
         root.addWidget(self.meaning_panel)
         root.addStretch(1)
+        self.scroll_area.setWidget(content)
+        outer.addWidget(self.scroll_area)
 
     @staticmethod
     def _label(*, object_name: str = "") -> QLabel:

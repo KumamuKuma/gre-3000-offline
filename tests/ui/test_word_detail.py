@@ -28,6 +28,8 @@ def test_word_detail_clears_stale_optional_fields_and_supports_long_text(
 ):
     detail = WordDetail()
     qtbot.addWidget(detail)
+    detail.resize(420, 220)
+    detail.show()
     first = replace(
         sample_word,
         synonyms="unavoidable, preordained, ineluctable",
@@ -37,6 +39,7 @@ def test_word_detail_clears_stale_optional_fields_and_supports_long_text(
     detail.set_word(first, reveal=True)
     assert detail.synonyms_label.text()
     assert detail.example_en_label.wordWrap()
+    qtbot.waitUntil(lambda: detail.scroll_area.verticalScrollBar().maximum() > 0)
 
     detail.set_word(
         replace(sample_word, synonyms="", example_en="", example_zh=""),
@@ -47,4 +50,3 @@ def test_word_detail_clears_stale_optional_fields_and_supports_long_text(
     assert detail.example_en_label.text() == ""
     assert detail.example_en_label.isHidden()
     assert detail.definition_label.textInteractionFlags() & Qt.TextSelectableByMouse
-

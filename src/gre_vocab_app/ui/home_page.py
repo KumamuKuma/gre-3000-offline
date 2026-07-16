@@ -46,9 +46,7 @@ class HomePage(QWidget):
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("搜索英文单词（Ctrl+F）")
         self.search_edit.setClearButtonEnabled(True)
-        self.search_edit.textChanged.connect(
-            lambda text: self.searchRequested.emit(text.strip())
-        )
+        self.search_edit.textChanged.connect(self._on_search_changed)
         root.addWidget(self.search_edit)
         self.find_shortcut = QShortcut(QKeySequence.StandardKey.Find, self)
         self.find_shortcut.setContext(Qt.ApplicationShortcut)
@@ -86,7 +84,8 @@ class HomePage(QWidget):
         root.addWidget(self.no_results_label)
         self.results = QListWidget()
         self.results.setAlternatingRowColors(False)
-        self.results.itemActivated.connect(self._emit_word)
+        self.results.currentItemChanged.connect(self._selection_changed)
+        self.results.hide()
         root.addWidget(self.results, 1)
 
     @staticmethod
@@ -129,6 +128,18 @@ class HomePage(QWidget):
         self.no_results_label.setVisible(
             not has_results and bool(self.search_edit.text().strip())
         )
+
+    def _on_search_changed(self, text: str) -> None:
+        self.results.clear()
+        self.results.hide()
+        self.no_results_label.hide()
+        self.searchRequested.emit(text.strip())
+
+    def _selection_changed(
+        self, current: QListWidgetItem | None, _previous: QListWidgetItem | None
+    ) -> None:
+        if current is not None:
+            self._emit_word(current)
 
     def _emit_word(self, item: QListWidgetItem) -> None:
         word = item.data(Qt.UserRole)

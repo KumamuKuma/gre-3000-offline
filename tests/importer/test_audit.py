@@ -81,6 +81,18 @@ def test_cli_strict_mode_writes_outputs_then_returns_two(tmp_path, capsys):
     for _ in range(5):
         document.new_page(width=596, height=842)
     page = document[4]
+    for y in (11.16, 40.16, 101.16):
+        page.draw_rect(
+            fitz.Rect(17.16, y, 569.52, y + 0.36),
+            color=None,
+            fill=(0, 0, 0),
+        )
+    for x in (17.16, 98.16, 186.16, 323.16, 382.16, 569.16):
+        page.draw_rect(
+            fitz.Rect(x, 11.16, x + 0.36, 101.52),
+            color=None,
+            fill=(0, 0, 0),
+        )
     page.insert_text((19, 70), "alpha", fontsize=10)
     page.insert_text((100, 70), "[a]", fontsize=10)
     page.insert_text((188, 70), "adj. sample", fontsize=10)
@@ -134,4 +146,3 @@ def test_cli_returns_one_for_missing_input(tmp_path, capsys):
     )
     assert result == 1
     assert "error:" in capsys.readouterr().err.lower()
-

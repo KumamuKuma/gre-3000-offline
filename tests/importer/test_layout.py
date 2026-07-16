@@ -338,3 +338,130 @@ def test_real_pdf_combined_headword_phonetic_restores_missing_row_and_neighbors(
     assert "are different" not in rows["oppressive"].columns[2]
     assert rows["oppressive"].columns[3] == ""
     assert not rows["oppressive"].columns[4].startswith("美国人口")
+
+
+def test_physical_row_coverage_rejects_a_band_without_a_headword_anchor():
+    spans = [
+        span(19, 50, "alpha"),
+        span(100, 50, "[alpha]"),
+        span(188, 50, "first definition"),
+        span(100, 110, "[missing]"),
+        span(188, 110, "definition without a headword"),
+    ]
+
+    with pytest.raises(
+        ValueError,
+        match=r"page 5 physical row coverage failed: .*empty_row_bands=1",
+    ):
+        layout_module.validate_physical_row_coverage(
+            spans,
+            page_number=5,
+            physical_row_bands=((40.0, 100.0), (100.0, 160.0)),
+        )
+
+
+def test_physical_row_coverage_rejects_multiple_anchors_in_one_band():
+    spans = [
+        span(19, 50, "alpha"),
+        span(100, 50, "[alpha]"),
+        span(19, 75, "beta"),
+        span(100, 75, "[beta]"),
+    ]
+
+    with pytest.raises(
+        ValueError,
+        match=r"page 5 physical row coverage failed: .*multi_anchor_row_bands=1",
+    ):
+        layout_module.validate_physical_row_coverage(
+            spans,
+            page_number=5,
+            physical_row_bands=((40.0, 100.0),),
+        )
+
+
+def test_unicode_latin_headwords_are_anchors_but_non_latin_headers_are_not():
+    spans = [
+        span(19, 50, "单词"),
+        span(19, 110, "naiveté"),
+        span(100, 110, "[na:'i:vtei]"),
+        span(188, 110, "n. innocence"),
+        span(19, 170, "cliché"),
+        span(100, 170, "['kli:ʃei]"),
+        span(188, 170, "n. a hackneyed theme"),
+    ]
+
+    rows, _ = group_spans_into_rows(
+        spans,
+        page_number=5,
+        state=ParserState(next_order=1, section="list1"),
+        row_boundaries=(40.0, 100.0, 160.0, 220.0),
+    )
+
+    assert [row.columns[0] for row in rows] == ["naiveté", "cliché"]
+
+
+def test_real_pdf_all_independent_physical_word_bands_have_one_anchor():
+    source = os.environ.get("GRE_SOURCE_PDF")
+    if not source:
+        pytest.skip("GRE_SOURCE_PDF is not configured")
+
+    physical_row_bands = 0
+    with fitz.open(source) as document:
+        for page_index in range(4, len(document)):
+            page = document[page_index]
+            spans = extract_page_spans(page)
+            bands = layout_module.extract_page_word_row_bands(
+                page,
+                spans,
+                is_last_page=page_index + 1 == len(document),
+            )
+            coverage = layout_module.validate_physical_row_coverage(
+                spans,
+                page_number=page_index + 1,
+                physical_row_bands=bands,
+            )
+            physical_row_bands += coverage.physical_row_bands
+            assert coverage.empty_row_bands == 0
+            assert coverage.multi_anchor_row_bands == 0
+
+    assert physical_row_bands == 3292
+
+
+@pytest.mark.parametrize(
+    "page_index, headword",
+    [(180, "naiveté"), (204, "cliché")],
+)
+def test_real_pdf_unicode_latin_headword_row_is_not_missed(page_index, headword):
+    rows = _real_pdf_rows(page_index)
+
+    assert headword in rows
+
+
+def test_page_288_requiem_uses_an_independent_footer_bounded_physical_row():
+    source = os.environ.get("GRE_SOURCE_PDF")
+    if not source:
+        pytest.skip("GRE_SOURCE_PDF is not configured")
+
+    with fitz.open(source) as document:
+        page = document[287]
+        spans = extract_page_spans(page)
+        bands = layout_module.extract_page_word_row_bands(
+            page,
+            spans,
+            is_last_page=True,
+        )
+        rows, _ = group_spans_into_rows(
+            spans,
+            page_number=288,
+            state=ParserState(next_order=1, section="supplement-4"),
+            physical_row_bands=bands,
+        )
+    requiem = next(span for span in spans if span.text == "requiem")
+    requiem_center = (requiem.y0 + requiem.y1) / 2
+    footer_top = min(
+        span.y0 for span in spans if span.y0 > 800 and span.size < 9
+    )
+
+    assert bands[-1] == pytest.approx((667.160034, footer_top))
+    assert bands[-1][0] <= requiem_center < bands[-1][1]
+    assert rows[-1].columns[0] == "requiem"

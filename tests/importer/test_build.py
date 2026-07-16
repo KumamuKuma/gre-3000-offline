@@ -1,8 +1,10 @@
 import json
 import sqlite3
 
+import fitz
 import pytest
 
+from gre_vocab_app.importer import build as build_module
 from gre_vocab_app.importer.build import apply_overrides, build_database
 from gre_vocab_app.importer.normalize import WordDraft
 
@@ -90,3 +92,46 @@ def test_database_replaces_existing_target_atomically(tmp_path):
         assert db.execute("select count(*) from words").fetchone()[0] == 1
     assert not list(tmp_path.glob("*.tmp"))
 
+
+def test_import_rejects_a_physical_word_row_without_a_headword(tmp_path, capsys):
+    source = tmp_path / "missing-headword.pdf"
+    with fitz.open() as document:
+        for _ in range(6):
+            document.new_page(width=595.44, height=841.68)
+        page = document[4]
+        for y in (11.16, 40.16, 101.16):
+            page.draw_rect(
+                fitz.Rect(17.16, y, 569.52, y + 0.36),
+                color=None,
+                fill=(0, 0, 0),
+            )
+        for x in (17.16, 98.16, 186.16, 323.16, 382.16, 569.16):
+            page.draw_rect(
+                fitz.Rect(x, 11.16, x + 0.36, 101.52),
+                color=None,
+                fill=(0, 0, 0),
+            )
+        page.insert_text((188.0, 70.0), "definition without a headword")
+        document.save(source)
+    overrides = tmp_path / "overrides.json"
+    overrides.write_text("{}", encoding="utf-8")
+
+    exit_code = build_module.main(
+        [
+            "--pdf",
+            str(source),
+            "--output",
+            str(tmp_path / "words.db"),
+            "--audit-json",
+            str(tmp_path / "audit.json"),
+            "--audit-html",
+            str(tmp_path / "audit.html"),
+            "--overrides",
+            str(overrides),
+            "--strict",
+        ]
+    )
+
+    assert exit_code == 1
+    assert "empty_row_bands=1" in capsys.readouterr().err
+    assert not (tmp_path / "words.db").exists()

@@ -16,9 +16,11 @@ from gre_vocab_app.db.schema import CONTENT_SCHEMA, CONTENT_SCHEMA_VERSION
 
 from .audit import write_audit
 from .layout import (
-    extract_page_row_boundaries,
+    PhysicalRowCoverage,
     extract_page_spans,
+    extract_page_word_row_bands,
     group_spans_into_rows,
+    validate_physical_row_coverage,
 )
 from .normalize import WordDraft, normalize_row
 from .types import ParserState
@@ -125,23 +127,46 @@ def build_database(entries: Sequence[WordDraft], output_path: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _extract(pdf_path: Path) -> tuple[list[WordDraft], int]:
+def _extract(
+    pdf_path: Path,
+) -> tuple[list[WordDraft], int, PhysicalRowCoverage]:
     entries: list[WordDraft] = []
     state = ParserState(next_order=1, section="unknown")
+    physical_row_bands = 0
     with fitz.open(pdf_path) as document:
         if document.needs_pass:
             raise ValueError("encrypted PDF requires a password")
         page_count = len(document)
         for page_index in range(4, page_count):
             page = document[page_index]
+            spans = extract_page_spans(page)
+            bands = extract_page_word_row_bands(
+                page,
+                spans,
+                is_last_page=page_index + 1 == page_count,
+            )
+            coverage = validate_physical_row_coverage(
+                spans,
+                page_number=page_index + 1,
+                physical_row_bands=bands,
+            )
+            physical_row_bands += coverage.physical_row_bands
             rows, state = group_spans_into_rows(
-                extract_page_spans(page),
+                spans,
                 page_number=page_index + 1,
                 state=state,
-                row_boundaries=extract_page_row_boundaries(page),
+                physical_row_bands=bands,
             )
             entries.extend(normalize_row(row) for row in rows)
-    return entries, page_count
+    return (
+        entries,
+        page_count,
+        PhysicalRowCoverage(
+            physical_row_bands=physical_row_bands,
+            empty_row_bands=0,
+            multi_anchor_row_bands=0,
+        ),
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -156,7 +181,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _run(args: argparse.Namespace) -> int:
-    entries, page_count = _extract(args.pdf)
+    entries, page_count, coverage = _extract(args.pdf)
     overrides = json.loads(args.overrides.read_text(encoding="utf-8"))
     if not isinstance(overrides, dict):
         raise ValueError("overrides must be a JSON object")
@@ -168,6 +193,11 @@ def _run(args: argparse.Namespace) -> int:
         args.audit_html,
         source_path=args.pdf,
         page_count=page_count,
+    )
+    print(
+        f"physical_row_bands={coverage.physical_row_bands} "
+        f"empty_row_bands={coverage.empty_row_bands} "
+        f"multi_anchor_row_bands={coverage.multi_anchor_row_bands}"
     )
     print(
         f"records={summary.record_count} unresolved={summary.unresolved_count} "

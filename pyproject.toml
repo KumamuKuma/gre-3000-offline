@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gre-vocab-offline"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "PySide6>=6.8,<7",
+  "PyMuPDF>=1.24,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<10",
+  "pytest-qt>=4.4,<5",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+qt_api = "pyside6"

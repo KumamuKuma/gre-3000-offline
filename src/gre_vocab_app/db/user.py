@@ -58,10 +58,17 @@ class UserRepository:
         version = int(self.db.execute("pragma user_version").fetchone()[0])
         if version not in (0, USER_SCHEMA_VERSION):
             raise ValueError("user database version is incompatible")
-        with self.db:
-            self.db.executescript(USER_SCHEMA)
-            if version == 0:
-                self.db.execute(f"pragma user_version={USER_SCHEMA_VERSION}")
+        version_statement = (
+            f"pragma user_version={USER_SCHEMA_VERSION};" if version == 0 else ""
+        )
+        try:
+            self.db.executescript(
+                f"begin immediate;\n{USER_SCHEMA}\n{version_statement}\ncommit;"
+            )
+        except sqlite3.DatabaseError:
+            if self.db.in_transaction:
+                self.db.rollback()
+            raise
 
     @classmethod
     def open_recovering(cls, path: Path) -> UserOpenResult:
@@ -204,4 +211,3 @@ class UserRepository:
 class UserOpenResult:
     repository: UserRepository
     recovered_from: Path | None
-

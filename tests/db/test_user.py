@@ -1,5 +1,8 @@
 import sqlite3
 
+import pytest
+
+import gre_vocab_app.db.user as user_module
 from gre_vocab_app.db.user import QueueState, UserRepository
 
 
@@ -99,3 +102,23 @@ def test_unsupported_user_schema_is_not_mistaken_for_corruption(tmp_path):
         raise AssertionError("unsupported schema version should fail")
     assert not list(tmp_path.glob("*.corrupt-*"))
 
+
+def test_schema_initialization_rolls_back_every_table_when_script_fails(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "user.db"
+    monkeypatch.setattr(
+        user_module,
+        "USER_SCHEMA",
+        "create table partial_table(id integer); this is invalid sql;",
+    )
+
+    with pytest.raises(sqlite3.DatabaseError):
+        UserRepository(path)
+
+    with sqlite3.connect(path) as database:
+        tables = database.execute(
+            "select name from sqlite_master where type='table'"
+        ).fetchall()
+        assert tables == []
+        assert database.execute("pragma user_version").fetchone()[0] == 0

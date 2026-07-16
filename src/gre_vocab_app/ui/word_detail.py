@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
+
+from gre_vocab_app.domain import WordEntry
+
+
+class WordDetail(QWidget):
+    speechRequested = Signal(str)
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._word: WordEntry | None = None
+        self._revealed = True
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(14)
+
+        word_card = QWidget(objectName="wordCard")
+        word_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        word_layout = QVBoxLayout(word_card)
+        word_layout.setContentsMargins(24, 20, 24, 20)
+        word_layout.setSpacing(8)
+        title_row = QHBoxLayout()
+        self.headword_label = self._label(object_name="headword")
+        self.headword_label.setAccessibleName("单词")
+        title_row.addWidget(self.headword_label, 1)
+        self.speech_button = QPushButton("朗读")
+        self.speech_button.setAccessibleName("朗读当前单词")
+        self.speech_button.setEnabled(False)
+        self.speech_button.clicked.connect(self._request_speech)
+        title_row.addWidget(self.speech_button)
+        word_layout.addLayout(title_row)
+        self.phonetic_label = self._label(object_name="phonetic")
+        word_layout.addWidget(self.phonetic_label)
+        root.addWidget(word_card)
+
+        self.meaning_panel = QWidget(objectName="meaningPanel")
+        self.meaning_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        meaning_layout = QVBoxLayout(self.meaning_panel)
+        meaning_layout.setContentsMargins(24, 20, 24, 22)
+        meaning_layout.setSpacing(8)
+
+        self.definition_label = self._label(object_name="definition")
+        self.definition_zh_label = self._label()
+        meaning_layout.addWidget(self.definition_label)
+        meaning_layout.addWidget(self.definition_zh_label)
+
+        self.synonyms_title = self._section_title("近义词")
+        self.synonyms_label = self._label()
+        meaning_layout.addSpacing(5)
+        meaning_layout.addWidget(self.synonyms_title)
+        meaning_layout.addWidget(self.synonyms_label)
+
+        self.example_title = self._section_title("例句")
+        self.example_en_label = self._label()
+        self.example_zh_label = self._label(object_name="muted")
+        meaning_layout.addSpacing(5)
+        meaning_layout.addWidget(self.example_title)
+        meaning_layout.addWidget(self.example_en_label)
+        meaning_layout.addWidget(self.example_zh_label)
+        root.addWidget(self.meaning_panel)
+        root.addStretch(1)
+
+    @staticmethod
+    def _label(*, object_name: str = "") -> QLabel:
+        label = QLabel()
+        if object_name:
+            label.setObjectName(object_name)
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(
+            Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
+        )
+        return label
+
+    @classmethod
+    def _section_title(cls, text: str) -> QLabel:
+        label = cls._label(object_name="sectionTitle")
+        label.setText(text)
+        return label
+
+    def set_word(self, word: WordEntry, reveal: bool) -> None:
+        self._word = word
+        for label in (
+            self.headword_label,
+            self.phonetic_label,
+            self.definition_label,
+            self.definition_zh_label,
+            self.synonyms_label,
+            self.example_en_label,
+            self.example_zh_label,
+        ):
+            label.clear()
+
+        self.headword_label.setText(word.headword)
+        self.phonetic_label.setText(word.phonetic)
+        self.definition_label.setText(word.definition_en)
+        self.definition_zh_label.setText(word.definition_zh)
+        self.synonyms_label.setText(word.synonyms)
+        self.example_en_label.setText(word.example_en)
+        self.example_zh_label.setText(word.example_zh)
+
+        self.phonetic_label.setVisible(bool(word.phonetic))
+        self.definition_label.setVisible(bool(word.definition_en))
+        self.definition_zh_label.setVisible(bool(word.definition_zh))
+        has_synonyms = bool(word.synonyms)
+        self.synonyms_title.setVisible(has_synonyms)
+        self.synonyms_label.setVisible(has_synonyms)
+        has_example = bool(word.example_en or word.example_zh)
+        self.example_title.setVisible(has_example)
+        self.example_en_label.setVisible(bool(word.example_en))
+        self.example_zh_label.setVisible(bool(word.example_zh))
+        self.speech_button.setEnabled(bool(word.headword))
+        self.set_revealed(reveal)
+
+    def set_revealed(self, revealed: bool) -> None:
+        self._revealed = bool(revealed)
+        self.meaning_panel.setVisible(self._revealed)
+
+    def is_revealed(self) -> bool:
+        return self._revealed
+
+    def _request_speech(self) -> None:
+        if self._word is not None and self._word.headword:
+            self.speechRequested.emit(self._word.headword)

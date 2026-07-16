@@ -122,3 +122,15 @@ def test_schema_initialization_rolls_back_every_table_when_script_fails(
         ).fetchall()
         assert tables == []
         assert database.execute("pragma user_version").fetchone()[0] == 0
+
+
+def test_seen_count_and_favorites_support_home_and_favorites_views(tmp_path):
+    with UserRepository(tmp_path / "user.db") as repository:
+        repository.record_seen(7)
+        repository.record_seen(7)
+        repository.record_seen(2)
+        repository.set_favorite(1, True)
+        repository.set_favorite(2, True)
+
+        assert repository.seen_word_count() == 2
+        assert repository.favorite_ids() == (2, 1)

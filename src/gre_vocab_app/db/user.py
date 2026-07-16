@@ -122,7 +122,7 @@ class UserRepository:
 
     def favorite_ids(self) -> tuple[int, ...]:
         rows = self.db.execute(
-            "select word_id from favorites order by word_id"
+            "select word_id from favorites order by created_at desc, rowid desc"
         ).fetchall()
         return tuple(int(row[0]) for row in rows)
 
@@ -138,6 +138,11 @@ class UserRepository:
                 """,
                 (word_id, self._now()),
             )
+
+    def seen_word_count(self) -> int:
+        return int(
+            self.db.execute("select count(*) from word_progress").fetchone()[0]
+        )
 
     def load_setting(self, key: str) -> str | None:
         row = self.db.execute(

@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtTest import QSignalSpy
 
@@ -118,4 +119,19 @@ def test_geometry_clamps_oversized_and_partial_offscreen_to_target_screen(qtbot)
         }
     )
     assert window.restore_geometry_state(partially_offscreen) is True
+    assert available.contains(window.geometry())
+
+
+@pytest.mark.parametrize("field", ("x", "y", "width", "height"))
+@pytest.mark.parametrize("value", (2**31, -(2**31) - 1))
+def test_geometry_rejects_values_outside_qt_signed_int_range(
+    qtbot, field, value
+):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    available = QGuiApplication.primaryScreen().availableGeometry()
+    payload = {"x": 10, "y": 10, "width": 500, "height": 400}
+    payload[field] = value
+
+    assert window.restore_geometry_state(json.dumps(payload)) is False
     assert available.contains(window.geometry())

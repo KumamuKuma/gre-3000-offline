@@ -19,6 +19,8 @@ _SAFE_DEFAULT_HEIGHT = 760
 _TITLE_BAR_HEIGHT = 32
 _OPERABLE_TITLE_WIDTH = 120
 _OPERABLE_TITLE_HEIGHT = 24
+_QT_INT_MIN = -(2**31)
+_QT_INT_MAX = 2**31 - 1
 
 
 class MainWindow(QMainWindow):
@@ -101,13 +103,24 @@ class MainWindow(QMainWindow):
             )
             if any(type(item) is not int for item in coordinates):
                 raise ValueError("geometry values must be integers")
-            rectangle = QRect(*coordinates)
-            if rectangle.width() <= 0 or rectangle.height() <= 0:
+            if any(
+                item < _QT_INT_MIN or item > _QT_INT_MAX
+                for item in coordinates
+            ):
+                raise ValueError("geometry values exceed Qt integer limits")
+            if coordinates[2] <= 0 or coordinates[3] <= 0:
                 raise ValueError("geometry size must be positive")
+            rectangle = QRect(*coordinates)
             available = self._target_available_geometry(rectangle)
             if available is None:
                 raise ValueError("window title bar is not operable on any screen")
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        except (
+            KeyError,
+            TypeError,
+            ValueError,
+            OverflowError,
+            json.JSONDecodeError,
+        ):
             self._use_safe_default_geometry()
             return False
         self.setGeometry(self._clamp_geometry(rectangle, available))

@@ -195,3 +195,55 @@ def test_native_smoke_owns_a_real_gui_process_until_normal_window_close(tmp_path
     assert result.root_process_id > 0
     assert result.gui_process_id > 0
     assert result.total_processes >= 1
+
+
+def _independent_gui_child_arguments(title: str, gui_exit_code: int) -> tuple[str, ...]:
+    child_code = (
+        "import ctypes, sys; "
+        "ctypes.windll.user32.MessageBoxW(None, 'probe', sys.argv[1], 0); "
+        "sys.exit(int(sys.argv[2]))"
+    )
+    root_code = (
+        "import subprocess, sys; "
+        "child=subprocess.Popen([sys.argv[1], '-c', sys.argv[2], sys.argv[3], sys.argv[4]]); "
+        "child.wait(); "
+        "sys.exit(0)"
+    )
+    return (
+        "-c",
+        root_code,
+        str(PYTHONW),
+        child_code,
+        title,
+        str(gui_exit_code),
+    )
+
+
+def test_native_smoke_rejects_independent_gui_exit_7_when_root_exits_0():
+    from scripts.windows_release_probe import ProcessExitError, run_native_smoke
+
+    title = "GRE failing GUI owner"
+    with pytest.raises(ProcessExitError, match=r"GUI process .*code 7"):
+        run_native_smoke(
+            PYTHONW,
+            expected_title=title,
+            timeout_seconds=10,
+            arguments=_independent_gui_child_arguments(title, 7),
+        )
+
+
+def test_native_smoke_accepts_independent_gui_and_root_exit_0():
+    from scripts.windows_release_probe import run_native_smoke
+
+    title = "GRE clean GUI owner"
+    result = run_native_smoke(
+        PYTHONW,
+        expected_title=title,
+        timeout_seconds=10,
+        arguments=_independent_gui_child_arguments(title, 0),
+    )
+
+    assert result.gui_process_id != result.root_process_id
+    assert result.gui_exit_code == 0
+    assert result.root_exit_code == 0
+    assert result.active_processes_after_close == 0

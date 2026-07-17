@@ -62,6 +62,7 @@ class ConsoleProbe:
 class NativeSmokeResult:
     root_process_id: int
     gui_process_id: int
+    gui_exit_code: int
     root_exit_code: int
     total_processes: int
     active_processes_after_close: int
@@ -744,6 +745,14 @@ def run_native_smoke(
                     raise RuntimeError("Exact titled GUI process owns a console")
 
             _request_owned_window_close(job, window)
+            gui_exit_code = wait_for_process_exit(
+                window.process_handle,
+                max(0.0, deadline - time.monotonic()),
+            )
+            if gui_exit_code != 0:
+                raise ProcessExitError(
+                    f"GUI process {window.process_id} exited with code {gui_exit_code}"
+                )
             root_exit_code = job.wait_for_empty(
                 max(0.0, deadline - time.monotonic())
             )
@@ -760,6 +769,7 @@ def run_native_smoke(
             return NativeSmokeResult(
                 root_process_id=job.root_process_id,
                 gui_process_id=window.process_id,
+                gui_exit_code=gui_exit_code,
                 root_exit_code=root_exit_code,
                 total_processes=int(accounting.TotalProcesses),
                 active_processes_after_close=active_processes,
@@ -867,7 +877,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"job_active_processes={result.active_processes_after_close} "
                 f"machine=0x{arguments.expected_machine:04x} "
                 f"subsystem={arguments.expected_subsystem} no_console=true "
-                f"wm_close=true root_exit={result.root_exit_code}"
+                f"wm_close=true gui_exit={result.gui_exit_code} "
+                f"root_exit={result.root_exit_code}"
             )
             return 0
         if arguments.command == "publish":

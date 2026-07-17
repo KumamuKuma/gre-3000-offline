@@ -35,3 +35,10 @@ def test_release_script_smokes_build_candidate_before_atomic_publish_and_cleanup
     assert stage < smoke < publish < cleanup
     assert "Copy-Item -LiteralPath $LauncherExe -Destination $ReleaseCandidate" in script
     assert "Remove-Item -LiteralPath $OutputExe" not in script
+
+
+def test_release_script_verifies_the_current_strict_reviewed_count():
+    script = (ROOT / "scripts" / "build_release.ps1").read_text(encoding="utf-8-sig")
+
+    assert '"--expected-reviewed", "5"' in script
+    assert '"--expected-reviewed", "4"' not in script

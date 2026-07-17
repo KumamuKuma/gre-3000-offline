@@ -21,7 +21,8 @@ Native acceptance no longer relies on a Toolhelp process snapshot. The probe now
    and real titled GUI owner;
 6. revalidates the held process handle and HWND ownership before sending one
    `WM_CLOSE`;
-7. requires root exit code 0 and Job Object `ActiveProcesses == 0`.
+7. waits on the already-held GUI owner handle and requires its exit code 0;
+8. then requires root exit code 0 and Job Object `ActiveProcesses == 0`.
 
 On any failure, closing the Job Object terminates every still-associated
 descendant, including children created after an earlier observation. The success
@@ -42,7 +43,7 @@ build script had no protected build candidate
 The focused suite is now green:
 
 ```text
-12 passed
+15 passed
 ```
 
 It includes real Windows integration coverage for:
@@ -54,12 +55,17 @@ It includes real Windows integration coverage for:
 - Job close terminating a real lingering descendant after the root has exited;
 - a real GUI-subsystem process with an exact-title Win32 window, normal
   `WM_CLOSE`, root exit 0, and final active-process count 0;
+- an independent exact-title GUI owner exiting 7 while its waiting root exits 0,
+  which must fail specifically on the GUI exit code;
+- independent GUI/root exit codes 0, which must both be reported and accepted;
 - launcher production `main()` forwarding real arguments and preserving the
   caller's current directory;
-- atomic replacement of an existing release by a verified candidate; and
+- atomic replacement of an existing release by a verified candidate;
 - release-script ordering: stage under `build`, verify and smoke the candidate,
   publish atomically, and clean a failed candidate without deleting the old
-  output.
+  output; and
+- the release verifier's strict reviewed-row expectation is the current value 5,
+  rather than the stale value 4.
 
 The console check now runs `FreeConsole`/`AttachConsole` only inside a disposable
 worker whose stdout is a pipe. The long-lived CLI remains attached to its own
@@ -82,9 +88,9 @@ probe:
 
 ```text
 pe_metadata ... machine=0x8664 subsystem=2
-native_smoke title='GRE 3000 词离线版' root_pid=41720 gui_pid=13452
+native_smoke title='GRE 3000 词离线版' root_pid=23892 gui_pid=30932
 job_total_processes=4 job_active_processes=0 machine=0x8664 subsystem=2
-no_console=true wm_close=true root_exit=0
+no_console=true wm_close=true gui_exit=0 root_exit=0
 ```
 
 This run proves the new supervisor covers the outer launcher plus descendants
@@ -94,7 +100,7 @@ the pre-integration artifact is the final deliverable.
 Final corrective checks:
 
 ```text
-full pytest without GRE_SOURCE_PDF: 88 passed, 14 skipped in 6.06s
+full pytest without GRE_SOURCE_PDF: 91 passed, 14 skipped in 7.66s
 python -m compileall -q scripts tests: pass
 PowerShell parser: pass
 git diff --check: pass

@@ -120,7 +120,7 @@ try {
         $Database,
         $AuditJson,
         "--expected-records", "3292",
-        "--expected-reviewed", "4"
+        "--expected-reviewed", "5"
     )
 
     Invoke-External -Label "SVG to multi-size ICO generation" -FilePath $Python -ArgumentList @(

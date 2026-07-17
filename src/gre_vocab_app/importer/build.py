@@ -839,7 +839,16 @@ def _validate_artifact_candidates(
         semantic_checks=facts["semantic_checks"],
         strict_checks=expected_strict_checks,
     )
-    if payload != expected_payload:
+    expected_json_bytes = (
+        json.dumps(
+            expected_payload,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
+    if json_bytes != expected_json_bytes:
         differing_fields = sorted(
             key
             for key in set(payload) | set(expected_payload)
@@ -847,7 +856,7 @@ def _validate_artifact_candidates(
         )
         raise ValueError(
             "candidate audit JSON payload mismatch: "
-            + ", ".join(differing_fields)
+            + (", ".join(differing_fields) or "serialized representation")
         )
 
     html = html_path.read_text(encoding="utf-8")

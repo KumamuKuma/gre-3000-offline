@@ -314,11 +314,10 @@ def write_audit(
         strict_checks=strict_checks,
     )
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    json_bytes = json_path.read_bytes()
+    json_bytes = (
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    json_path.write_bytes(json_bytes)
     audit_json_sha256 = hashlib.sha256(json_bytes).hexdigest()
     canonical_payload = json.loads(json_bytes.decode("utf-8"))
     html = render_audit_html(

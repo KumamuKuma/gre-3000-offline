@@ -448,6 +448,7 @@ def test_cli_candidate_write_failure_preserves_old_artifact_set(
         "strict_checks",
         "unresolved_records",
         "reviewed_records",
+        "json_numeric_type",
         "duplicate_key",
         "database_metadata_count",
         "database_content",
@@ -541,12 +542,23 @@ def test_cli_rejects_tampered_candidate_audit_and_preserves_old_artifact_set(
                 payload["unresolved_records"] = [{"source_order": 999}]
             elif tamper == "reviewed_records":
                 payload["reviewed_records"] = [{"source_order": 999}]
+            elif tamper == "json_numeric_type":
+                payload["record_count"] = float(payload["record_count"])
             elif tamper == "duplicate_headwords":
                 payload["duplicate_headwords"] = [
                     {"headword": "forged", "source_orders": [1, 1]}
                 ]
 
         _rewrite_audit_and_sync_html(json_path, html_path, mutate)
+        if tamper == "json_numeric_type":
+            forged_payload = json.loads(json_path.read_text(encoding="utf-8"))
+            forged_digest = hashlib.sha256(json_path.read_bytes()).hexdigest()
+            html_path.write_text(
+                build_module.render_audit_html(
+                    forged_payload, audit_json_sha256=forged_digest
+                ),
+                encoding="utf-8",
+            )
         if tamper == "duplicate_key":
             raw_json = json_path.read_text(encoding="utf-8")
             json_path.write_text(

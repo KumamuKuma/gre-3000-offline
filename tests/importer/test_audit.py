@@ -96,6 +96,51 @@ def test_audit_contains_counts_categories_duplicates_and_escaped_html(tmp_path):
         ],
     )
 
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert len(payload["source_sha256"]) == 64
+    assert payload["page_count"] == 288
+    assert payload["record_count"] == 3
+    assert payload["section_counts"] == {"list1": 2, "list2": 1}
+    assert [item["headword"] for item in payload["unresolved_records"]] == [
+        "<alpha>"
+    ]
+    assert [item["headword"] for item in payload["reviewed_records"]] == [
+        "<alpha>"
+    ]
+    assert payload["duplicate_headwords"] == [
+        {"headword": "<alpha>", "source_orders": [1, 2]}
+    ]
+    assert payload["source_profile"]["approved"]["physical_row_bands"] == 3292
+    assert payload["source_profile"]["actual"]["page_count"] == 288
+    assert payload["physical_coverage"]["physical_row_bands"] == 3292
+    assert payload["continuity"]["missing_source_orders"] == []
+    assert payload["page_range"] == {
+        "first_source_page": 5,
+        "last_source_page": 5,
+    }
+    assert payload["dewrap_counts"]["definition"]["normal_space"] == 4
+    assert payload["override_details"][0]["before"] == {"definition_en": "bad"}
+    assert payload["semantic_checks"][0]["pass"] is True
+    assert payload["strict_checks"][0]["pass"] is True
+    assert summary.unresolved_count == 1
+    assert summary.reviewed_count == 1
+
+    html = html_path.read_text(encoding="utf-8")
+    assert "&lt;alpha&gt;" in html
+    assert "&lt;b&gt;bad&lt;/b&gt;" in html
+    assert "<alpha>" not in html
+    assert "<b>bad</b>" not in html
+    for heading in (
+        "Source profile",
+        "Physical coverage",
+        "Continuity",
+        "De-wrap counts",
+        "Override details",
+        "Semantic checks",
+        "Strict checks",
+    ):
+        assert heading in html
+
 
 def _stub_successful_extract(monkeypatch):
     diagnostics = ExtractionDiagnostics(
@@ -146,51 +191,6 @@ def _publication_leftovers(root: Path) -> list[Path]:
         for path in root.rglob("*")
         if ".candidate-" in path.name or ".backup-" in path.name
     )
-
-    payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert len(payload["source_sha256"]) == 64
-    assert payload["page_count"] == 288
-    assert payload["record_count"] == 3
-    assert payload["section_counts"] == {"list1": 2, "list2": 1}
-    assert [item["headword"] for item in payload["unresolved_records"]] == [
-        "<alpha>"
-    ]
-    assert [item["headword"] for item in payload["reviewed_records"]] == [
-        "<alpha>"
-    ]
-    assert payload["duplicate_headwords"] == [
-        {"headword": "<alpha>", "source_orders": [1, 2]}
-    ]
-    assert payload["source_profile"]["approved"]["physical_row_bands"] == 3292
-    assert payload["source_profile"]["actual"]["page_count"] == 288
-    assert payload["physical_coverage"]["physical_row_bands"] == 3292
-    assert payload["continuity"]["missing_source_orders"] == []
-    assert payload["page_range"] == {
-        "first_source_page": 5,
-        "last_source_page": 5,
-    }
-    assert payload["dewrap_counts"]["definition"]["normal_space"] == 4
-    assert payload["override_details"][0]["before"] == {"definition_en": "bad"}
-    assert payload["semantic_checks"][0]["pass"] is True
-    assert payload["strict_checks"][0]["pass"] is True
-    assert summary.unresolved_count == 1
-    assert summary.reviewed_count == 1
-
-    html = html_path.read_text(encoding="utf-8")
-    assert "&lt;alpha&gt;" in html
-    assert "&lt;b&gt;bad&lt;/b&gt;" in html
-    assert "<alpha>" not in html
-    assert "<b>bad</b>" not in html
-    for heading in (
-        "Source profile",
-        "Physical coverage",
-        "Continuity",
-        "De-wrap counts",
-        "Override details",
-        "Semantic checks",
-        "Strict checks",
-    ):
-        assert heading in html
 
 
 def test_cli_strict_mode_rejects_unapproved_pdf_without_replacing_outputs(

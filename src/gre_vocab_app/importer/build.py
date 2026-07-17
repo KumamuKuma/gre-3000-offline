@@ -15,9 +15,15 @@ from typing import Any, Mapping, Sequence
 
 import fitz
 
+from gre_vocab_app.db.content import ContentDatabaseError, ContentRepository
 from gre_vocab_app.db.schema import CONTENT_SCHEMA, CONTENT_SCHEMA_VERSION
 
-from .audit import AuditSummary, write_audit
+from .audit import (
+    AuditSummary,
+    build_audit_payload,
+    render_audit_html,
+    write_audit,
+)
 from .layout import (
     PhysicalRowCoverage,
     extract_page_spans,
@@ -736,51 +742,74 @@ def _facts(
     }
 
 
+CANDIDATE_ENTRY_FIELDS = (
+    "source_order",
+    "source_section",
+    "source_page",
+    "headword",
+    "phonetic",
+    "definition_en",
+    "definition_zh",
+    "synonyms",
+    "example_en",
+    "example_zh",
+    "raw_definition",
+    "raw_example",
+    "quality_flags",
+)
+
+
 def _validate_artifact_candidates(
     entries: Sequence[WordDraft],
     slots: Sequence[ArtifactSlot],
     summary: AuditSummary,
     *,
     facts: Mapping[str, Any],
+    override_details: Sequence[Mapping[str, Any]],
     strict: bool,
 ) -> None:
     database_path, json_path, html_path = (
         slot.candidate for slot in slots
     )
-    database = sqlite3.connect(database_path)
     try:
-        integrity = database.execute("pragma integrity_check").fetchall()
-        record_count = database.execute(
-            "select count(*) from words"
-        ).fetchone()[0]
-        metadata = {
-            str(row[0]): str(row[1])
-            for row in database.execute("select key, value from metadata")
-        }
-    finally:
-        database.close()
-    if [tuple(row) for row in integrity] != [("ok",)]:
-        raise sqlite3.IntegrityError(
-            f"candidate database integrity check failed: {integrity}"
-        )
-    expected_record_count = facts["record_count"]
-    if record_count != len(entries) or record_count != expected_record_count:
+        with ContentRepository(database_path) as repository:
+            database_entries = tuple(
+                repository.get(word_id)
+                for word_id in repository.ids_in_source_order()
+            )
+    except ContentDatabaseError as error:
+        raise ValueError(
+            f"candidate database contract validation failed: {error}"
+        ) from error
+
+    ordered_entries = tuple(
+        sorted(entries, key=lambda entry: entry.source_order)
+    )
+    if (
+        len(database_entries) != len(ordered_entries)
+        or len(database_entries) != facts["record_count"]
+    ):
         raise ValueError(
             "candidate database record count mismatch: "
-            f"entries={len(entries)}, facts={expected_record_count}, "
-            f"database={record_count}"
+            f"entries={len(ordered_entries)}, facts={facts['record_count']}, "
+            f"database={len(database_entries)}"
         )
-    try:
-        metadata_record_count = int(metadata["record_count"])
-    except (KeyError, TypeError, ValueError) as error:
-        raise ValueError(
-            f"candidate database metadata record count invalid: {error}"
-        ) from error
-    if metadata_record_count != expected_record_count:
-        raise ValueError(
-            "candidate database metadata record count mismatch: "
-            f"expected {expected_record_count}, got {metadata_record_count}"
-        )
+    for expected_id, (expected, actual) in enumerate(
+        zip(ordered_entries, database_entries, strict=True), start=1
+    ):
+        if actual.id != expected_id:
+            raise ValueError(
+                "candidate database id mismatch at source_order "
+                f"{expected.source_order}: expected {expected_id}, got {actual.id}"
+            )
+        for field in CANDIDATE_ENTRY_FIELDS:
+            expected_value = getattr(expected, field)
+            actual_value = getattr(actual, field)
+            if actual_value != expected_value:
+                raise ValueError(
+                    "candidate database field mismatch at source_order "
+                    f"{expected.source_order}: {field}"
+                )
 
     json_bytes = json_path.read_bytes()
     try:
@@ -796,72 +825,38 @@ def _validate_artifact_candidates(
         raise ValueError("candidate audit JSON must be an object")
 
     expected_strict_checks = strict_checks_from_facts(facts)
-    expected_actual_profile = {
-        "sha256": facts["source_sha256"],
-        "overrides_sha256": facts["overrides_sha256"],
-        "page_count": facts["page_count"],
-        "record_count": facts["record_count"],
-        "section_counts": facts["section_counts"],
-    }
-    expected_values = {
-        "source_sha256": facts["source_sha256"],
-        "overrides_sha256": facts["overrides_sha256"],
-        "page_count": facts["page_count"],
-        "record_count": facts["record_count"],
-        "physical_coverage": facts["physical_coverage"],
-        "section_counts": facts["section_counts"],
-        "continuity": facts["continuity"],
-        "page_range": facts["page_range"],
-        "dewrap_counts": facts["dewrap_counts"],
-        "semantic_checks": facts["semantic_checks"],
-        "strict_checks": expected_strict_checks,
-    }
-    for field, expected in expected_values.items():
-        actual = payload.get(field)
-        if actual != expected:
-            raise ValueError(
-                f"candidate audit {field} mismatch: "
-                f"expected {expected!r}, got {actual!r}"
-            )
-
-    source_profile = payload.get("source_profile")
-    if not isinstance(source_profile, dict):
-        raise ValueError("candidate audit source_profile is invalid")
-    if source_profile.get("approved") != APPROVED_SOURCE_PROFILE:
-        raise ValueError("candidate audit approved source profile mismatch")
-    if source_profile.get("actual") != expected_actual_profile:
-        raise ValueError("candidate audit actual source profile mismatch")
-
-    override_details = payload.get("override_details")
-    if (
-        not isinstance(override_details, list)
-        or len(override_details) != facts["override_use"]["applied"]
-    ):
-        raise ValueError("candidate audit override detail count mismatch")
-    unresolved_records = payload.get("unresolved_records")
-    if (
-        not isinstance(unresolved_records, list)
-        or len(unresolved_records) != facts["unresolved_count"]
-    ):
-        raise ValueError("candidate audit unresolved record count mismatch")
-    reviewed_records = payload.get("reviewed_records")
-    if (
-        not isinstance(reviewed_records, list)
-        or len(reviewed_records) != facts["reviewed_count"]
-    ):
-        raise ValueError("candidate audit reviewed record count mismatch")
+    expected_payload = build_audit_payload(
+        entries,
+        source_sha256=facts["source_sha256"],
+        overrides_sha256=facts["overrides_sha256"],
+        page_count=facts["page_count"],
+        approved_source_profile=APPROVED_SOURCE_PROFILE,
+        physical_coverage=facts["physical_coverage"],
+        continuity=facts["continuity"],
+        page_range=facts["page_range"],
+        dewrap_counts=facts["dewrap_counts"],
+        override_details=override_details,
+        semantic_checks=facts["semantic_checks"],
+        strict_checks=expected_strict_checks,
+    )
+    if payload != expected_payload:
+        differing_fields = sorted(
+            key
+            for key in set(payload) | set(expected_payload)
+            if payload.get(key) != expected_payload.get(key)
+        )
+        raise ValueError(
+            "candidate audit JSON payload mismatch: "
+            + ", ".join(differing_fields)
+        )
 
     html = html_path.read_text(encoding="utf-8")
     json_digest = hashlib.sha256(json_bytes).hexdigest()
-    digest_marker = (
-        f'<meta name="audit-json-sha256" content="{json_digest}">'
+    expected_html = render_audit_html(
+        payload, audit_json_sha256=json_digest
     )
-    if (
-        not html.startswith("<!doctype html>")
-        or "<title>Vocabulary import audit</title>" not in html
-        or digest_marker not in html
-    ):
-        raise ValueError("candidate audit HTML validation failed")
+    if html != expected_html:
+        raise ValueError("candidate audit HTML content mismatch")
     if (
         summary.record_count != facts["record_count"]
         or summary.unresolved_count != facts["unresolved_count"]
@@ -951,6 +946,7 @@ def _run(args: argparse.Namespace) -> int:
             slots,
             summary,
             facts=facts,
+            override_details=override_details,
             strict=args.strict,
         )
         publish_artifact_slots(slots)

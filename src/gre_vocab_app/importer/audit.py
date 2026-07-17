@@ -91,13 +91,10 @@ def _json_cell(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def write_audit(
+def build_audit_payload(
     entries: Sequence[WordDraft],
-    json_path: Path,
-    html_path: Path,
     *,
-    source_path: Path | None = None,
-    source_sha256: str | None = None,
+    source_sha256: str,
     overrides_sha256: str = "",
     page_count: int = 0,
     approved_source_profile: Mapping[str, Any] | None = None,
@@ -108,7 +105,7 @@ def write_audit(
     override_details: Sequence[Mapping[str, Any]] = (),
     semantic_checks: Sequence[Mapping[str, Any]] = (),
     strict_checks: Sequence[Mapping[str, Any]] = (),
-) -> AuditSummary:
+) -> dict[str, Any]:
     ordered = sorted(entries, key=lambda item: item.source_order)
     unresolved = [
         _record(entry)
@@ -124,19 +121,16 @@ def write_audit(
         sorted(Counter(entry.source_section for entry in ordered).items())
     )
     duplicates = _duplicates(ordered)
-    actual_source_sha256 = (
-        source_sha256 if source_sha256 is not None else _source_hash(source_path)
-    )
     actual_profile = {
-        "sha256": actual_source_sha256,
+        "sha256": source_sha256,
         "overrides_sha256": overrides_sha256,
         "page_count": page_count,
         "record_count": len(ordered),
         "section_counts": section_counts,
     }
-    payload = {
+    return {
         # Retain the original flat values for machine consumers from the first audit schema.
-        "source_sha256": actual_source_sha256,
+        "source_sha256": source_sha256,
         "overrides_sha256": overrides_sha256,
         "page_count": page_count,
         "record_count": len(ordered),
@@ -159,18 +153,19 @@ def write_audit(
         "duplicate_headwords": duplicates,
     }
 
-    json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    audit_json_sha256 = hashlib.sha256(json_path.read_bytes()).hexdigest()
 
+def render_audit_html(
+    payload: Mapping[str, Any], *, audit_json_sha256: str
+) -> str:
+    section_counts = payload["section_counts"]
+    unresolved = payload["unresolved_records"]
+    reviewed = payload["reviewed_records"]
+    duplicates = payload["duplicate_headwords"]
     summary_rows = [
         ("Source SHA-256", payload["source_sha256"]),
         ("Overrides SHA-256", payload["overrides_sha256"]),
-        ("Page count", page_count),
-        ("Record count", len(ordered)),
+        ("Page count", payload["page_count"]),
+        ("Record count", payload["record_count"]),
         ("Unresolved", len(unresolved)),
         ("Reviewed", len(reviewed)),
         ("Duplicate headwords", len(duplicates)),
@@ -225,7 +220,7 @@ def write_audit(
         )
         for item in payload["strict_checks"]
     ]
-    html = "".join(
+    return "".join(
         [
             "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
             f'<meta name="audit-json-sha256" content="{audit_json_sha256}">',
@@ -281,6 +276,58 @@ def write_audit(
             "</body></html>\n",
         ]
     )
+
+
+def write_audit(
+    entries: Sequence[WordDraft],
+    json_path: Path,
+    html_path: Path,
+    *,
+    source_path: Path | None = None,
+    source_sha256: str | None = None,
+    overrides_sha256: str = "",
+    page_count: int = 0,
+    approved_source_profile: Mapping[str, Any] | None = None,
+    physical_coverage: Mapping[str, Any] | None = None,
+    continuity: Mapping[str, Any] | None = None,
+    page_range: Mapping[str, Any] | None = None,
+    dewrap_counts: Mapping[str, Mapping[str, int]] | None = None,
+    override_details: Sequence[Mapping[str, Any]] = (),
+    semantic_checks: Sequence[Mapping[str, Any]] = (),
+    strict_checks: Sequence[Mapping[str, Any]] = (),
+) -> AuditSummary:
+    actual_source_sha256 = (
+        source_sha256 if source_sha256 is not None else _source_hash(source_path)
+    )
+    payload = build_audit_payload(
+        entries,
+        source_sha256=actual_source_sha256,
+        overrides_sha256=overrides_sha256,
+        page_count=page_count,
+        approved_source_profile=approved_source_profile,
+        physical_coverage=physical_coverage,
+        continuity=continuity,
+        page_range=page_range,
+        dewrap_counts=dewrap_counts,
+        override_details=override_details,
+        semantic_checks=semantic_checks,
+        strict_checks=strict_checks,
+    )
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    json_bytes = json_path.read_bytes()
+    audit_json_sha256 = hashlib.sha256(json_bytes).hexdigest()
+    canonical_payload = json.loads(json_bytes.decode("utf-8"))
+    html = render_audit_html(
+        canonical_payload, audit_json_sha256=audit_json_sha256
+    )
     html_path.parent.mkdir(parents=True, exist_ok=True)
     html_path.write_text(html, encoding="utf-8")
-    return AuditSummary(len(ordered), len(unresolved), len(reviewed))
+    return AuditSummary(
+        payload["record_count"],
+        len(payload["unresolved_records"]),
+        len(payload["reviewed_records"]),
+    )

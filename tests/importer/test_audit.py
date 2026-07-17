@@ -181,7 +181,8 @@ def test_audit_uses_stable_supplied_hashes_without_rereading_source(tmp_path):
     )
 
 
-def _stub_successful_extract(monkeypatch):
+def _stub_successful_extract(monkeypatch, entries=None):
+    extracted_entries = [draft("alpha", 1)] if entries is None else entries
     diagnostics = ExtractionDiagnostics(
         dewrap_counts={
             field: {
@@ -197,9 +198,9 @@ def _stub_successful_extract(monkeypatch):
         build_module,
         "_extract_with_diagnostics",
         lambda _path: (
-            [draft("alpha", 1)],
+            extracted_entries,
             5,
-            PhysicalRowCoverage(1, 0, 0),
+            PhysicalRowCoverage(len(extracted_entries), 0, 0),
             diagnostics,
         ),
     )
@@ -449,29 +450,68 @@ def test_cli_candidate_write_failure_preserves_old_artifact_set(
         "reviewed_records",
         "duplicate_key",
         "database_metadata_count",
+        "database_content",
+        "database_quality_flags",
+        "database_id",
+        "database_schema_version",
+        "duplicate_headwords",
         "html_link",
+        "html_body",
     ),
 )
 def test_cli_rejects_tampered_candidate_audit_and_preserves_old_artifact_set(
     tmp_path, monkeypatch, capsys, tamper
 ):
-    _stub_successful_extract(monkeypatch)
+    extracted_entries = None
+    if tamper == "unresolved_records":
+        extracted_entries = [
+            draft("alpha", 1, flags=("missing_phonetic",))
+        ]
+    elif tamper == "reviewed_records":
+        extracted_entries = [
+            draft("alpha", 1, flags=("reviewed:sample",))
+        ]
+    _stub_successful_extract(monkeypatch, extracted_entries)
     output = tmp_path / "words.db"
     audit_json = tmp_path / "audit.json"
     audit_html = tmp_path / "audit.html"
     output.write_bytes(b"trusted database")
     audit_json.write_text("trusted json", encoding="utf-8")
     audit_html.write_text("trusted html", encoding="utf-8")
-    if tamper == "database_metadata_count":
+    if tamper in {
+        "database_metadata_count",
+        "database_content",
+        "database_quality_flags",
+        "database_id",
+        "database_schema_version",
+    }:
         real_build_database = build_module.build_database
 
         def build_then_tamper_metadata(entries, database_path):
             real_build_database(entries, database_path)
             database = build_module.sqlite3.connect(database_path)
             try:
-                database.execute(
-                    "update metadata set value='999' where key='record_count'"
-                )
+                if tamper == "database_metadata_count":
+                    database.execute(
+                        "update metadata set value='999' "
+                        "where key='record_count'"
+                    )
+                elif tamper == "database_content":
+                    database.execute(
+                        "update words set definition_en='forged' where id=1"
+                    )
+                elif tamper == "database_quality_flags":
+                    database.execute(
+                        "update words set quality_flags='[\"forged\"]' "
+                        "where id=1"
+                    )
+                elif tamper == "database_id":
+                    database.execute("update words set id=99 where id=1")
+                else:
+                    database.execute(
+                        "update metadata set value='999' "
+                        "where key='schema_version'"
+                    )
                 database.commit()
             finally:
                 database.close()
@@ -498,9 +538,13 @@ def test_cli_rejects_tampered_candidate_audit_and_preserves_old_artifact_set(
                     "strict_checks"
                 ][0]["pass"]
             elif tamper == "unresolved_records":
-                payload["unresolved_records"] = [{"source_order": 1}]
+                payload["unresolved_records"] = [{"source_order": 999}]
             elif tamper == "reviewed_records":
-                payload["reviewed_records"] = [{"source_order": 1}]
+                payload["reviewed_records"] = [{"source_order": 999}]
+            elif tamper == "duplicate_headwords":
+                payload["duplicate_headwords"] = [
+                    {"headword": "forged", "source_orders": [1, 1]}
+                ]
 
         _rewrite_audit_and_sync_html(json_path, html_path, mutate)
         if tamper == "duplicate_key":
@@ -533,6 +577,16 @@ def test_cli_rejects_tampered_candidate_audit_and_preserves_old_artifact_set(
                 ),
                 encoding="utf-8",
             )
+        if tamper == "html_body":
+            html = html_path.read_text(encoding="utf-8")
+            html_path.write_text(
+                html.replace(
+                    "<h1>Vocabulary import audit</h1>",
+                    "<h1>Forged audit body</h1>",
+                    1,
+                ),
+                encoding="utf-8",
+            )
         return summary
 
     monkeypatch.setattr(build_module, "write_audit", write_then_tamper)
@@ -544,10 +598,65 @@ def test_cli_rejects_tampered_candidate_audit_and_preserves_old_artifact_set(
     assert result == 1
     expected_error = (
         "candidate database"
-        if tamper == "database_metadata_count"
+        if tamper
+        in {
+            "database_metadata_count",
+            "database_content",
+            "database_quality_flags",
+            "database_id",
+            "database_schema_version",
+        }
         else "candidate audit"
     )
     assert expected_error in capsys.readouterr().err
+    assert output.read_bytes() == b"trusted database"
+    assert audit_json.read_text(encoding="utf-8") == "trusted json"
+    assert audit_html.read_text(encoding="utf-8") == "trusted html"
+    assert _publication_leftovers(tmp_path) == []
+
+
+def test_cli_rejects_same_length_forged_override_details_and_preserves_outputs(
+    tmp_path, monkeypatch, capsys
+):
+    _stub_successful_extract(
+        monkeypatch,
+        [draft("alpha", 1, flags=("missing_phonetic",))],
+    )
+    output = tmp_path / "words.db"
+    audit_json = tmp_path / "audit.json"
+    audit_html = tmp_path / "audit.html"
+    output.write_bytes(b"trusted database")
+    audit_json.write_text("trusted json", encoding="utf-8")
+    audit_html.write_text("trusted html", encoding="utf-8")
+    arguments = _import_arguments(tmp_path, output, audit_json, audit_html)
+    Path(arguments[-1]).write_text(
+        json.dumps(
+            {
+                "5:alpha": {
+                    "phonetic": "[a]",
+                    "reviewed": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    real_write_audit = build_module.write_audit
+
+    def write_then_forge(entries, json_path, html_path, **kwargs):
+        summary = real_write_audit(entries, json_path, html_path, **kwargs)
+
+        def forge(payload):
+            payload["override_details"][0]["key"] = "5:forged"
+
+        _rewrite_audit_and_sync_html(json_path, html_path, forge)
+        return summary
+
+    monkeypatch.setattr(build_module, "write_audit", write_then_forge)
+
+    result = main(arguments)
+
+    assert result == 1
+    assert "candidate audit" in capsys.readouterr().err
     assert output.read_bytes() == b"trusted database"
     assert audit_json.read_text(encoding="utf-8") == "trusted json"
     assert audit_html.read_text(encoding="utf-8") == "trusted html"

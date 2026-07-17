@@ -14,4 +14,3 @@ class SearchService:
         if not value:
             return []
         return list(self._content.search(value, limit=50))[:50]
-

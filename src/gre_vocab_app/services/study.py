@@ -164,4 +164,3 @@ class StudySession:
         self._answer_visible = False
         self._save_navigation()
         return self.current()
-

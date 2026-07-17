@@ -231,4 +231,3 @@ def test_navigation_keeps_memory_intent_and_retries_queue_and_seen_atomically(
         assert persisted.db.execute(
             "select seen_count from word_progress where word_id=2"
         ).fetchone()[0] == 1
-

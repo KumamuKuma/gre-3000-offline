@@ -62,4 +62,3 @@ QListWidget::item:selected { color: #24145f; background: #e8e2ff; }
 def apply_theme(application: QApplication) -> None:
     application.setStyle("Fusion")
     application.setStyleSheet(APP_STYLESHEET)
-

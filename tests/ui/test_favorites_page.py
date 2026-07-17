@@ -37,4 +37,3 @@ def test_favorites_open_and_remove_emit_selected_word(qtbot, sample_word):
     with qtbot.waitSignal(page.favoriteRemoved) as removed:
         page.remove_button.click()
     assert removed.args == [2]
-

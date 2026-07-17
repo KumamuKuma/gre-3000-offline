@@ -41,24 +41,65 @@ function Remove-WorkspaceDirectory {
     }
 }
 
+function Assert-ReleaseOutputAllowlist {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string[]]$ExpectedNames,
+        [switch]$RequireAll
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        throw "Release output directory not found: $Path"
+    }
+    $entries = @(Get-ChildItem -LiteralPath $Path -Force)
+    $unexpected = @(
+        $entries | Where-Object { $_.Name -notin $ExpectedNames }
+    )
+    if ($unexpected.Count -ne 0) {
+        $names = ($unexpected | ForEach-Object { $_.Name }) -join ", "
+        throw "Unexpected release output entries: $names"
+    }
+    if ($RequireAll) {
+        $missing = @(
+            $ExpectedNames | Where-Object {
+                -not (Test-Path -LiteralPath (Join-Path $Path $_) -PathType Leaf)
+            }
+        )
+        if ($missing.Count -ne 0 -or $entries.Count -ne $ExpectedNames.Count) {
+            $names = $missing -join ", "
+            throw "Release output set is incomplete: $names"
+        }
+    }
+}
+
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $Python = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 $Deploy = Join-Path $RepoRoot ".venv\Scripts\pyside6-deploy.exe"
 $Spec = Join-Path $RepoRoot "pysidedeploy.spec"
 $Database = Join-Path $RepoRoot "build\generated\words.db"
 $AuditJson = Join-Path $RepoRoot "build\audit\report.json"
-$AuditHtml = Join-Path $RepoRoot "outputs\词库导入审计报告.html"
+$StagedAuditHtml = Join-Path $RepoRoot "build\audit\词库导入审计报告.html"
 $IconSvg = Join-Path $RepoRoot "resources\app.svg"
 $IconIco = Join-Path $RepoRoot "resources\app.ico"
+$InstructionsSource = Join-Path $RepoRoot "resources\使用说明.txt"
 $ReleaseProbe = Join-Path $RepoRoot "scripts\windows_release_probe.py"
+$PublishReleaseSet = Join-Path $RepoRoot "scripts\publish_release_set.py"
 $LauncherSource = Join-Path $RepoRoot "scripts\unicode_launcher.py"
 $InnerRuntime = Join-Path $RepoRoot "build\release\GRE3000OfflineRuntime.exe"
 $LauncherBuild = Join-Path $RepoRoot "build\launcher"
 $LauncherExe = Join-Path $LauncherBuild "GRELauncher.exe"
 $ReleaseCandidateDirectory = Join-Path $RepoRoot "build\release-candidate"
 $ReleaseCandidate = Join-Path $ReleaseCandidateDirectory "GRE 3000 词离线版.exe"
-$OutputExe = Join-Path $RepoRoot "outputs\GRE 3000 词离线版.exe"
-$Instructions = Join-Path $RepoRoot "outputs\使用说明.txt"
+$StagedInstructions = Join-Path $ReleaseCandidateDirectory "使用说明.txt"
+$OutputsDirectory = Join-Path $RepoRoot "outputs"
+$OutputExe = Join-Path $OutputsDirectory "GRE 3000 词离线版.exe"
+$OutputAuditHtml = Join-Path $OutputsDirectory "词库导入审计报告.html"
+$OutputInstructions = Join-Path $OutputsDirectory "使用说明.txt"
+$ExpectedOutputNames = @(
+    "GRE 3000 词离线版.exe",
+    "使用说明.txt",
+    "词库导入审计报告.html"
+)
 $SmokeProfile = Join-Path $RepoRoot "build\smoke-profile"
 $ExpectedTitle = "GRE 3000 词离线版"
 $Amd64Machine = "0x8664"
@@ -69,8 +110,9 @@ foreach ($requiredFile in @(
     $Deploy,
     $Spec,
     $IconSvg,
-    $Instructions,
+    $InstructionsSource,
     $ReleaseProbe,
+    $PublishReleaseSet,
     $LauncherSource
 )) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
@@ -89,8 +131,11 @@ $ReleaseTemp = Join-Path $RepoRoot "work\release-temp"
 $NuitkaCache = Join-Path $RepoRoot "work\nuitka-cache"
 New-Item -ItemType Directory -Force -Path $ReleaseTemp | Out-Null
 New-Item -ItemType Directory -Force -Path $NuitkaCache | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $RepoRoot "outputs") | Out-Null
+New-Item -ItemType Directory -Force -Path $OutputsDirectory | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $RepoRoot "build\release") | Out-Null
+Assert-ReleaseOutputAllowlist `
+    -Path $OutputsDirectory `
+    -ExpectedNames $ExpectedOutputNames
 $env:TEMP = $ReleaseTemp
 $env:TMP = $ReleaseTemp
 $env:NUITKA_CACHE_DIR = $NuitkaCache
@@ -110,7 +155,7 @@ try {
         "--pdf", $env:GRE_SOURCE_PDF,
         "--output", $Database,
         "--audit-json", $AuditJson,
-        "--audit-html", $AuditHtml,
+        "--audit-html", $StagedAuditHtml,
         "--overrides", (Join-Path $RepoRoot "src\gre_vocab_app\importer\overrides.json"),
         "--strict"
     )
@@ -148,8 +193,8 @@ try {
         throw "pyside6-deploy returned without the expected executable: $InnerRuntime"
     }
 
-    if (-not (Test-Path -LiteralPath $AuditHtml -PathType Leaf)) {
-        throw "Strict importer did not generate the audit HTML: $AuditHtml"
+    if (-not (Test-Path -LiteralPath $StagedAuditHtml -PathType Leaf)) {
+        throw "Strict importer did not generate the staged audit HTML: $StagedAuditHtml"
     }
 
     Invoke-External -Label "ASCII Qt runtime x64 GUI verification" -FilePath $Python -ArgumentList @(
@@ -182,6 +227,7 @@ try {
     Remove-WorkspaceDirectory -Path $ReleaseCandidateDirectory -AllowedRoot (Join-Path $RepoRoot "build")
     New-Item -ItemType Directory -Force -Path $ReleaseCandidateDirectory | Out-Null
     Copy-Item -LiteralPath $LauncherExe -Destination $ReleaseCandidate
+    Copy-Item -LiteralPath $InstructionsSource -Destination $StagedInstructions
 
     Invoke-External -Label "final Unicode candidate x64 GUI verification" -FilePath $Python -ArgumentList @(
         $ReleaseProbe,
@@ -207,12 +253,17 @@ try {
         "--expected-subsystem", $WindowsGuiSubsystem
     )
 
-    Invoke-External -Label "atomic release publication" -FilePath $Python -ArgumentList @(
-        $ReleaseProbe,
-        "publish",
-        "--candidate", $ReleaseCandidate,
-        "--output", $OutputExe
+    Invoke-External -Label "transactional release-set publication" -FilePath $Python -ArgumentList @(
+        $PublishReleaseSet,
+        "--artifact", $ReleaseCandidate, $OutputExe,
+        "--artifact", $StagedAuditHtml, $OutputAuditHtml,
+        "--artifact", $StagedInstructions, $OutputInstructions
     )
+
+    Assert-ReleaseOutputAllowlist `
+        -Path $OutputsDirectory `
+        -ExpectedNames $ExpectedOutputNames `
+        -RequireAll
 
     $releaseFile = Get-Item -LiteralPath $OutputExe
     $sha256 = (Get-FileHash -LiteralPath $OutputExe -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -226,6 +277,9 @@ try {
 finally {
     if (Test-Path -LiteralPath $ReleaseCandidate) {
         Remove-Item -LiteralPath $ReleaseCandidate -Force
+    }
+    if (Test-Path -LiteralPath $StagedInstructions) {
+        Remove-Item -LiteralPath $StagedInstructions -Force
     }
     Pop-Location
 }

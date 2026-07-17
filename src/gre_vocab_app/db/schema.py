@@ -26,4 +26,3 @@ create table words(
 create index words_headword_nocase on words(headword collate nocase);
 create index words_source_order on words(source_order);
 """
-

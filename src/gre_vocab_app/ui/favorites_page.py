@@ -104,4 +104,3 @@ class FavoritesPage(QWidget):
         word = self._current_word()
         if word is not None:
             self.favoriteRemoved.emit(word.id)
-

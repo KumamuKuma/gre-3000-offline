@@ -18,4 +18,3 @@ def test_search_trims_delegates_and_caps_results_without_writes():
     assert content.calls == []
     assert service.search("  abat  ") == list(range(50))
     assert content.calls == [("abat", 50)]
-

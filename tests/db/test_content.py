@@ -262,4 +262,3 @@ def test_real_generated_database_supports_accented_unicode_queries():
         assert repository.count() == 3292
         assert repository.search("NAÏVETÉ")[0].headword == "naiveté"
         assert repository.search("CLICHE\N{COMBINING ACUTE ACCENT}")[0].headword == "cliché"
-

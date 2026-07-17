@@ -26,7 +26,6 @@ def launch_runtime(
         raise FileNotFoundError(f"Embedded runtime not found: {executable}")
     completed = subprocess.run(
         [str(executable), *arguments],
-        cwd=Path(sys.executable).resolve().parent,
         check=False,
     )
     return int(completed.returncode)
@@ -48,7 +47,7 @@ def show_error(message: str) -> None:
 
 def main() -> int:
     try:
-        exit_code = launch_runtime(embedded_runtime_path())
+        exit_code = launch_runtime(embedded_runtime_path(), sys.argv[1:])
     except OSError as error:
         show_error(f"应用无法启动。\n\n{error}")
         return 1

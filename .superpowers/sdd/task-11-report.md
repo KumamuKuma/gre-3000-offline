@@ -1,128 +1,115 @@
-# Task 11 report: hardened packaged Windows offline release
+# Task 11 report: Job-supervised Windows release verification
 
 ## Outcome
 
-The release remains one user-facing file, `outputs/GRE 3000 词离线版.exe`,
-with an exact `GRE 3000 词离线版` main-window title and no console window.
-Both the final launcher and the actual GUI child are x64 Windows-GUI PE files.
-The smoke test now closes the real Qt window with `WM_CLOSE`, waits for every
-process in the launcher/runtime chain, requires exit code 0 from each process,
-and fails if any process lingers.
+The Windows release pipeline still produces one user-facing file,
+`outputs/GRE 3000 词离线版.exe`. The Unicode-named outer executable embeds the
+ASCII-named Qt runtime `GRE3000OfflineRuntime.exe`; application arguments are
+forwarded to the runtime and the runtime inherits the caller's working directory.
 
-The final file embeds an ASCII-named Qt runtime inside a stdlib-only Nuitka
-onefile launcher. This is necessary because both Nuitka and PyInstaller Qt
-onefile diagnostics crashed at `QMainWindow.show()` when the outer executable
-itself had a Chinese filename, while byte-identical ASCII-named builds ran
-normally. The launcher resolves its embedded child relative to `__file__`,
-waits for it, returns its exact exit code, and never copies it to a persistent
-directory. Onefile temporary files are removed after a normal exit.
+Native acceptance no longer relies on a Toolhelp process snapshot. The probe now:
 
-## TDD and probe hardening
+1. creates the final Unicode-named build candidate with `CreateProcessW` and
+   `CREATE_SUSPENDED`;
+2. assigns the suspended root to a private Windows Job Object configured with
+   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`;
+3. resumes the root only after assignment, so all later descendants remain in the
+   supervised job;
+4. locates the visible exact-title window and proves its owner handle belongs to
+   that job;
+5. checks x64/Windows-GUI PE metadata and absence of a console for the outer root
+   and real titled GUI owner;
+6. revalidates the held process handle and HWND ownership before sending one
+   `WM_CLOSE`;
+7. requires root exit code 0 and Job Object `ActiveProcesses == 0`.
 
-New focused tests cover real Windows behavior rather than mocks:
+On any failure, closing the Job Object terminates every still-associated
+descendant, including children created after an earlier observation. The success
+path does not post to an old HWND again and does not kill by a bare PID.
 
-- PE COFF Machine and subsystem parsing against `python.exe` and `pythonw.exe`.
-- `FreeConsole`/`AttachConsole(actual_pid)` detection against a hidden real
-  console process and a real GUI-subsystem process.
-- waiting for two real zero-exit processes, rejecting a timeout, and rejecting
-  a nonzero exit.
-- Toolhelp32 process-tree discovery against a real child process, including the
-  command-line output consumed by the PowerShell release script.
-- Unicode launcher path resolution, real child waiting/exit-code propagation,
-  and missing-runtime failure.
+## TDD evidence
 
-The Toolhelp process-tree test was first observed RED with
-`ImportError: cannot import name 'process_tree_ids'`; after implementation the
-focused suite passed:
+The corrective tests were first observed failing for the intended reasons:
 
 ```text
-9 passed in 2.36s
+6 failed, 9 passed
+console CLI in an uncaptured CREATE_NEW_CONSOLE returned 120
+JobSupervisor and atomic publication did not exist
+launcher main did not forward arguments or preserve caller cwd
+build script had no protected build candidate
 ```
 
-Toolhelp32 replaced `Get-CimInstance Win32_Process`, which was denied by the
-managed Windows environment. It also avoids depending on process names: the
-release smoke identifies the exact titled window, verifies that its owner PID
-is in the launcher's real descendant tree, and probes that owner directly.
-
-## Packaging architecture and dependencies
-
-- Python 3.12.13
-- PySide6 / Qt / shiboken6 6.11.1
-- Nuitka 4.1.3
-- Microsoft Visual Studio 2022 MSVC
-
-`pyside6-deploy` builds `build/release/GRE3000OfflineRuntime.exe` with QtSql,
-the required Qt plugins, the generated SQLite content database, application
-icon, GUI subsystem, and onefile mode. A second stdlib-only Nuitka build embeds
-that runtime at `runtime/GRE3000OfflineRuntime.exe` and produces the final
-Unicode-safe launcher. Both layers are checked for COFF Machine `0x8664` and
-PE subsystem `2` before native smoke starts.
-
-The release script preserves its reviewed UTF-8 spec around
-`pyside6-deploy`, which otherwise rewrites discovered modules and Python paths.
-It carries a UTF-8 BOM for Windows PowerShell 5.1 and keeps Nuitka/temp caches
-inside `work/`.
-
-## Verification evidence
-
-The complete release pipeline reached and passed all pre-smoke stages using the
-source PDF:
+The focused suite is now green:
 
 ```text
-98 passed
-physical_row_bands=3292 empty_row_bands=0 multi_anchor_row_bands=0
-records=3292 unresolved=0 reviewed=4
-release_data_check record_count=3292 unresolved=0 reviewed=4 duplicates=0 integrity=ok
-inner PE: machine=0x8664 subsystem=2
-final PE: machine=0x8664 subsystem=2
+12 passed
 ```
 
-That invocation stopped only when its then-CIM process enumeration was denied.
-After replacing CIM with the tested Toolhelp probe, the already-produced exact
-release artifact passed the complete native smoke without another expensive
-rebuild:
+It includes real Windows integration coverage for:
+
+- a console probe invoked without `capture_output` in a real
+  `CREATE_NEW_CONSOLE` process;
+- Job Object tracking of a delayed child created after the initial root-only
+  observation;
+- Job close terminating a real lingering descendant after the root has exited;
+- a real GUI-subsystem process with an exact-title Win32 window, normal
+  `WM_CLOSE`, root exit 0, and final active-process count 0;
+- launcher production `main()` forwarding real arguments and preserving the
+  caller's current directory;
+- atomic replacement of an existing release by a verified candidate; and
+- release-script ordering: stage under `build`, verify and smoke the candidate,
+  publish atomically, and clean a failed candidate without deleting the old
+  output.
+
+The console check now runs `FreeConsole`/`AttachConsole` only inside a disposable
+worker whose stdout is a pipe. The long-lived CLI remains attached to its own
+interactive console, so Python can flush stdout normally instead of exiting 120.
+
+## Protected publication pipeline
+
+The final launcher is copied first to
+`build/release-candidate/GRE 3000 词离线版.exe`. PE verification and the
+Job-supervised native smoke run against that exact final basename. Only after
+both succeed does `os.replace` atomically publish the candidate to `outputs` on
+the same volume. The build script never removes the existing official EXE before
+verification, and its outer `finally` removes an unpublished candidate.
+
+This corrective task intentionally did not repeat the expensive full Qt build,
+because importer and application fixes are being integrated separately and the
+final pipeline will rebuild from those merged sources. The already-built exact
+release artifact was copied to a disposable build candidate and passed the new
+probe:
 
 ```text
-pe_metadata .../runtime/GRE3000OfflineRuntime.exe machine=0x8664 subsystem=2
-console_probe pid=39684 has_console=false winerror=6
-console_probe pid=34740 has_console=false winerror=6
-normal_exit wm_close=true processes=34740:0,37408:0,39128:0,39684:0 all_exited=true
-NATIVE_SMOKE_OK title='GRE 3000 词离线版' gui_pid=39684 launcher_pid=34740 chain=34740,37408,39128,39684 exit=0
+pe_metadata ... machine=0x8664 subsystem=2
+native_smoke title='GRE 3000 词离线版' root_pid=41720 gui_pid=13452
+job_total_processes=4 job_active_processes=0 machine=0x8664 subsystem=2
+no_console=true wm_close=true root_exit=0
 ```
 
-Final post-change checks:
+This run proves the new supervisor covers the outer launcher plus descendants
+created by the onefile/runtime chain; it is regression evidence, not a claim that
+the pre-integration artifact is the final deliverable.
+
+Final corrective checks:
 
 ```text
-focused: 9 passed
-full pytest without GRE_SOURCE_PDF: 85 passed, 14 skipped in 6.74s
-python -m compileall -q src scripts main.py: pass
+full pytest without GRE_SOURCE_PDF: 88 passed, 14 skipped in 6.06s
+python -m compileall -q scripts tests: pass
 PowerShell parser: pass
 git diff --check: pass
 ```
 
-The 14 local skips are PDF-layout tests gated on `GRE_SOURCE_PDF`; the release
-pipeline configured the supplied PDF and ran those tests successfully before
-the strict import shown above.
-
-Final release artifact:
-
-- Path: `outputs/GRE 3000 词离线版.exe`
-- SHA-256: `bf2501103ec9d50a80c9c358df512a2d6fce54840c80f8f65072b08e96bb3b4c`
-- Size: `34,003,968` bytes
-- Final launcher: x64 (`0x8664`), Windows GUI subsystem (`2`), no console
-- Actual Qt GUI child: x64 (`0x8664`), Windows GUI subsystem (`2`), no console
-- Close result: exact titled window received `WM_CLOSE`; all four observed
-  chain processes exited 0 within the timeout
+The 14 skips are the existing source-PDF layout tests gated on
+`GRE_SOURCE_PDF`; final integration will run those against the supplied PDF
+before rebuilding the deliverable.
 
 ## Boundaries
 
-- The personal EXE is unsigned, so Windows SmartScreen may warn on first run.
-- The packaged-path regression remained green because the desired
-  `PACKAGE_ROOT / "data" / "words.db"` behavior already existed; no artificial
-  production change was introduced.
-- Task 10 vocabulary content, parser rules, overrides, and MainWindow geometry
-  were not changed.
-- Generated database/build files, EXEs, profiles, reports, and caches remain
-  ignored.
-- research-git capture was skipped because this repository is manual-only and
-  the user did not request capture.
+- Vocabulary importer, database, UI, controller, and speech business code were
+  not changed by this corrective task.
+- The personal EXE remains unsigned, so Windows SmartScreen may warn on first
+  run.
+- Generated databases, EXEs, profiles, reports, and caches remain ignored.
+- research-git capture was skipped because the repository is manual-only and the
+  user did not request it.

@@ -41,3 +41,27 @@ def test_launch_runtime_rejects_a_missing_embedded_child(tmp_path: Path):
     missing = tmp_path / "GRE3000OfflineRuntime.exe"
     with pytest.raises(FileNotFoundError, match="GRE3000OfflineRuntime"):
         launch_runtime(missing)
+
+
+def test_production_main_forwards_real_arguments_and_inherits_callers_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import scripts.unicode_launcher as launcher
+
+    marker = tmp_path / "runtime-observation.txt"
+    runtime_code = (
+        "import os, pathlib, sys; "
+        "pathlib.Path(sys.argv[1]).write_text(os.getcwd() + '\\n' + '|'.join(sys.argv[2:]))"
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(launcher, "embedded_runtime_path", lambda: Path(sys.executable))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["GRE-outer.exe", "-c", runtime_code, str(marker), "alpha", "\u4e2d\u6587"],
+    )
+
+    assert launcher.main() == 0
+    observed_cwd, observed_arguments = marker.read_text().splitlines()
+    assert Path(observed_cwd) == tmp_path
+    assert observed_arguments == "alpha|\u4e2d\u6587"

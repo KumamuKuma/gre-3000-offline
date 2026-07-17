@@ -43,9 +43,12 @@ from .types import ParserState
 
 APPROVED_SOURCE_PROFILE: dict[str, Any] = {
     "sha256": "8270d259f3457711a16c9f7a7d79f2d95f89fa83228a1b89e656546882f303a0",
+    "overrides_sha256": "f4dafd4c42da35af47953064555312e20d2567cb123254d851d53932e8cbf074",
     "page_count": 288,
     "physical_row_bands": 3292,
     "record_count": 3292,
+    "override_count": 5,
+    "reviewed_count": 5,
     "first_source_order": 1,
     "last_source_order": 3292,
     "first_source_page": 5,
@@ -141,14 +144,21 @@ def _duplicate_rejecting_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def load_overrides(path: Path) -> dict[str, Mapping[str, Any]]:
+def _load_overrides_with_hash(
+    path: Path,
+) -> tuple[dict[str, Mapping[str, Any]], str]:
+    payload = path.read_bytes()
     parsed = json.loads(
-        path.read_text(encoding="utf-8"),
+        payload.decode("utf-8"),
         object_pairs_hook=_duplicate_rejecting_object,
     )
     if not isinstance(parsed, dict):
         raise ValueError("overrides must be a JSON object")
-    return parsed
+    return parsed, hashlib.sha256(payload).hexdigest()
+
+
+def load_overrides(path: Path) -> dict[str, Mapping[str, Any]]:
+    return _load_overrides_with_hash(path)[0]
 
 
 def _original_issues(entry: WordDraft) -> tuple[str, ...]:
@@ -590,6 +600,13 @@ def strict_checks_from_facts(facts: Mapping[str, Any]) -> list[dict[str, Any]]:
             facts["source_sha256"],
         ),
         _check(
+            "overrides_sha256",
+            facts["overrides_sha256"]
+            == APPROVED_SOURCE_PROFILE["overrides_sha256"],
+            APPROVED_SOURCE_PROFILE["overrides_sha256"],
+            facts["overrides_sha256"],
+        ),
+        _check(
             "page_count",
             facts["page_count"] == APPROVED_SOURCE_PROFILE["page_count"],
             APPROVED_SOURCE_PROFILE["page_count"],
@@ -640,8 +657,15 @@ def strict_checks_from_facts(facts: Mapping[str, Any]) -> list[dict[str, Any]]:
         ),
         _check(
             "override_use",
-            override_use["declared"] == override_use["applied"],
-            "declared == applied",
+            override_use
+            == {
+                "declared": APPROVED_SOURCE_PROFILE["override_count"],
+                "applied": APPROVED_SOURCE_PROFILE["override_count"],
+            },
+            {
+                "declared": APPROVED_SOURCE_PROFILE["override_count"],
+                "applied": APPROVED_SOURCE_PROFILE["override_count"],
+            },
             override_use,
         ),
         _check(
@@ -649,6 +673,12 @@ def strict_checks_from_facts(facts: Mapping[str, Any]) -> list[dict[str, Any]]:
             facts["unresolved_count"] == 0,
             0,
             facts["unresolved_count"],
+        ),
+        _check(
+            "reviewed_records",
+            facts["reviewed_count"] == APPROVED_SOURCE_PROFILE["reviewed_count"],
+            APPROVED_SOURCE_PROFILE["reviewed_count"],
+            facts["reviewed_count"],
         ),
         _check(
             "dewrap_profile",
@@ -669,6 +699,7 @@ def _facts(
     entries: Sequence[WordDraft],
     *,
     source_sha256: str,
+    overrides_sha256: str,
     page_count: int,
     coverage: PhysicalRowCoverage,
     diagnostics: ExtractionDiagnostics,
@@ -678,6 +709,7 @@ def _facts(
 ) -> dict[str, Any]:
     return {
         "source_sha256": source_sha256,
+        "overrides_sha256": overrides_sha256,
         "page_count": page_count,
         "physical_coverage": {
             "physical_row_bands": coverage.physical_row_bands,
@@ -695,6 +727,10 @@ def _facts(
             "applied": override_applied,
         },
         "unresolved_count": _unresolved_count(entries),
+        "reviewed_count": sum(
+            any(flag.startswith("reviewed:") for flag in entry.quality_flags)
+            for entry in entries
+        ),
         "dewrap_counts": diagnostics.dewrap_counts,
         "semantic_checks": list(checks),
     }
@@ -704,42 +740,149 @@ def _validate_artifact_candidates(
     entries: Sequence[WordDraft],
     slots: Sequence[ArtifactSlot],
     summary: AuditSummary,
+    *,
+    facts: Mapping[str, Any],
+    strict: bool,
 ) -> None:
     database_path, json_path, html_path = (
         slot.candidate for slot in slots
     )
     database = sqlite3.connect(database_path)
     try:
-        integrity = database.execute("pragma integrity_check").fetchone()
+        integrity = database.execute("pragma integrity_check").fetchall()
         record_count = database.execute(
             "select count(*) from words"
         ).fetchone()[0]
+        metadata = {
+            str(row[0]): str(row[1])
+            for row in database.execute("select key, value from metadata")
+        }
     finally:
         database.close()
-    if integrity is None or integrity[0] != "ok":
+    if [tuple(row) for row in integrity] != [("ok",)]:
         raise sqlite3.IntegrityError(
             f"candidate database integrity check failed: {integrity}"
         )
-    if record_count != len(entries):
+    expected_record_count = facts["record_count"]
+    if record_count != len(entries) or record_count != expected_record_count:
         raise ValueError(
             "candidate database record count mismatch: "
-            f"expected {len(entries)}, got {record_count}"
+            f"entries={len(entries)}, facts={expected_record_count}, "
+            f"database={record_count}"
+        )
+    try:
+        metadata_record_count = int(metadata["record_count"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(
+            f"candidate database metadata record count invalid: {error}"
+        ) from error
+    if metadata_record_count != expected_record_count:
+        raise ValueError(
+            "candidate database metadata record count mismatch: "
+            f"expected {expected_record_count}, got {metadata_record_count}"
         )
 
-    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    json_bytes = json_path.read_bytes()
+    try:
+        payload = json.loads(
+            json_bytes.decode("utf-8"),
+            object_pairs_hook=_duplicate_rejecting_object,
+        )
+    except (UnicodeDecodeError, ValueError) as error:
+        raise ValueError(
+            f"candidate audit JSON validation failed: {error}"
+        ) from error
+    if not isinstance(payload, dict):
+        raise ValueError("candidate audit JSON must be an object")
+
+    expected_strict_checks = strict_checks_from_facts(facts)
+    expected_actual_profile = {
+        "sha256": facts["source_sha256"],
+        "overrides_sha256": facts["overrides_sha256"],
+        "page_count": facts["page_count"],
+        "record_count": facts["record_count"],
+        "section_counts": facts["section_counts"],
+    }
+    expected_values = {
+        "source_sha256": facts["source_sha256"],
+        "overrides_sha256": facts["overrides_sha256"],
+        "page_count": facts["page_count"],
+        "record_count": facts["record_count"],
+        "physical_coverage": facts["physical_coverage"],
+        "section_counts": facts["section_counts"],
+        "continuity": facts["continuity"],
+        "page_range": facts["page_range"],
+        "dewrap_counts": facts["dewrap_counts"],
+        "semantic_checks": facts["semantic_checks"],
+        "strict_checks": expected_strict_checks,
+    }
+    for field, expected in expected_values.items():
+        actual = payload.get(field)
+        if actual != expected:
+            raise ValueError(
+                f"candidate audit {field} mismatch: "
+                f"expected {expected!r}, got {actual!r}"
+            )
+
+    source_profile = payload.get("source_profile")
+    if not isinstance(source_profile, dict):
+        raise ValueError("candidate audit source_profile is invalid")
+    if source_profile.get("approved") != APPROVED_SOURCE_PROFILE:
+        raise ValueError("candidate audit approved source profile mismatch")
+    if source_profile.get("actual") != expected_actual_profile:
+        raise ValueError("candidate audit actual source profile mismatch")
+
+    override_details = payload.get("override_details")
     if (
-        not isinstance(payload, dict)
-        or payload.get("record_count") != len(entries)
+        not isinstance(override_details, list)
+        or len(override_details) != facts["override_use"]["applied"]
     ):
-        raise ValueError("candidate audit JSON record count mismatch")
+        raise ValueError("candidate audit override detail count mismatch")
+    unresolved_records = payload.get("unresolved_records")
+    if (
+        not isinstance(unresolved_records, list)
+        or len(unresolved_records) != facts["unresolved_count"]
+    ):
+        raise ValueError("candidate audit unresolved record count mismatch")
+    reviewed_records = payload.get("reviewed_records")
+    if (
+        not isinstance(reviewed_records, list)
+        or len(reviewed_records) != facts["reviewed_count"]
+    ):
+        raise ValueError("candidate audit reviewed record count mismatch")
+
     html = html_path.read_text(encoding="utf-8")
+    json_digest = hashlib.sha256(json_bytes).hexdigest()
+    digest_marker = (
+        f'<meta name="audit-json-sha256" content="{json_digest}">'
+    )
     if (
         not html.startswith("<!doctype html>")
         or "<title>Vocabulary import audit</title>" not in html
+        or digest_marker not in html
     ):
         raise ValueError("candidate audit HTML validation failed")
-    if summary.record_count != len(entries):
-        raise ValueError("candidate audit summary record count mismatch")
+    if (
+        summary.record_count != facts["record_count"]
+        or summary.unresolved_count != facts["unresolved_count"]
+        or summary.reviewed_count != facts["reviewed_count"]
+    ):
+        raise ValueError("candidate audit summary mismatch")
+
+    if strict:
+        if not all(check.get("pass") is True for check in expected_strict_checks):
+            raise ValueError("candidate strict audit has a failed strict check")
+        if facts["unresolved_count"] != 0:
+            raise ValueError(
+                "candidate strict audit requires zero unresolved records"
+            )
+        if (
+            facts["reviewed_count"]
+            != APPROVED_SOURCE_PROFILE["reviewed_count"]
+        ):
+            raise ValueError(
+                "candidate strict audit reviewed record count mismatch"
+            )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -754,14 +897,18 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _run(args: argparse.Namespace) -> int:
-    entries, page_count, coverage, diagnostics = _extract_with_diagnostics(args.pdf)
-    overrides = load_overrides(args.overrides)
-    entries, override_details = apply_overrides_with_audit(entries, overrides)
     source_hash = _source_sha256(args.pdf)
+    entries, page_count, coverage, diagnostics = _extract_with_diagnostics(args.pdf)
+    source_hash_after = _source_sha256(args.pdf)
+    if source_hash_after != source_hash:
+        raise ValueError("source PDF changed during extraction")
+    overrides, overrides_hash = _load_overrides_with_hash(args.overrides)
+    entries, override_details = apply_overrides_with_audit(entries, overrides)
     semantic = semantic_checks(entries, diagnostics)
     facts = _facts(
         entries,
         source_sha256=source_hash,
+        overrides_sha256=overrides_hash,
         page_count=page_count,
         coverage=coverage,
         diagnostics=diagnostics,
@@ -787,6 +934,8 @@ def _run(args: argparse.Namespace) -> int:
             slots[1].candidate,
             slots[2].candidate,
             source_path=args.pdf,
+            source_sha256=source_hash,
+            overrides_sha256=overrides_hash,
             page_count=page_count,
             approved_source_profile=APPROVED_SOURCE_PROFILE,
             physical_coverage=facts["physical_coverage"],
@@ -797,7 +946,13 @@ def _run(args: argparse.Namespace) -> int:
             semantic_checks=semantic,
             strict_checks=strict_checks,
         )
-        _validate_artifact_candidates(entries, slots, summary)
+        _validate_artifact_candidates(
+            entries,
+            slots,
+            summary,
+            facts=facts,
+            strict=args.strict,
+        )
         publish_artifact_slots(slots)
     finally:
         cleanup_artifact_slots(slots)

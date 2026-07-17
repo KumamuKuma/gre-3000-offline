@@ -1,4 +1,6 @@
+import hashlib
 import json
+import re
 from pathlib import Path
 
 import fitz
@@ -142,6 +144,43 @@ def test_audit_contains_counts_categories_duplicates_and_escaped_html(tmp_path):
         assert heading in html
 
 
+def test_audit_uses_stable_supplied_hashes_without_rereading_source(tmp_path):
+    missing_source = tmp_path / "source-was-removed.pdf"
+    json_path = tmp_path / "report.json"
+    html_path = tmp_path / "report.html"
+    source_sha256 = "a" * 64
+    overrides_sha256 = "b" * 64
+
+    write_audit(
+        [draft("alpha", 1)],
+        json_path,
+        html_path,
+        source_path=missing_source,
+        source_sha256=source_sha256,
+        overrides_sha256=overrides_sha256,
+        approved_source_profile={
+            "sha256": "c" * 64,
+            "overrides_sha256": "d" * 64,
+        },
+    )
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["source_sha256"] == source_sha256
+    assert payload["overrides_sha256"] == overrides_sha256
+    assert payload["source_profile"]["actual"]["sha256"] == source_sha256
+    assert (
+        payload["source_profile"]["actual"]["overrides_sha256"]
+        == overrides_sha256
+    )
+    html = html_path.read_text(encoding="utf-8")
+    assert source_sha256 in html
+    assert overrides_sha256 in html
+    json_digest = hashlib.sha256(json_path.read_bytes()).hexdigest()
+    assert (
+        f'<meta name="audit-json-sha256" content="{json_digest}">' in html
+    )
+
+
 def _stub_successful_extract(monkeypatch):
     diagnostics = ExtractionDiagnostics(
         dewrap_counts={
@@ -191,6 +230,28 @@ def _publication_leftovers(root: Path) -> list[Path]:
         for path in root.rglob("*")
         if ".candidate-" in path.name or ".backup-" in path.name
     )
+
+
+def _rewrite_audit_and_sync_html(json_path, html_path, mutate):
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    mutate(payload)
+    json_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    digest = hashlib.sha256(json_path.read_bytes()).hexdigest()
+    marker = f'<meta name="audit-json-sha256" content="{digest}">'
+    html = html_path.read_text(encoding="utf-8")
+    if 'name="audit-json-sha256"' in html:
+        html = re.sub(
+            r'<meta name="audit-json-sha256" content="[0-9a-f]{64}">',
+            marker,
+            html,
+            count=1,
+        )
+    else:
+        html = html.replace("<head>", "<head>" + marker, 1)
+    html_path.write_text(html, encoding="utf-8")
 
 
 def test_cli_strict_mode_rejects_unapproved_pdf_without_replacing_outputs(
@@ -376,6 +437,249 @@ def test_cli_candidate_write_failure_preserves_old_artifact_set(
     assert audit_html.read_text(encoding="utf-8") == "trusted html"
     assert _publication_leftovers(tmp_path) == []
     assert "candidate HTML write failed" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    (
+        "source_hash",
+        "overrides_hash",
+        "strict_checks",
+        "unresolved_records",
+        "reviewed_records",
+        "duplicate_key",
+        "database_metadata_count",
+        "html_link",
+    ),
+)
+def test_cli_rejects_tampered_candidate_audit_and_preserves_old_artifact_set(
+    tmp_path, monkeypatch, capsys, tamper
+):
+    _stub_successful_extract(monkeypatch)
+    output = tmp_path / "words.db"
+    audit_json = tmp_path / "audit.json"
+    audit_html = tmp_path / "audit.html"
+    output.write_bytes(b"trusted database")
+    audit_json.write_text("trusted json", encoding="utf-8")
+    audit_html.write_text("trusted html", encoding="utf-8")
+    if tamper == "database_metadata_count":
+        real_build_database = build_module.build_database
+
+        def build_then_tamper_metadata(entries, database_path):
+            real_build_database(entries, database_path)
+            database = build_module.sqlite3.connect(database_path)
+            try:
+                database.execute(
+                    "update metadata set value='999' where key='record_count'"
+                )
+                database.commit()
+            finally:
+                database.close()
+
+        monkeypatch.setattr(
+            build_module, "build_database", build_then_tamper_metadata
+        )
+    real_write_audit = build_module.write_audit
+
+    def write_then_tamper(entries, json_path, html_path, **kwargs):
+        summary = real_write_audit(entries, json_path, html_path, **kwargs)
+
+        def mutate(payload):
+            if tamper == "source_hash":
+                payload["source_sha256"] = "0" * 64
+                payload["source_profile"]["actual"]["sha256"] = "0" * 64
+            elif tamper == "overrides_hash":
+                payload["overrides_sha256"] = "1" * 64
+                payload["source_profile"]["actual"]["overrides_sha256"] = (
+                    "1" * 64
+                )
+            elif tamper == "strict_checks":
+                payload["strict_checks"][0]["pass"] = not payload[
+                    "strict_checks"
+                ][0]["pass"]
+            elif tamper == "unresolved_records":
+                payload["unresolved_records"] = [{"source_order": 1}]
+            elif tamper == "reviewed_records":
+                payload["reviewed_records"] = [{"source_order": 1}]
+
+        _rewrite_audit_and_sync_html(json_path, html_path, mutate)
+        if tamper == "duplicate_key":
+            raw_json = json_path.read_text(encoding="utf-8")
+            json_path.write_text(
+                raw_json.replace(
+                    "{\n", '{\n  "record_count": 999,\n', 1
+                ),
+                encoding="utf-8",
+            )
+            digest = hashlib.sha256(json_path.read_bytes()).hexdigest()
+            html = html_path.read_text(encoding="utf-8")
+            html_path.write_text(
+                re.sub(
+                    r'(<meta name="audit-json-sha256" content=")[0-9a-f]{64}(">)',
+                    r"\g<1>" + digest + r"\g<2>",
+                    html,
+                    count=1,
+                ),
+                encoding="utf-8",
+            )
+        if tamper == "html_link":
+            html = html_path.read_text(encoding="utf-8")
+            html_path.write_text(
+                re.sub(
+                    r'(<meta name="audit-json-sha256" content=")[0-9a-f]{64}(">)',
+                    r"\g<1>" + "f" * 64 + r"\g<2>",
+                    html,
+                    count=1,
+                ),
+                encoding="utf-8",
+            )
+        return summary
+
+    monkeypatch.setattr(build_module, "write_audit", write_then_tamper)
+
+    result = main(
+        _import_arguments(tmp_path, output, audit_json, audit_html)
+    )
+
+    assert result == 1
+    expected_error = (
+        "candidate database"
+        if tamper == "database_metadata_count"
+        else "candidate audit"
+    )
+    assert expected_error in capsys.readouterr().err
+    assert output.read_bytes() == b"trusted database"
+    assert audit_json.read_text(encoding="utf-8") == "trusted json"
+    assert audit_html.read_text(encoding="utf-8") == "trusted html"
+    assert _publication_leftovers(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    ("reviewed_count", "unresolved_count"), ((4, 0), (5, 1))
+)
+def test_strict_candidate_rechecks_review_counts_before_publication(
+    tmp_path, monkeypatch, capsys, reviewed_count, unresolved_count
+):
+    diagnostics = ExtractionDiagnostics(
+        dewrap_counts={
+            field: {
+                "normal_space": 0,
+                "hard_join": 0,
+                "hard_join_records": 0,
+            }
+            for field in ("definition", "example", "synonyms")
+        },
+        dewrap_events=(),
+    )
+    entries = [
+        draft(
+            f"reviewed-{order}",
+            order,
+            flags=("reviewed:sample",),
+        )
+        for order in range(1, reviewed_count + 1)
+    ]
+    entries.extend(
+        draft(
+            f"unresolved-{order}",
+            reviewed_count + order,
+            flags=("missing_phonetic",),
+        )
+        for order in range(1, unresolved_count + 1)
+    )
+    monkeypatch.setattr(
+        build_module,
+        "_extract_with_diagnostics",
+        lambda _path: (
+            entries,
+            5,
+            PhysicalRowCoverage(len(entries), 0, 0),
+            diagnostics,
+        ),
+    )
+    monkeypatch.setattr(
+        build_module,
+        "_source_sha256",
+        lambda _path: build_module.APPROVED_SOURCE_PROFILE["sha256"],
+    )
+    monkeypatch.setattr(
+        build_module,
+        "_load_overrides_with_hash",
+        lambda _path: (
+            {},
+            build_module.APPROVED_SOURCE_PROFILE["overrides_sha256"],
+        ),
+    )
+    monkeypatch.setattr(
+        build_module,
+        "strict_checks_from_facts",
+        lambda _facts: [
+            {"name": "synthetic_gate", "pass": True, "expected": 1, "actual": 1}
+        ],
+    )
+    output = tmp_path / "words.db"
+    audit_json = tmp_path / "audit.json"
+    audit_html = tmp_path / "audit.html"
+    output.write_bytes(b"trusted database")
+    audit_json.write_text("trusted json", encoding="utf-8")
+    audit_html.write_text("trusted html", encoding="utf-8")
+    arguments = _import_arguments(tmp_path, output, audit_json, audit_html)
+    arguments.append("--strict")
+
+    result = main(arguments)
+
+    assert result == 1
+    assert "candidate strict audit" in capsys.readouterr().err
+    assert output.read_bytes() == b"trusted database"
+    assert audit_json.read_text(encoding="utf-8") == "trusted json"
+    assert audit_html.read_text(encoding="utf-8") == "trusted html"
+    assert _publication_leftovers(tmp_path) == []
+
+
+def test_cli_rejects_pdf_changed_during_extraction_without_replacing_outputs(
+    tmp_path, monkeypatch, capsys
+):
+    output = tmp_path / "words.db"
+    audit_json = tmp_path / "audit.json"
+    audit_html = tmp_path / "audit.html"
+    output.write_bytes(b"trusted database")
+    audit_json.write_text("trusted json", encoding="utf-8")
+    audit_html.write_text("trusted html", encoding="utf-8")
+    arguments = _import_arguments(tmp_path, output, audit_json, audit_html)
+
+    diagnostics = ExtractionDiagnostics(
+        dewrap_counts={
+            field: {
+                "normal_space": 0,
+                "hard_join": 0,
+                "hard_join_records": 0,
+            }
+            for field in ("definition", "example", "synonyms")
+        },
+        dewrap_events=(),
+    )
+
+    def mutate_during_extract(source):
+        Path(source).write_bytes(b"source changed while extracting")
+        return (
+            [draft("alpha", 1)],
+            5,
+            PhysicalRowCoverage(1, 0, 0),
+            diagnostics,
+        )
+
+    monkeypatch.setattr(
+        build_module, "_extract_with_diagnostics", mutate_during_extract
+    )
+
+    result = main(arguments)
+
+    assert result == 1
+    assert "changed during extraction" in capsys.readouterr().err
+    assert output.read_bytes() == b"trusted database"
+    assert audit_json.read_text(encoding="utf-8") == "trusted json"
+    assert audit_html.read_text(encoding="utf-8") == "trusted html"
+    assert _publication_leftovers(tmp_path) == []
 
 
 def test_cli_html_output_directory_conflict_preserves_old_database_and_json(

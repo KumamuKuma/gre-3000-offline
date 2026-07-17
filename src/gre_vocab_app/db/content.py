@@ -131,6 +131,13 @@ class ContentRepository:
             "select * from words order by source_order"
         ).fetchall()
         self._validated_entries = tuple(self._map(row) for row in rows)
+        entry_ids = tuple(entry.id for entry in self._validated_entries)
+        if any(word_id <= 0 for word_id in entry_ids):
+            raise ContentDatabaseError(
+                "word entry id must be a positive integer"
+            )
+        if len(set(entry_ids)) != len(entry_ids):
+            raise ContentDatabaseError("word entry id values must be unique")
         self._entries_by_id = {
             entry.id: entry for entry in self._validated_entries
         }

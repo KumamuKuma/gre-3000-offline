@@ -97,6 +97,8 @@ def write_audit(
     html_path: Path,
     *,
     source_path: Path | None = None,
+    source_sha256: str | None = None,
+    overrides_sha256: str = "",
     page_count: int = 0,
     approved_source_profile: Mapping[str, Any] | None = None,
     physical_coverage: Mapping[str, Any] | None = None,
@@ -122,16 +124,20 @@ def write_audit(
         sorted(Counter(entry.source_section for entry in ordered).items())
     )
     duplicates = _duplicates(ordered)
-    source_sha256 = _source_hash(source_path)
+    actual_source_sha256 = (
+        source_sha256 if source_sha256 is not None else _source_hash(source_path)
+    )
     actual_profile = {
-        "sha256": source_sha256,
+        "sha256": actual_source_sha256,
+        "overrides_sha256": overrides_sha256,
         "page_count": page_count,
         "record_count": len(ordered),
         "section_counts": section_counts,
     }
     payload = {
         # Retain the original flat values for machine consumers from the first audit schema.
-        "source_sha256": source_sha256,
+        "source_sha256": actual_source_sha256,
+        "overrides_sha256": overrides_sha256,
         "page_count": page_count,
         "record_count": len(ordered),
         "source_profile": {
@@ -158,9 +164,11 @@ def write_audit(
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    audit_json_sha256 = hashlib.sha256(json_path.read_bytes()).hexdigest()
 
     summary_rows = [
         ("Source SHA-256", payload["source_sha256"]),
+        ("Overrides SHA-256", payload["overrides_sha256"]),
         ("Page count", page_count),
         ("Record count", len(ordered)),
         ("Unresolved", len(unresolved)),
@@ -220,6 +228,7 @@ def write_audit(
     html = "".join(
         [
             "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
+            f'<meta name="audit-json-sha256" content="{audit_json_sha256}">',
             "<title>Vocabulary import audit</title>",
             "<style>body{font:14px system-ui;margin:24px;color:#17202a}",
             "table{border-collapse:collapse;width:100%;margin:8px 0 22px}",

@@ -1,6 +1,8 @@
+import hashlib
 import json
 import sqlite3
 from dataclasses import replace
+from pathlib import Path
 
 import fitz
 import pytest
@@ -360,6 +362,7 @@ def test_semantic_wrap_scan_covers_mixed_chinese_block_boundaries(
 def approved_facts():
     return {
         "source_sha256": APPROVED_SOURCE_PROFILE["sha256"],
+        "overrides_sha256": APPROVED_SOURCE_PROFILE["overrides_sha256"],
         "page_count": 288,
         "physical_coverage": {
             "physical_row_bands": 3292,
@@ -377,6 +380,7 @@ def approved_facts():
         "section_counts": APPROVED_SOURCE_PROFILE["section_counts"],
         "override_use": {"declared": 5, "applied": 5},
         "unresolved_count": 0,
+        "reviewed_count": 5,
         "dewrap_counts": {
             "definition": {
                 "normal_space": 3993,
@@ -398,10 +402,22 @@ def approved_facts():
     }
 
 
+def test_approved_profile_binds_the_exact_reviewed_override_file():
+    override_path = Path(build_module.__file__).with_name("overrides.json")
+
+    actual = hashlib.sha256(override_path.read_bytes()).hexdigest()
+
+    assert APPROVED_SOURCE_PROFILE["overrides_sha256"] == actual
+
+
 @pytest.mark.parametrize(
     "mutate, failing_check",
     [
         (lambda facts: facts.update(source_sha256="0" * 64), "source_sha256"),
+        (
+            lambda facts: facts.update(overrides_sha256="0" * 64),
+            "overrides_sha256",
+        ),
         (lambda facts: facts.update(page_count=287), "page_count"),
         (
             lambda facts: facts["physical_coverage"].update(physical_row_bands=3291),
@@ -424,7 +440,12 @@ def approved_facts():
             lambda facts: facts["override_use"].update(applied=4),
             "override_use",
         ),
+        (
+            lambda facts: facts["override_use"].update(declared=4, applied=4),
+            "override_use",
+        ),
         (lambda facts: facts.update(unresolved_count=1), "unresolved_records"),
+        (lambda facts: facts.update(reviewed_count=4), "reviewed_records"),
         (
             lambda facts: facts["dewrap_counts"]["example"].update(hard_join=240),
             "dewrap_profile",

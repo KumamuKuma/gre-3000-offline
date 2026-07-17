@@ -55,6 +55,33 @@ def relax_words_constraints(path: Path) -> None:
         )
 
 
+def remove_words_id_primary_key(path: Path) -> None:
+    with sqlite3.connect(path) as database:
+        database.executescript(
+            """
+            alter table words rename to words_valid;
+            create table words(
+              id integer,
+              source_order integer not null unique,
+              source_section text not null,
+              source_page integer not null,
+              headword text not null,
+              phonetic text not null,
+              definition_en text not null,
+              definition_zh text not null,
+              synonyms text not null,
+              example_en text not null,
+              example_zh text not null,
+              raw_definition text not null,
+              raw_example text not null,
+              quality_flags text not null
+            );
+            insert into words select * from words_valid;
+            drop table words_valid;
+            """
+        )
+
+
 @pytest.fixture
 def content_path(tmp_path):
     path = tmp_path / "words.db"
@@ -141,6 +168,20 @@ def test_content_repository_rejects_non_continuous_source_order(content_path):
 
     error_type = getattr(content_module, "ContentDatabaseError", RuntimeError)
     with pytest.raises(error_type, match="source_order|顺序"):
+        ContentRepository(content_path)
+
+
+@pytest.mark.parametrize("invalid_id", (0, -1, 1))
+def test_content_repository_rejects_nonpositive_or_duplicate_entry_ids_before_indexing(
+    content_path, invalid_id
+):
+    remove_words_id_primary_key(content_path)
+    with sqlite3.connect(content_path) as database:
+        database.execute(
+            "update words set id=? where source_order=2", (invalid_id,)
+        )
+
+    with pytest.raises(content_module.ContentDatabaseError, match="id"):
         ContentRepository(content_path)
 
 

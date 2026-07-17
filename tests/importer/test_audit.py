@@ -49,6 +49,47 @@ def test_audit_contains_counts_categories_duplicates_and_escaped_html(tmp_path):
         html_path,
         source_path=source,
         page_count=288,
+        approved_source_profile={
+            "sha256": "approved",
+            "page_count": 288,
+            "physical_row_bands": 3292,
+            "record_count": 3292,
+        },
+        physical_coverage={
+            "physical_row_bands": 3292,
+            "empty_row_bands": 0,
+            "multi_anchor_row_bands": 0,
+        },
+        continuity={
+            "first_source_order": 1,
+            "last_source_order": 3,
+            "missing_source_orders": [],
+            "duplicate_source_orders": [],
+        },
+        page_range={"first_source_page": 5, "last_source_page": 5},
+        dewrap_counts={
+            "definition": {
+                "normal_space": 4,
+                "hard_join": 0,
+                "hard_join_records": 0,
+            }
+        },
+        override_details=[
+            {
+                "key": "5:<alpha>",
+                "source_order": 2,
+                "original_issues": ["split_token"],
+                "changed_fields": ["definition_en"],
+                "before": {"definition_en": "bad"},
+                "after": {"definition_en": "fixed"},
+            }
+        ],
+        semantic_checks=[
+            {"name": "language_contamination", "pass": True, "count": 0}
+        ],
+        strict_checks=[
+            {"name": "source_sha256", "pass": True, "expected": "x", "actual": "x"}
+        ],
     )
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))
@@ -65,6 +106,18 @@ def test_audit_contains_counts_categories_duplicates_and_escaped_html(tmp_path):
     assert payload["duplicate_headwords"] == [
         {"headword": "<alpha>", "source_orders": [1, 2]}
     ]
+    assert payload["source_profile"]["approved"]["physical_row_bands"] == 3292
+    assert payload["source_profile"]["actual"]["page_count"] == 288
+    assert payload["physical_coverage"]["physical_row_bands"] == 3292
+    assert payload["continuity"]["missing_source_orders"] == []
+    assert payload["page_range"] == {
+        "first_source_page": 5,
+        "last_source_page": 5,
+    }
+    assert payload["dewrap_counts"]["definition"]["normal_space"] == 4
+    assert payload["override_details"][0]["before"] == {"definition_en": "bad"}
+    assert payload["semantic_checks"][0]["pass"] is True
+    assert payload["strict_checks"][0]["pass"] is True
     assert summary.unresolved_count == 1
     assert summary.reviewed_count == 1
 
@@ -73,9 +126,21 @@ def test_audit_contains_counts_categories_duplicates_and_escaped_html(tmp_path):
     assert "&lt;b&gt;bad&lt;/b&gt;" in html
     assert "<alpha>" not in html
     assert "<b>bad</b>" not in html
+    for heading in (
+        "Source profile",
+        "Physical coverage",
+        "Continuity",
+        "De-wrap counts",
+        "Override details",
+        "Semantic checks",
+        "Strict checks",
+    ):
+        assert heading in html
 
 
-def test_cli_strict_mode_writes_outputs_then_returns_two(tmp_path, capsys):
+def test_cli_strict_mode_rejects_unapproved_pdf_without_replacing_outputs(
+    tmp_path, capsys
+):
     pdf = tmp_path / "source.pdf"
     document = fitz.open()
     for _ in range(5):
@@ -103,6 +168,11 @@ def test_cli_strict_mode_writes_outputs_then_returns_two(tmp_path, capsys):
     output = tmp_path / "build" / "words.db"
     audit_json = tmp_path / "audit" / "report.json"
     audit_html = tmp_path / "audit" / "report.html"
+    output.parent.mkdir(parents=True)
+    audit_json.parent.mkdir(parents=True)
+    output.write_bytes(b"trusted database")
+    audit_json.write_text("trusted json", encoding="utf-8")
+    audit_html.write_text("trusted html", encoding="utf-8")
     overrides = tmp_path / "overrides.json"
     overrides.write_text("{}", encoding="utf-8")
 
@@ -122,11 +192,45 @@ def test_cli_strict_mode_writes_outputs_then_returns_two(tmp_path, capsys):
         ]
     )
 
-    assert result == 2
-    assert output.exists() and audit_json.exists() and audit_html.exists()
-    assert capsys.readouterr().out.strip().endswith(
-        "records=1 unresolved=1 reviewed=0"
+    assert result == 1
+    assert output.read_bytes() == b"trusted database"
+    assert audit_json.read_text(encoding="utf-8") == "trusted json"
+    assert audit_html.read_text(encoding="utf-8") == "trusted html"
+    captured = capsys.readouterr()
+    assert "strict validation failed" in captured.err
+    assert captured.out == ""
+
+
+def test_cli_strict_mode_rejects_four_page_empty_pdf(tmp_path, capsys):
+    pdf = tmp_path / "empty.pdf"
+    with fitz.open() as document:
+        for _ in range(4):
+            document.new_page(width=596, height=842)
+        document.save(pdf)
+    overrides = tmp_path / "overrides.json"
+    overrides.write_text("{}", encoding="utf-8")
+
+    result = main(
+        [
+            "--pdf",
+            str(pdf),
+            "--output",
+            str(tmp_path / "words.db"),
+            "--audit-json",
+            str(tmp_path / "audit.json"),
+            "--audit-html",
+            str(tmp_path / "audit.html"),
+            "--overrides",
+            str(overrides),
+            "--strict",
+        ]
     )
+
+    assert result == 1
+    assert not (tmp_path / "words.db").exists()
+    assert not (tmp_path / "audit.json").exists()
+    assert not (tmp_path / "audit.html").exists()
+    assert "strict validation failed" in capsys.readouterr().err
 
 
 def test_cli_returns_one_for_missing_input(tmp_path, capsys):

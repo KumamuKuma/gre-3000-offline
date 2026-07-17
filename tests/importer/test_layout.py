@@ -12,6 +12,55 @@ def span(x: float, y: float, text: str, size: float = 10) -> TextSpan:
     return TextSpan(x0=x, y0=y, x1=x + 60, y1=y + 11, text=text, size=size)
 
 
+def test_extract_page_spans_preserves_boundary_whitespace():
+    class FakePage:
+        def get_text(self, kind):
+            assert kind == "dict"
+            return {
+                "blocks": [
+                    {
+                        "lines": [
+                            {
+                                "spans": [
+                                    {
+                                        "bbox": (10, 20, 30, 40),
+                                        "text": " word ",
+                                        "size": 10,
+                                    },
+                                    {
+                                        "bbox": (30, 20, 40, 40),
+                                        "text": "   ",
+                                        "size": 10,
+                                    },
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+
+    spans = extract_page_spans(FakePage())
+
+    assert [item.text for item in spans] == [" word "]
+
+
+def test_visual_lines_cluster_by_center_and_keep_same_line_span_boundaries():
+    spans = [
+        TextSpan(19, 70, 70, 87, "alpha", 10),
+        TextSpan(100, 70, 150, 87, "[a]", 10),
+        TextSpan(188, 70, 250, 87, "adj. sure ", 10),
+        TextSpan(250, 72.5, 290, 84.5, "\u5fc5\u7136\u7684", 10),
+    ]
+
+    rows, _ = group_spans_into_rows(
+        spans,
+        page_number=5,
+        state=ParserState(next_order=1, section="list1"),
+    )
+
+    assert rows[0].columns[2] == "adj. sure \u5fc5\u7136\u7684"
+
+
 def test_groups_five_columns_and_updates_mid_page_section():
     spans = [
         span(19, 48, "张巍GRE镇考3000词 乱序版 list1"),
@@ -288,7 +337,7 @@ def test_real_pdf_row_bands_recover_bottom_translation():
     rows = _real_pdf_rows(8)
 
     assert rows["fluctuate"].columns[4] == (
-        "Body temperature can fluctuate if you\n"
+        "Body temperature can fluctuate if you \n"
         "are ill.\n"
         "人患病后体温可能会上下波动。"
     )
@@ -299,8 +348,8 @@ def test_real_pdf_row_bands_keep_comestible_and_neighbors_separate():
 
     assert rows["occult"].columns[4].endswith("过同样的情景似的。")
     assert rows["comestible"].columns[4] == (
-        "Ethyl lactate is one kind of comestible\n"
-        "synthetic spicery.\n"
+        "Ethyl lactate is one kind of comestible \n"
+        "synthetic spicery. \n"
         "乳酸乙酯是一种食用合成香料。"
     )
     assert rows["embed"].columns[4].startswith("They used to kind of embed it")
@@ -327,9 +376,9 @@ def test_real_pdf_combined_headword_phonetic_restores_missing_row_and_neighbors(
     assert rows["heterogeneous"].columns == (
         "heterogeneous",
         "[ˌhetərəˈdʒi:niəs]",
-        "adj. made up of parts that\nare different\n各种各样的",
-        "disparate,\ndissimilar",
-        "America has a very heterogeneous\npopulation.\n美国人口是由不同种族组成的。",
+        "adj. made up of parts that \nare different 各种各样的",
+        "disparate, \ndissimilar",
+        "America has a very heterogeneous \npopulation. \n美国人口是由不同种族组成的。",
     )
     assert "adj. made up of parts" not in rows["halfhearted"].columns[2]
     assert rows["oppressive"].columns[2].startswith(

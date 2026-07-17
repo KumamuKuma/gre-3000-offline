@@ -5,7 +5,17 @@ import fitz
 import pytest
 
 from gre_vocab_app.importer import build as build_module
-from gre_vocab_app.importer.build import apply_overrides, build_database
+from gre_vocab_app.importer.build import (
+    APPROVED_SOURCE_PROFILE,
+    ExtractionDiagnostics,
+    RecordDewrapEvent,
+    apply_overrides,
+    apply_overrides_with_audit,
+    build_database,
+    load_overrides,
+    semantic_checks,
+    strict_checks_from_facts,
+)
 from gre_vocab_app.importer.normalize import WordDraft
 
 
@@ -67,6 +77,240 @@ def test_reviewed_override_is_idempotent_and_does_not_mutate_input():
         "reviewed:split_token",
         "reviewed:missing_phonetic",
     )
+
+
+def test_override_recomputes_flags_and_audits_before_after_and_original_issue():
+    original = draft("beta", 2, ("missing_phonetic",))
+    original = WordDraft(
+        **{
+            **{name: getattr(original, name) for name in original.__dataclass_fields__},
+            "phonetic": "",
+        }
+    )
+
+    fixed, details = apply_overrides_with_audit(
+        [original], {"5:beta": {"phonetic": "[b]", "reviewed": True}}
+    )
+
+    assert fixed[0].quality_flags == ("reviewed:missing_phonetic",)
+    assert details[0]["key"] == "5:beta"
+    assert details[0]["source_order"] == 2
+    assert details[0]["original_issues"] == ["missing_phonetic"]
+    assert details[0]["changed_fields"] == ["phonetic"]
+    assert details[0]["before"]["phonetic"] == ""
+    assert details[0]["after"]["phonetic"] == "[b]"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("source_order", 99),
+        ("source_page", 99),
+        ("source_section", "list2"),
+        ("raw_definition", "forged"),
+        ("raw_example", "forged"),
+        ("quality_flags", []),
+    ],
+)
+def test_override_rejects_provenance_raw_and_quality_flag_fields(field, value):
+    with pytest.raises(ValueError, match="forbidden override field"):
+        apply_overrides(
+            [draft("beta", 2, ("split_token",))],
+            {"5:beta": {field: value, "reviewed": True}},
+        )
+
+
+def test_override_requires_every_key_to_match_exactly_one_original_row():
+    with pytest.raises(ValueError, match="matched 0 rows"):
+        apply_overrides(
+            [draft("beta", 2, ("split_token",))],
+            {"5:betta": {"reviewed": True}},
+        )
+
+    with pytest.raises(ValueError, match="matched 2 rows"):
+        apply_overrides(
+            [draft("beta", 2, ("split_token",)), draft("beta", 3, ("split_token",))],
+            {"5:beta": {"reviewed": True}},
+        )
+
+
+def test_reviewed_override_requires_a_real_original_issue():
+    with pytest.raises(ValueError, match="no original issue"):
+        apply_overrides([draft("beta", 2)], {"5:beta": {"reviewed": True}})
+
+
+def test_override_rejects_invalid_post_override_content():
+    original = draft("beta", 2, ("missing_phonetic",))
+
+    with pytest.raises(ValueError, match="invalid after override"):
+        apply_overrides(
+            [original],
+            {"5:beta": {"phonetic": "not ipa", "reviewed": True}},
+        )
+
+
+def test_override_loader_rejects_duplicate_json_keys(tmp_path):
+    path = tmp_path / "overrides.json"
+    path.write_text(
+        '{"5:beta":{"reviewed":true},"5:beta":{"reviewed":true}}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate JSON key: 5:beta"):
+        load_overrides(path)
+
+
+def test_hard_wrap_scan_uses_boundary_context_not_an_unrelated_spaced_substring():
+    entry = draft("dispel", 581)
+    entry = WordDraft(
+        **{
+            **{name: getattr(entry, name) for name in entry.__dataclass_fields__},
+            "example_en": (
+                "The President is attempting to dispel the notion that he has "
+                "neglected the economy."
+            ),
+        }
+    )
+    diagnostics = ExtractionDiagnostics(
+        dewrap_counts={},
+        dewrap_events=(
+            RecordDewrapEvent(
+                source_order=581,
+                field="example",
+                kind="hard_join",
+                left="The President is attempting to dispel t",
+                right="he notion that he has neglected the ec",
+            ),
+        ),
+    )
+
+    result = semantic_checks([entry], diagnostics)
+
+    assert next(item for item in result if item["name"] == "hard_wrap_residue")[
+        "pass"
+    ] is True
+
+
+def test_wrap_scan_checks_latin_names_that_belong_to_the_chinese_example():
+    entry = draft("putative", 1167)
+    entry = WordDraft(
+        **{
+            **{name: getattr(entry, name) for name in entry.__dataclass_fields__},
+            "example_zh": "\u5019\u9009\u4ebaNewt Gingrich\u53d1\u8a00\u3002",
+        }
+    )
+    diagnostics = ExtractionDiagnostics(
+        dewrap_counts={},
+        dewrap_events=(
+            RecordDewrapEvent(
+                source_order=1167,
+                field="example",
+                kind="normal_space",
+                left="\u5019\u9009\u4ebaNewt ",
+                right="Gingrich\u53d1\u8a00",
+            ),
+        ),
+    )
+
+    result = semantic_checks([entry], diagnostics)
+
+    assert next(item for item in result if item["name"] == "normal_wrap_overjoin")[
+        "pass"
+    ] is True
+
+
+def approved_facts():
+    return {
+        "source_sha256": APPROVED_SOURCE_PROFILE["sha256"],
+        "page_count": 288,
+        "physical_coverage": {
+            "physical_row_bands": 3292,
+            "empty_row_bands": 0,
+            "multi_anchor_row_bands": 0,
+        },
+        "record_count": 3292,
+        "continuity": {
+            "first_source_order": 1,
+            "last_source_order": 3292,
+            "missing_source_orders": [],
+            "duplicate_source_orders": [],
+        },
+        "page_range": {"first_source_page": 5, "last_source_page": 288},
+        "section_counts": APPROVED_SOURCE_PROFILE["section_counts"],
+        "override_use": {"declared": 5, "applied": 5},
+        "unresolved_count": 0,
+        "dewrap_counts": {
+            "definition": {
+                "normal_space": 3993,
+                "hard_join": 0,
+                "hard_join_records": 0,
+            },
+            "example": {
+                "normal_space": 3416,
+                "hard_join": 241,
+                "hard_join_records": 212,
+            },
+            "synonyms": {
+                "normal_space": 2,
+                "hard_join": 255,
+                "hard_join_records": 237,
+            },
+        },
+        "semantic_checks": [{"name": "language_contamination", "pass": True}],
+    }
+
+
+@pytest.mark.parametrize(
+    "mutate, failing_check",
+    [
+        (lambda facts: facts.update(source_sha256="0" * 64), "source_sha256"),
+        (lambda facts: facts.update(page_count=287), "page_count"),
+        (
+            lambda facts: facts["physical_coverage"].update(physical_row_bands=3291),
+            "physical_row_bands",
+        ),
+        (lambda facts: facts.update(record_count=3291), "record_count"),
+        (
+            lambda facts: facts["continuity"].update(missing_source_orders=[42]),
+            "source_order_continuity",
+        ),
+        (
+            lambda facts: facts["page_range"].update(last_source_page=287),
+            "source_page_range",
+        ),
+        (
+            lambda facts: facts["section_counts"].update(list1=104),
+            "section_counts",
+        ),
+        (
+            lambda facts: facts["override_use"].update(applied=4),
+            "override_use",
+        ),
+        (lambda facts: facts.update(unresolved_count=1), "unresolved_records"),
+        (
+            lambda facts: facts["dewrap_counts"]["example"].update(hard_join=240),
+            "dewrap_profile",
+        ),
+        (
+            lambda facts: facts["semantic_checks"][0].update(pass_=False),
+            "semantic_scans",
+        ),
+    ],
+)
+def test_strict_profile_mutations_fail_the_named_gate(mutate, failing_check):
+    facts = approved_facts()
+    # Avoid mutating the shared approved section-count mapping.
+    facts["section_counts"] = dict(facts["section_counts"])
+    mutate(facts)
+    if "pass_" in facts["semantic_checks"][0]:
+        facts["semantic_checks"][0]["pass"] = facts["semantic_checks"][0].pop(
+            "pass_"
+        )
+
+    checks = strict_checks_from_facts(facts)
+
+    assert all(check["pass"] for check in checks if check["name"] != failing_check)
+    assert next(check for check in checks if check["name"] == failing_check)["pass"] is False
 
 
 @pytest.mark.parametrize(

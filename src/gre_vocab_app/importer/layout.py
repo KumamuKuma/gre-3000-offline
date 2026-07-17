@@ -1,6 +1,5 @@
 import re
 import unicodedata
-from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
@@ -15,6 +14,7 @@ MAIN_HEADER = re.compile(r"张巍|镇考|乱序版")
 HEADER_BRANDING = re.compile(r"微信公众号")
 LATEST_VOCAB_HEADER = re.compile(r"最新真题词汇")
 HEADER_LINE_TOLERANCE = 4.0
+VISUAL_LINE_TOLERANCE = 4.0
 TABLE_HEADER_BOTTOM = 41.0
 FOOTER_TOP_FRACTION = 0.9
 FOOTER_MAX_SIZE = 9.0
@@ -34,8 +34,8 @@ def extract_page_spans(page) -> list[TextSpan]:
     for block in page.get_text("dict")["blocks"]:
         for line in block.get("lines", []):
             for item in line.get("spans", []):
-                text = item["text"].strip()
-                if text:
+                text = item["text"]
+                if text.strip():
                     x0, y0, x1, y1 = item["bbox"]
                     result.append(
                         TextSpan(x0, y0, x1, y1, text, item["size"])
@@ -66,14 +66,23 @@ def _column(x0: float) -> int | None:
 
 
 def _join_cell(spans: Iterable[TextSpan]) -> str:
-    lines: dict[float, list[TextSpan]] = defaultdict(list)
-    for item in spans:
-        lines[round(item.y0, 1)].append(item)
+    lines: list[tuple[float, list[TextSpan]]] = []
+    for item in sorted(spans, key=lambda span: (_center_y(span), span.x0)):
+        center = _center_y(item)
+        if not lines or abs(center - lines[-1][0]) > VISUAL_LINE_TOLERANCE:
+            lines.append((center, [item]))
+            continue
+        members = lines[-1][1]
+        members.append(item)
+        lines[-1] = (
+            sum(_center_y(member) for member in members) / len(members),
+            members,
+        )
 
     rendered = []
-    for y in sorted(lines):
+    for _, members in lines:
         rendered.append(
-            " ".join(item.text for item in sorted(lines[y], key=lambda span: span.x0))
+            "".join(item.text for item in sorted(members, key=lambda span: span.x0))
         )
     return "\n".join(rendered).strip()
 
@@ -89,6 +98,7 @@ def _is_latin_letter(character: str) -> bool:
 
 
 def _is_headword(text: str) -> bool:
+    text = text.strip()
     return bool(text) and _is_latin_letter(text[0]) and all(
         _is_latin_letter(character) or character in HEADWORD_PUNCTUATION
         for character in text
@@ -114,7 +124,7 @@ def _merge_wrapped_anchors(anchors: list[TextSpan]) -> list[TextSpan]:
             y0=min(previous.y0, anchor.y0),
             x1=max(previous.x1, anchor.x1),
             y1=max(previous.y1, anchor.y1),
-            text=f"{previous.text}{separator}{anchor.text}",
+            text=f"{previous.text.strip()}{separator}{anchor.text.strip()}",
             size=max(previous.size, anchor.size),
         )
     return merged
@@ -124,7 +134,7 @@ def _split_combined_headword_phonetic(spans: Iterable[TextSpan]) -> list[TextSpa
     result: list[TextSpan] = []
     for span in spans:
         match = (
-            COMBINED_HEADWORD_PHONETIC.fullmatch(span.text)
+            COMBINED_HEADWORD_PHONETIC.fullmatch(span.text.strip())
             if span.x0 < COLUMN_BOUNDS[1]
             else None
         )
@@ -167,7 +177,7 @@ def _usable_spans(spans: Iterable[TextSpan]) -> list[TextSpan]:
 def _section_events(usable: Sequence[TextSpan]) -> list[tuple[float, str]]:
     events: list[tuple[float, str]] = []
     for span in usable:
-        match = SECTION.search(span.text)
+        match = SECTION.search(span.text.strip())
         if not match:
             continue
         line_neighbors = [
@@ -176,10 +186,10 @@ def _section_events(usable: Sequence[TextSpan]) -> list[tuple[float, str]]:
             if abs(_center_y(other) - _center_y(span)) <= HEADER_LINE_TOLERANCE
         ]
         is_supplement = bool(match.group(1)) or any(
-            SUPPLEMENT.search(other.text) for other in line_neighbors
+            SUPPLEMENT.search(other.text.strip()) for other in line_neighbors
         )
         is_main_header = span.x0 < 180 or any(
-            MAIN_HEADER.search(other.text) for other in line_neighbors
+            MAIN_HEADER.search(other.text.strip()) for other in line_neighbors
         )
         if not is_supplement and not is_main_header:
             continue
@@ -201,7 +211,7 @@ def _content_spans(
         header_centers.extend(
             _center_y(span)
             for span in usable
-            if HEADER_BRANDING.search(span.text)
+            if HEADER_BRANDING.search(span.text.strip())
             and 0 < _center_y(span) - event_y <= 32
         )
     content = [
@@ -231,7 +241,9 @@ def _is_latest_vocab_header_band(
     spans: Sequence[TextSpan], start_y: float, end_y: float
 ) -> bool:
     texts = [
-        span.text for span in spans if start_y <= _center_y(span) < end_y
+        span.text.strip()
+        for span in spans
+        if start_y <= _center_y(span) < end_y
     ]
     return any(LATEST_VOCAB_HEADER.search(text) for text in texts) and any(
         HEADER_BRANDING.search(text) for text in texts
@@ -351,7 +363,7 @@ def validate_physical_row_coverage(
             details.append(f"multiple={_format_bands(multiple)}")
         if unassigned:
             details.append(
-                "unassigned=" + ",".join(anchor.text for anchor in unassigned)
+                "unassigned=" + ",".join(anchor.text.strip() for anchor in unassigned)
             )
         raise ValueError(
             f"page {page_number} physical row coverage failed: "
@@ -415,7 +427,7 @@ def group_spans_into_rows(
             )
             if physical_bounds is None:
                 raise ValueError(
-                    f"headword anchor outside physical row bands: {anchor.text}"
+                    f"headword anchor outside physical row bands: {anchor.text.strip()}"
                 )
         else:
             physical_bounds = _physical_row_bounds(anchor, row_boundaries)
@@ -427,7 +439,7 @@ def group_spans_into_rows(
             if column is not None and start_y <= center_y < end_y:
                 buckets[column].append(item)
 
-        columns = (anchor.text,) + tuple(
+        columns = (anchor.text.strip(),) + tuple(
             _join_cell(bucket) for bucket in buckets[1:]
         )
         flags = ("missing_phonetic",) if not columns[1] else ()

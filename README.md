@@ -10,7 +10,7 @@
 %APPDATA%\GRE Vocab Offline\GRE 3000 词离线版
 ```
 
-其中 `user.db` 保存进度、收藏和设置，`logs/app.log` 保存滚动日志。词库嵌入 EXE 的临时运行目录，不会写入或覆盖个人数据。因此以后直接替换 EXE 即可升级，原有进度仍会保留。
+其中 `user.db` 保存进度、收藏和设置，`logs/app.log` 保存滚动日志。词库和运行组件只会解包到系统临时目录，程序正常退出后自动清理，不会写入或覆盖个人数据。因此以后直接替换 EXE 即可升级，原有进度仍会保留。
 
 首次运行未签名的个人构建时，Windows SmartScreen 可能显示警告。请先确认文件来源和 SHA-256，再选择“更多信息”继续运行。
 
@@ -46,13 +46,13 @@ New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
 .\.venv\Scripts\python.exe -m pytest -v -p no:cacheprovider
 ```
 
-发布构建另外需要在项目 `.venv` 中安装 Pillow 和 Nuitka（以及 Nuitka 的 `ordered-set`、`zstandard` 依赖），并需要本机 C 编译器。发布脚本固定使用 `pyside6-deploy` 的 onefile 流程，不会回退到其他打包器：
+发布构建另外需要在项目 `.venv` 中安装 Pillow 和 Nuitka 4.1.3（以及 Nuitka 的 `ordered-set`、`zstandard` 依赖），并需要本机 C 编译器。发布脚本先用 `pyside6-deploy` 生成 ASCII 名的 Qt onefile runtime，再用 stdlib-only Nuitka onefile 外壳生成最终中文文件名；外壳不导入 Qt，也不会把 runtime 复制到持久目录：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/build_release.ps1
 ```
 
-脚本会依次执行全量测试、严格词库导入、数据库/审计核对、SVG→ICO 生成、onefile 构建和原生窗口 smoke，并输出 EXE 的 SHA-256 与字节数。严格导入预期为 3,292 条记录、0 条未解决问题、4 条已人工复核记录，SQLite 完整性检查为 `ok`。
+脚本会依次执行全量测试、严格词库导入、数据库/审计核对、SVG→ICO 生成、内外层 onefile 构建和完整进程链原生窗口 smoke，并输出最终单文件 EXE 的 SHA-256 与字节数。严格导入预期为 3,292 条记录、0 条未解决问题、4 条已人工复核记录，SQLite 完整性检查为 `ok`。
 
 发布目录包含：
 

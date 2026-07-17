@@ -1,7 +1,7 @@
 [app]
 
 # title of your application
-title = GRE 3000 词离线版
+title = GRE3000OfflineRuntime
 
 # project root directory. default = The parent directory of input_file
 project_dir = .
@@ -24,7 +24,7 @@ icon = resources/app.ico
 python_path = .venv/Scripts/python.exe
 
 # python packages to install
-packages = Nuitka==4.0
+packages = Nuitka==4.1.3
 
 # buildozer = for deploying Android application
 android_packages = buildozer==1.5.0,cython==0.29.33

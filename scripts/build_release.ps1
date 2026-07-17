@@ -41,35 +41,6 @@ function Remove-WorkspaceDirectory {
     }
 }
 
-function Get-PeSubsystem {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    $stream = [System.IO.File]::Open(
-        $Path,
-        [System.IO.FileMode]::Open,
-        [System.IO.FileAccess]::Read,
-        [System.IO.FileShare]::Read
-    )
-    $reader = [System.IO.BinaryReader]::new($stream)
-    try {
-        if ($reader.ReadUInt16() -ne 0x5A4D) {
-            throw "Release executable does not have an MZ header: $Path"
-        }
-        $reader.BaseStream.Seek(0x3C, [System.IO.SeekOrigin]::Begin) | Out-Null
-        $peOffset = $reader.ReadInt32()
-        $reader.BaseStream.Seek($peOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
-        if ($reader.ReadUInt32() -ne 0x00004550) {
-            throw "Release executable does not have a PE header: $Path"
-        }
-        $reader.BaseStream.Seek(20 + 68, [System.IO.SeekOrigin]::Current) | Out-Null
-        return $reader.ReadUInt16()
-    }
-    finally {
-        $reader.Dispose()
-        $stream.Dispose()
-    }
-}
-
 function Initialize-NativeWindowInspector {
     if ("GreReleaseWindowInspector" -as [type]) {
         return
@@ -120,7 +91,7 @@ public static class GreReleaseWindowInspector
         {
             uint processId;
             GetWindowThreadProcessId(handle, out processId);
-            if (processId == wantedProcessId)
+            if (wantedProcessId <= 0 || processId == wantedProcessId)
             {
                 var title = new StringBuilder(1024);
                 var windowClass = new StringBuilder(256);
@@ -149,6 +120,34 @@ public static class GreReleaseWindowInspector
     Add-Type -TypeDefinition $source
 }
 
+function Get-ProcessTreeIds {
+    param([Parameter(Mandatory = $true)][int]$RootProcessId)
+
+    $probeOutput = @(& $Python $ReleaseProbe "process-tree" "--pid" $RootProcessId.ToString())
+    if ($LASTEXITCODE -ne 0) {
+        throw "Native process-tree probe failed with exit code $LASTEXITCODE."
+    }
+    $line = $probeOutput |
+        Where-Object { $_ -match '^process_tree root=\d+ pids=\d+(?:,\d+)*$' } |
+        Select-Object -Last 1
+    if ($null -eq $line) {
+        throw "Native process-tree probe returned no parseable result."
+    }
+    $match = [regex]::Match(
+        [string]$line,
+        '^process_tree root=(?<root>\d+) pids=(?<pids>\d+(?:,\d+)*)$'
+    )
+    if ([int]$match.Groups['root'].Value -ne $RootProcessId) {
+        throw "Native process-tree probe returned a different root process."
+    }
+    Write-Host $line
+    return @(
+        $match.Groups['pids'].Value.Split(',') |
+            ForEach-Object { [int]$_ } |
+            Sort-Object -Unique
+    )
+}
+
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $Python = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 $Deploy = Join-Path $RepoRoot ".venv\Scripts\pyside6-deploy.exe"
@@ -158,14 +157,27 @@ $AuditJson = Join-Path $RepoRoot "build\audit\report.json"
 $AuditHtml = Join-Path $RepoRoot "outputs\词库导入审计报告.html"
 $IconSvg = Join-Path $RepoRoot "resources\app.svg"
 $IconIco = Join-Path $RepoRoot "resources\app.ico"
-$DeployExe = Join-Path $RepoRoot "build\release\GRE 3000 词离线版.exe"
+$ReleaseProbe = Join-Path $RepoRoot "scripts\windows_release_probe.py"
+$LauncherSource = Join-Path $RepoRoot "scripts\unicode_launcher.py"
+$InnerRuntime = Join-Path $RepoRoot "build\release\GRE3000OfflineRuntime.exe"
+$LauncherBuild = Join-Path $RepoRoot "build\launcher"
+$LauncherExe = Join-Path $LauncherBuild "GRELauncher.exe"
 $OutputExe = Join-Path $RepoRoot "outputs\GRE 3000 词离线版.exe"
 $Instructions = Join-Path $RepoRoot "outputs\使用说明.txt"
 $SmokeProfile = Join-Path $RepoRoot "build\smoke-profile"
 $ExpectedTitle = "GRE 3000 词离线版"
-$WindowsGuiSubsystem = 2
+$Amd64Machine = "0x8664"
+$WindowsGuiSubsystem = "2"
 
-foreach ($requiredFile in @($Python, $Deploy, $Spec, $IconSvg, $Instructions)) {
+foreach ($requiredFile in @(
+    $Python,
+    $Deploy,
+    $Spec,
+    $IconSvg,
+    $Instructions,
+    $ReleaseProbe,
+    $LauncherSource
+)) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
         throw "Required release input not found: $requiredFile"
     }
@@ -189,7 +201,7 @@ $env:TMP = $ReleaseTemp
 $env:NUITKA_CACHE_DIR = $NuitkaCache
 $env:QT_QPA_PLATFORM = "offscreen"
 # PySide6 6.11.1 opens its INI spec with Python's default text encoding.
-# Force UTF-8 so the Chinese application title is parsed consistently on GBK Windows.
+# Force UTF-8 so every reviewed setting is parsed consistently on GBK Windows.
 $env:PYTHONUTF8 = "1"
 Initialize-NativeWindowInspector
 
@@ -223,8 +235,8 @@ try {
         $IconIco
     )
 
-    if (Test-Path -LiteralPath $DeployExe) {
-        Remove-Item -LiteralPath $DeployExe -Force
+    if (Test-Path -LiteralPath $InnerRuntime) {
+        Remove-Item -LiteralPath $InnerRuntime -Force
     }
     if (Test-Path -LiteralPath $OutputExe) {
         Remove-Item -LiteralPath $OutputExe -Force
@@ -232,7 +244,7 @@ try {
     $specEncoding = [System.Text.UTF8Encoding]::new($false)
     $specSnapshot = [System.IO.File]::ReadAllText($Spec, $specEncoding)
     try {
-        Invoke-External -Label "pyside6-deploy onefile build" -FilePath $Deploy -ArgumentList @(
+        Invoke-External -Label "ASCII Qt runtime onefile build" -FilePath $Deploy -ArgumentList @(
             "-c", $Spec, "--extra-modules=Sql", "-f", "-v"
         )
     }
@@ -241,19 +253,50 @@ try {
         # Preserve the reviewed, portable release configuration in source control.
         [System.IO.File]::WriteAllText($Spec, $specSnapshot, $specEncoding)
     }
-    if (-not (Test-Path -LiteralPath $DeployExe -PathType Leaf)) {
-        throw "pyside6-deploy returned without the expected executable: $DeployExe"
+    if (-not (Test-Path -LiteralPath $InnerRuntime -PathType Leaf)) {
+        throw "pyside6-deploy returned without the expected executable: $InnerRuntime"
     }
 
-    Copy-Item -LiteralPath $DeployExe -Destination $OutputExe -Force
     if (-not (Test-Path -LiteralPath $AuditHtml -PathType Leaf)) {
         throw "Strict importer did not generate the audit HTML: $AuditHtml"
     }
 
-    $subsystem = Get-PeSubsystem -Path $OutputExe
-    if ($subsystem -ne $WindowsGuiSubsystem) {
-        throw "Expected Windows GUI subsystem (2), found $subsystem. A console window may open."
+    Invoke-External -Label "ASCII Qt runtime x64 GUI verification" -FilePath $Python -ArgumentList @(
+        $ReleaseProbe,
+        "pe",
+        "--path", $InnerRuntime,
+        "--expected-machine", $Amd64Machine,
+        "--expected-subsystem", $WindowsGuiSubsystem
+    )
+
+    Remove-WorkspaceDirectory -Path $LauncherBuild -AllowedRoot (Join-Path $RepoRoot "build")
+    New-Item -ItemType Directory -Force -Path $LauncherBuild | Out-Null
+    $embeddedRuntime = "$InnerRuntime=runtime/GRE3000OfflineRuntime.exe"
+    Invoke-External -Label "Unicode-safe stdlib launcher onefile build" -FilePath $Python -ArgumentList @(
+        "-m", "nuitka",
+        "--onefile",
+        "--windows-console-mode=disable",
+        "--nofollow-import-to=PySide6",
+        "--windows-icon-from-ico=$IconIco",
+        "--include-data-files=$embeddedRuntime",
+        "--msvc=latest",
+        "--assume-yes-for-downloads",
+        "--output-dir=$LauncherBuild",
+        "--output-filename=GRELauncher.exe",
+        $LauncherSource
+    )
+    if (-not (Test-Path -LiteralPath $LauncherExe -PathType Leaf)) {
+        throw "Nuitka returned without the expected launcher: $LauncherExe"
     }
+    Copy-Item -LiteralPath $LauncherExe -Destination $OutputExe -Force
+
+    Invoke-External -Label "final Unicode launcher x64 GUI verification" -FilePath $Python -ArgumentList @(
+        $ReleaseProbe,
+        "pe",
+        "--path", $OutputExe,
+        "--expected-machine", $Amd64Machine,
+        "--expected-subsystem", $WindowsGuiSubsystem
+    )
 
     Remove-WorkspaceDirectory -Path $SmokeProfile -AllowedRoot (Join-Path $RepoRoot "build")
     New-Item -ItemType Directory -Force -Path $SmokeProfile | Out-Null
@@ -265,6 +308,7 @@ try {
     $startedAt = Get-Date
     $launcher = Start-Process -FilePath $OutputExe -PassThru
     $mainWindow = $null
+    $chainProcessIds = @([int]$launcher.Id)
     try {
         $deadline = [DateTime]::UtcNow.AddSeconds(20)
         while ([DateTime]::UtcNow -lt $deadline) {
@@ -272,31 +316,21 @@ try {
                 throw "Packaged executable exited before its main window appeared (exit $($launcher.ExitCode))."
             }
 
-            $candidateProcesses = @(Get-Process -Name $launcher.ProcessName -ErrorAction SilentlyContinue |
-                Where-Object {
-                    try {
-                        $_.StartTime -ge $startedAt.AddSeconds(-1)
-                    }
-                    catch {
-                        $false
-                    }
-                })
-            $windows = @(
-                foreach ($candidate in $candidateProcesses) {
-                    [GreReleaseWindowInspector]::GetWindows($candidate.Id)
+            foreach ($window in @([GreReleaseWindowInspector]::GetWindows(0))) {
+                if (-not $window.Visible -or $window.MainWindowTitle -ne $ExpectedTitle) {
+                    continue
                 }
-            )
-            $consoleWindow = $windows |
-                Where-Object { $_.WindowClass -eq "ConsoleWindowClass" } |
-                Select-Object -First 1
-            if ($null -ne $consoleWindow) {
-                throw "Packaged executable created an unexpected console window."
+                try {
+                    $owner = Get-Process -Id $window.ProcessId -ErrorAction Stop
+                    if ($owner.StartTime -ge $startedAt.AddSeconds(-1)) {
+                        $mainWindow = $window
+                        break
+                    }
+                }
+                catch {
+                    continue
+                }
             }
-            $mainWindow = $windows |
-                Where-Object {
-                    $_.Visible -and $_.MainWindowTitle -eq $ExpectedTitle
-                } |
-                Select-Object -First 1
             if ($null -ne $mainWindow) {
                 break
             }
@@ -307,43 +341,65 @@ try {
         }
 
         $observedTitle = $mainWindow.MainWindowTitle
-        if (-not [GreReleaseWindowInspector]::RequestNormalClose($mainWindow.Handle)) {
-            throw "The packaged main window could not be closed normally."
+        $guiProcessId = [int]$mainWindow.ProcessId
+        $launcherProcessId = [int]$launcher.Id
+        $chainProcessIds = @(Get-ProcessTreeIds -RootProcessId $launcherProcessId)
+        if ($guiProcessId -notin $chainProcessIds) {
+            throw "The titled GUI process $guiProcessId is not a descendant of launcher $launcherProcessId."
         }
-        if (-not $launcher.WaitForExit(10000)) {
-            throw "The packaged process did not exit within 10 seconds after a normal window close."
+        Invoke-External -Label "packaged GUI child x64 verification" -FilePath $Python -ArgumentList @(
+            $ReleaseProbe,
+            "process-pe",
+            "--pid", $guiProcessId.ToString(),
+            "--expected-machine", $Amd64Machine,
+            "--expected-subsystem", $WindowsGuiSubsystem
+        )
+        Invoke-External -Label "packaged GUI child no-console verification" -FilePath $Python -ArgumentList @(
+            $ReleaseProbe,
+            "console",
+            "--pid", $guiProcessId.ToString()
+        )
+        Invoke-External -Label "Unicode launcher no-console verification" -FilePath $Python -ArgumentList @(
+            $ReleaseProbe,
+            "console",
+            "--pid", $launcherProcessId.ToString()
+        )
+        $closeArguments = @(
+            $ReleaseProbe,
+            "close-wait",
+            "--window-handle", ([Int64]$mainWindow.Handle).ToString()
+        )
+        foreach ($processId in $chainProcessIds) {
+            $closeArguments += @("--pid", ([int]$processId).ToString())
         }
-        if ($launcher.ExitCode -ne 0) {
-            throw "The packaged process exited with code $($launcher.ExitCode) after smoke close."
-        }
+        $closeArguments += @("--timeout", "15")
+        Invoke-External -Label "complete packaged process chain normal close" -FilePath $Python -ArgumentList $closeArguments
+        $launcher.Refresh()
         Write-Host (
-            "native_smoke title='{0}' profile='{1}' no_console=true subsystem=windows_gui exit=0" -f
+            "native_smoke title='{0}' profile='{1}' gui_pid={2} launcher_pid={3} chain_pids={4} machine=x64 no_console=true subsystem=windows_gui chain_exited=true exit=0" -f
             $observedTitle,
-            $SmokeProfile
+            $SmokeProfile,
+            $guiProcessId,
+            $launcherProcessId,
+            ($chainProcessIds -join ",")
         )
     }
     finally {
-        if (-not $launcher.HasExited) {
-            if ($null -ne $mainWindow) {
-                $null = [GreReleaseWindowInspector]::RequestNormalClose($mainWindow.Handle)
-                $null = $launcher.WaitForExit(3000)
-            }
-            if (-not $launcher.HasExited) {
-                Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue
-            }
+        if ($null -ne $mainWindow) {
+            $null = [GreReleaseWindowInspector]::RequestNormalClose($mainWindow.Handle)
         }
-        $remainingProcesses = @(Get-Process -Name $launcher.ProcessName -ErrorAction SilentlyContinue |
-            Where-Object {
-                try {
-                    $_.StartTime -ge $startedAt.AddSeconds(-1)
-                }
-                catch {
-                    $false
-                }
-            })
-        foreach ($remaining in $remainingProcesses) {
-            if (-not $remaining.HasExited) {
-                Stop-Process -Id $remaining.Id -Force -ErrorAction SilentlyContinue
+        try {
+            $latestTreeIds = @(Get-ProcessTreeIds -RootProcessId ([int]$launcher.Id))
+            $chainProcessIds = @($chainProcessIds + $latestTreeIds | Sort-Object -Unique)
+        }
+        catch {
+            # Preserve the original smoke result; cleanup uses the last safe snapshot.
+        }
+        Start-Sleep -Milliseconds 250
+        foreach ($processId in $chainProcessIds) {
+            $remaining = Get-Process -Id $processId -ErrorAction SilentlyContinue
+            if ($null -ne $remaining -and -not $remaining.HasExited) {
+                Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
             }
         }
         $launcher.Dispose()

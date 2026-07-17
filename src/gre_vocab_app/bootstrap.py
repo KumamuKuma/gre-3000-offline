@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import logging
 import random
-import sqlite3
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from gre_vocab_app.controller import ApplicationController
-from gre_vocab_app.db.content import ContentRepository
-from gre_vocab_app.db.schema import CONTENT_SCHEMA_VERSION
+from gre_vocab_app.db.content import ContentDatabaseError, ContentRepository
 from gre_vocab_app.db.user import UserRepository
 from gre_vocab_app.paths import AppPaths
 from gre_vocab_app.services.search import SearchService
@@ -20,10 +18,6 @@ from gre_vocab_app.ui.main_window import MainWindow
 
 LOGGER = logging.getLogger(__name__)
 _HANDLER_MARKER = "_gre_vocab_app_rotating_handler"
-
-
-class ContentDatabaseError(RuntimeError):
-    """Raised when the immutable vocabulary database cannot be trusted."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,43 +53,8 @@ def _configure_logging(log_file: Path) -> None:
         root_logger.setLevel(logging.INFO)
 
 
-def _validate_content_database(path: Path) -> None:
-    if not path.is_file():
-        raise ContentDatabaseError(f"词库文件缺失：{path}")
-
-    resolved = path.resolve()
-    try:
-        database = sqlite3.connect(f"{resolved.as_uri()}?mode=ro", uri=True)
-    except sqlite3.Error as error:
-        raise ContentDatabaseError(f"词库完整性检查失败：{error}") from error
-
-    try:
-        try:
-            integrity_rows = database.execute("pragma integrity_check").fetchall()
-        except sqlite3.Error as error:
-            raise ContentDatabaseError(f"词库完整性检查失败：{error}") from error
-        if integrity_rows != [("ok",)]:
-            details = "; ".join(str(row[0]) for row in integrity_rows) or "无检查结果"
-            raise ContentDatabaseError(f"词库完整性检查失败：{details}")
-
-        try:
-            row = database.execute(
-                "select value from metadata where key='schema_version'"
-            ).fetchone()
-            version = int(row[0]) if row is not None else None
-        except (sqlite3.Error, TypeError, ValueError) as error:
-            raise ContentDatabaseError(f"词库版本不兼容：{error}") from error
-        if version != CONTENT_SCHEMA_VERSION:
-            raise ContentDatabaseError(
-                f"词库版本不兼容：需要 {CONTENT_SCHEMA_VERSION}，实际 {version}"
-            )
-    finally:
-        database.close()
-
-
 def bootstrap(paths: AppPaths) -> BootstrapResult:
     _configure_logging(paths.log_file)
-    _validate_content_database(paths.content_db)
 
     content: ContentRepository | None = None
     user: UserRepository | None = None

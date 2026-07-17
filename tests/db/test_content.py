@@ -1,7 +1,10 @@
 import sqlite3
+import os
+from pathlib import Path
 
 import pytest
 
+import gre_vocab_app.db.content as content_module
 from gre_vocab_app.db.content import ContentRepository
 from gre_vocab_app.importer.build import build_database
 from gre_vocab_app.importer.normalize import WordDraft
@@ -81,6 +84,120 @@ def test_content_repository_rejects_schema_mismatch(content_path):
         database.execute(
             "update metadata set value='999' where key='schema_version'"
         )
-    with pytest.raises(ValueError, match="version"):
+    with pytest.raises(ValueError, match="版本|version"):
         ContentRepository(content_path)
+
+
+def test_content_repository_rejects_missing_required_columns_at_open(content_path):
+    with sqlite3.connect(content_path) as database:
+        database.execute("alter table words drop column quality_flags")
+
+    error_type = getattr(content_module, "ContentDatabaseError", RuntimeError)
+    with pytest.raises(error_type, match="quality_flags|列|结构"):
+        ContentRepository(content_path)
+
+
+def test_content_repository_rejects_metadata_record_count_mismatch(content_path):
+    with sqlite3.connect(content_path) as database:
+        database.execute(
+            "update metadata set value='999' where key='record_count'"
+        )
+
+    error_type = getattr(content_module, "ContentDatabaseError", RuntimeError)
+    with pytest.raises(error_type, match="record_count|记录数"):
+        ContentRepository(content_path)
+
+
+def test_content_repository_rejects_non_continuous_source_order(content_path):
+    with sqlite3.connect(content_path) as database:
+        database.execute("update words set source_order=4 where source_order=3")
+
+    error_type = getattr(content_module, "ContentDatabaseError", RuntimeError)
+    with pytest.raises(error_type, match="source_order|顺序"):
+        ContentRepository(content_path)
+
+
+@pytest.mark.parametrize("payload", ("not-json", "{}", '["ok", 7]'))
+def test_content_repository_rejects_invalid_quality_flags_json(
+    content_path, payload
+):
+    with sqlite3.connect(content_path) as database:
+        database.execute(
+            "update words set quality_flags=? where source_order=2", (payload,)
+        )
+
+    error_type = getattr(content_module, "ContentDatabaseError", RuntimeError)
+    with pytest.raises(error_type, match="quality_flags|JSON"):
+        ContentRepository(content_path)
+
+
+def test_content_repository_closes_connection_after_contract_failure(
+    content_path, monkeypatch
+):
+    with sqlite3.connect(content_path) as database:
+        database.execute(
+            "update metadata set value='999' where key='record_count'"
+        )
+
+    connections = []
+    real_connect = content_module.sqlite3.connect
+
+    def capture_connect(*args, **kwargs):
+        connection = real_connect(*args, **kwargs)
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(content_module.sqlite3, "connect", capture_connect)
+    error_type = getattr(content_module, "ContentDatabaseError", RuntimeError)
+    with pytest.raises(error_type):
+        ContentRepository(content_path)
+
+    assert len(connections) == 1
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        connections[0].execute("select 1")
+
+
+def test_unicode_search_normalizes_case_composition_and_literal_wildcards(tmp_path):
+    path = tmp_path / "unicode-words.db"
+    words = (
+        "naiveté",
+        "xnaïveté",
+        "cliché",
+        "100%pure",
+        "under_score",
+        r"back\slash",
+    )
+    build_database(
+        [make_draft(word, order) for order, word in enumerate(words, start=1)],
+        path,
+    )
+
+    with ContentRepository(path) as repository:
+        assert [word.headword for word in repository.search("NAÏVETÉ")] == [
+            "naiveté",
+            "xnaïveté",
+        ]
+        assert [
+            word.headword for word in repository.search("CLICHE\N{COMBINING ACUTE ACCENT}")
+        ] == ["cliché"]
+        assert [word.headword for word in repository.search("%")] == ["100%pure"]
+        assert [word.headword for word in repository.search("_")] == [
+            "under_score"
+        ]
+        assert [word.headword for word in repository.search("\\")] == [
+            r"back\slash"
+        ]
+        assert repository.search("\N{COMBINING ACUTE ACCENT}") == []
+
+
+@pytest.mark.skipif(
+    not os.environ.get("GRE_GENERATED_DB"),
+    reason="GRE_GENERATED_DB is not configured",
+)
+def test_real_generated_database_supports_accented_unicode_queries():
+    path = Path(os.environ["GRE_GENERATED_DB"])
+    with ContentRepository(path) as repository:
+        assert repository.count() == 3292
+        assert repository.search("NAÏVETÉ")[0].headword == "naiveté"
+        assert repository.search("CLICHE\N{COMBINING ACUTE ACCENT}")[0].headword == "cliché"
 

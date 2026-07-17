@@ -18,11 +18,13 @@ from gre_vocab_app.domain import WordEntry
 
 class WordDetail(QWidget):
     speechRequested = Signal(str)
+    revealRequested = Signal()
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self._word: WordEntry | None = None
         self._revealed = True
+        self._speech_available = True
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -55,6 +57,13 @@ class WordDetail(QWidget):
         self.phonetic_label = self._label(object_name="phonetic")
         word_layout.addWidget(self.phonetic_label)
         root.addWidget(word_card)
+
+        self.reveal_button = QPushButton("点击显示释义")
+        self.reveal_button.setAccessibleName("显示或隐藏释义")
+        self.reveal_button.setFocusPolicy(Qt.StrongFocus)
+        self.reveal_button.clicked.connect(self.revealRequested.emit)
+        self.reveal_button.hide()
+        root.addWidget(self.reveal_button)
 
         self.meaning_panel = QWidget(objectName="meaningPanel")
         self.meaning_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -102,7 +111,7 @@ class WordDetail(QWidget):
         label.setText(text)
         return label
 
-    def set_word(self, word: WordEntry, reveal: bool) -> None:
+    def set_word(self, word: WordEntry, reveal: bool, *, recall: bool = False) -> None:
         self._word = word
         for label in (
             self.headword_label,
@@ -133,16 +142,34 @@ class WordDetail(QWidget):
         self.example_title.setVisible(has_example)
         self.example_en_label.setVisible(bool(word.example_en))
         self.example_zh_label.setVisible(bool(word.example_zh))
-        self.speech_button.setEnabled(bool(word.headword))
+        self.speech_button.setEnabled(
+            self._speech_available and bool(word.headword)
+        )
+        self.reveal_button.setVisible(bool(recall))
         self.set_revealed(reveal)
 
     def set_revealed(self, revealed: bool) -> None:
         self._revealed = bool(revealed)
         self.meaning_panel.setVisible(self._revealed)
+        self.reveal_button.setText(
+            "隐藏释义" if self._revealed else "点击显示释义"
+        )
 
     def is_revealed(self) -> bool:
         return self._revealed
 
+    def set_speech_available(self, available: bool) -> None:
+        self._speech_available = bool(available)
+        self.speech_button.setEnabled(
+            self._speech_available
+            and self._word is not None
+            and bool(self._word.headword)
+        )
+
     def _request_speech(self) -> None:
-        if self._word is not None and self._word.headword:
+        if (
+            self._speech_available
+            and self._word is not None
+            and self._word.headword
+        ):
             self.speechRequested.emit(self._word.headword)

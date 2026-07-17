@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -48,9 +47,6 @@ class HomePage(QWidget):
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.textChanged.connect(self._on_search_changed)
         root.addWidget(self.search_edit)
-        self.find_shortcut = QShortcut(QKeySequence.StandardKey.Find, self)
-        self.find_shortcut.setContext(Qt.ApplicationShortcut)
-        self.find_shortcut.activated.connect(self.search_edit.setFocus)
 
         stats = QHBoxLayout()
         self.total_value = self._stat_card(stats, "词库总数")
@@ -84,7 +80,7 @@ class HomePage(QWidget):
         root.addWidget(self.no_results_label)
         self.results = QListWidget()
         self.results.setAlternatingRowColors(False)
-        self.results.currentItemChanged.connect(self._selection_changed)
+        self.results.itemActivated.connect(self._emit_word)
         self.results.hide()
         root.addWidget(self.results, 1)
 
@@ -135,11 +131,8 @@ class HomePage(QWidget):
         self.no_results_label.hide()
         self.searchRequested.emit(text.strip())
 
-    def _selection_changed(
-        self, current: QListWidgetItem | None, _previous: QListWidgetItem | None
-    ) -> None:
-        if current is not None:
-            self._emit_word(current)
+    def focus_search(self) -> None:
+        self.search_edit.setFocus(Qt.ShortcutFocusReason)
 
     def _emit_word(self, item: QListWidgetItem) -> None:
         word = item.data(Qt.UserRole)

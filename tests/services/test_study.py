@@ -2,7 +2,7 @@ import random
 
 import pytest
 
-from gre_vocab_app.db.user import QueueState
+from gre_vocab_app.db.user import QueueState, UserRepository
 from gre_vocab_app.domain import BrowseOrder, StudyMode, WordEntry
 from gre_vocab_app.services.study import StudySession
 
@@ -53,6 +53,20 @@ class FakeUser:
 
     def save_queue(self, name, word_ids, *, position, seed):
         self.queues[name] = QueueState(tuple(word_ids), position, seed)
+
+    def save_navigation(
+        self,
+        name,
+        word_ids,
+        *,
+        position,
+        seed,
+        seen_word_id,
+        event_id,
+    ):
+        del event_id
+        self.save_queue(name, word_ids, position=position, seed=seed)
+        self.record_seen(seen_word_id)
 
     def is_favorite(self, word_id):
         return word_id in self.favorites
@@ -174,4 +188,47 @@ def test_start_rejects_empty_content():
     session = StudySession(FakeContent(0), FakeUser(), random.Random(1))
     with pytest.raises(ValueError, match="empty"):
         session.start(BrowseOrder.SOURCE)
+
+
+def test_navigation_keeps_memory_intent_and_retries_queue_and_seen_atomically(
+    tmp_path,
+):
+    path = tmp_path / "user.db"
+    with UserRepository(path) as user:
+        session = StudySession(FakeContent(3), user, random.Random(1))
+        first = session.start(BrowseOrder.SOURCE)
+        assert first.index == 0
+
+        user.db.execute(
+            """
+            create trigger fail_seen before insert on word_progress
+            when new.word_id = 2
+            begin
+              select raise(abort, 'synthetic navigation failure');
+            end
+            """
+        )
+        second = session.next()
+
+        assert second.index == 1
+        assert second.word.id == 2
+        assert user.load_queue("source").position == 1
+        assert user.seen_word_count() == 2
+        assert user.has_pending_writes
+        assert user.take_persistence_issue() is not None
+
+        with UserRepository(path) as observer:
+            assert observer.load_queue("source").position == 0
+            assert observer.seen_word_count() == 1
+
+        user.db.execute("drop trigger fail_seen")
+        session.set_mode(StudyMode.RECALL)
+        assert not user.has_pending_writes
+
+    with UserRepository(path) as persisted:
+        assert persisted.load_queue("source").position == 1
+        assert persisted.seen_word_count() == 2
+        assert persisted.db.execute(
+            "select seen_count from word_progress where word_id=2"
+        ).fetchone()[0] == 1
 

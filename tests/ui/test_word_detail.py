@@ -50,3 +50,16 @@ def test_word_detail_clears_stale_optional_fields_and_supports_long_text(
     assert detail.example_en_label.text() == ""
     assert detail.example_en_label.isHidden()
     assert detail.definition_label.textInteractionFlags() & Qt.TextSelectableByMouse
+
+
+def test_word_detail_speech_button_respects_backend_availability(qtbot, sample_word):
+    detail = WordDetail()
+    qtbot.addWidget(detail)
+    assert hasattr(detail, "set_speech_available")
+
+    detail.set_speech_available(False)
+    detail.set_word(sample_word, reveal=True)
+    assert not detail.speech_button.isEnabled()
+
+    detail.set_speech_available(True)
+    assert detail.speech_button.isEnabled()

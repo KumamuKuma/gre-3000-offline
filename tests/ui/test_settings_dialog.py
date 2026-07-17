@@ -50,3 +50,15 @@ def test_reset_position_has_separate_non_destructive_signal(qtbot):
     qtbot.addWidget(dialog)
     with qtbot.waitSignal(dialog.resetPositionRequested):
         dialog.reset_button.click()
+
+
+def test_settings_distinguishes_default_voice_fallback_from_unavailable(qtbot):
+    dialog = SettingsDialog()
+    qtbot.addWidget(dialog)
+
+    dialog.set_voice_names((), using_default_voice=True)
+    assert "系统默认" in dialog.voice_combo.currentText()
+    assert not dialog.voice_combo.isEnabled()
+
+    dialog.set_voice_names((), using_default_voice=False)
+    assert "不可用" in dialog.voice_combo.currentText()

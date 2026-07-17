@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import uuid
 from typing import Any, Sequence
 
 from gre_vocab_app.domain import BrowseOrder, SessionSnapshot, StudyMode
@@ -40,12 +41,14 @@ class StudySession:
         random.Random(seed).shuffle(shuffled)
         return tuple(shuffled), seed
 
-    def _save_queue(self) -> None:
-        self._user.save_queue(
+    def _save_navigation(self) -> None:
+        self._user.save_navigation(
             self._order.value,
             self._ids,
             position=self._position,
             seed=self._seed,
+            seen_word_id=self._ids[self._position],
+            event_id=uuid.uuid4().hex,
         )
 
     def _load_mode(self) -> StudyMode:
@@ -76,7 +79,6 @@ class StudySession:
                 self._ids = content_ids
                 self._position = 0
                 self._seed = 0
-                self._save_queue()
         elif (
             saved is not None
             and self._same_id_set(saved.word_ids, content_ids)
@@ -88,12 +90,11 @@ class StudySession:
         else:
             self._ids, self._seed = self._fresh_random_queue(content_ids)
             self._position = 0
-            self._save_queue()
 
         self._answer_visible = False
         self._started = True
         self._user.save_setting("browse_order", self._order.value)
-        self._user.record_seen(self._ids[self._position])
+        self._save_navigation()
         return self.current()
 
     def _require_started(self) -> None:
@@ -118,8 +119,7 @@ class StudySession:
     def _move(self, position: int) -> SessionSnapshot:
         self._position = position
         self._answer_visible = False
-        self._save_queue()
-        self._user.record_seen(self._ids[self._position])
+        self._save_navigation()
         return self.current()
 
     def next(self) -> SessionSnapshot:
@@ -162,7 +162,6 @@ class StudySession:
         self._ids, self._seed = self._fresh_random_queue(content_ids)
         self._position = 0
         self._answer_visible = False
-        self._save_queue()
-        self._user.record_seen(self._ids[0])
+        self._save_navigation()
         return self.current()
 

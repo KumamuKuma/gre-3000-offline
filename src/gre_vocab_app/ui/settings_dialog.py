@@ -77,7 +77,11 @@ class SettingsDialog(QDialog):
         self.clear_button.clicked.connect(self._confirm_clear)
 
     def set_voice_names(
-        self, names: tuple[str, ...], selected: str | None = None
+        self,
+        names: tuple[str, ...],
+        selected: str | None = None,
+        *,
+        using_default_voice: bool = False,
     ) -> None:
         with QSignalBlocker(self.voice_combo):
             self.voice_combo.clear()
@@ -87,7 +91,11 @@ class SettingsDialog(QDialog):
                 if selected in names:
                     self.voice_combo.setCurrentText(selected)
             else:
-                self.voice_combo.addItem("未检测到英文语音")
+                self.voice_combo.addItem(
+                    "使用系统默认语音（建议安装英文语音包）"
+                    if using_default_voice
+                    else "朗读不可用"
+                )
                 self.voice_combo.setEnabled(False)
 
     def set_rate(self, rate: float) -> None:

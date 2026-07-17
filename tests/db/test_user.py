@@ -79,7 +79,10 @@ def test_open_recovering_normal_missing_file_does_not_report_recovery(tmp_path):
 def test_schema_version_is_set_and_initialization_is_idempotent(tmp_path):
     path = tmp_path / "user.db"
     with UserRepository(path) as repository:
-        assert repository.db.execute("pragma user_version").fetchone()[0] == 1
+        assert (
+            repository.db.execute("pragma user_version").fetchone()[0]
+            == user_module.USER_SCHEMA_VERSION
+        )
     with UserRepository(path) as repository:
         tables = {
             row[0]
@@ -134,3 +137,191 @@ def test_seen_count_and_favorites_support_home_and_favorites_views(tmp_path):
 
         assert repository.seen_word_count() == 2
         assert repository.favorite_ids() == (2, 1)
+
+
+def test_open_recovering_does_not_move_a_locked_healthy_database(tmp_path):
+    path = tmp_path / "user.db"
+    with UserRepository(path) as repository:
+        repository.save_setting("study_mode", "recall")
+
+    lock = sqlite3.connect(path)
+    lock.execute("begin exclusive")
+    try:
+        error_type = getattr(user_module, "UserDatabaseError", RuntimeError)
+        with pytest.raises(error_type, match="temporarily|暂时|locked"):
+            UserRepository.open_recovering(path)
+    finally:
+        lock.rollback()
+        lock.close()
+
+    assert path.exists()
+    assert not list(tmp_path.glob("*.corrupt-*"))
+    with UserRepository(path) as repository:
+        assert repository.load_setting("study_mode") == "recall"
+
+
+def test_physically_healthy_database_with_missing_column_is_rejected_not_backed_up(
+    tmp_path,
+):
+    path = tmp_path / "user.db"
+    with sqlite3.connect(path) as database:
+        database.executescript(
+            """
+            create table settings(key text primary key);
+            create table favorites(word_id integer primary key, created_at text not null);
+            create table word_progress(
+              word_id integer primary key,
+              seen_count integer not null,
+              last_seen_at text not null
+            );
+            create table session_queue(
+              name text primary key,
+              word_ids text not null,
+              position integer not null,
+              seed integer not null
+            );
+            pragma user_version=1;
+            """
+        )
+
+    error_type = getattr(user_module, "UserSchemaError", ValueError)
+    with pytest.raises(error_type, match="settings|column|列"):
+        UserRepository.open_recovering(path)
+
+    assert path.exists()
+    assert not list(tmp_path.glob("*.corrupt-*"))
+
+
+def test_user_schema_migrates_v1_to_current_without_losing_data(tmp_path):
+    path = tmp_path / "user.db"
+    with sqlite3.connect(path) as database:
+        database.executescript(user_module.USER_SCHEMA)
+        database.execute("pragma user_version=1")
+        database.execute(
+            "insert into settings(key, value) values('study_mode', 'recall')"
+        )
+
+    with UserRepository(path) as repository:
+        assert repository.load_setting("study_mode") == "recall"
+        assert repository.db.execute("pragma user_version").fetchone()[0] >= 2
+        tables = {
+            row[0]
+            for row in repository.db.execute(
+                "select name from sqlite_master where type='table'"
+            )
+        }
+        assert "seen_events" in tables
+
+
+def test_malformed_queue_is_reset_without_losing_other_user_data(tmp_path):
+    path = tmp_path / "user.db"
+    with UserRepository(path) as repository:
+        repository.save_setting("study_mode", "recall")
+        repository.set_favorite(7, True)
+        repository.save_queue("source", [1, 2], position=1, seed=0)
+
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "update session_queue set word_ids='[1,1]', position=9 where name='source'"
+        )
+
+    with UserRepository(path) as repository:
+        assert repository.load_queue("source") == QueueState((), 0, 0)
+        assert repository.load_setting("study_mode") == "recall"
+        assert repository.is_favorite(7)
+
+    with sqlite3.connect(path) as database:
+        assert database.execute(
+            "select 1 from session_queue where name='source'"
+        ).fetchone() is None
+
+
+def test_navigation_queue_and_seen_are_atomic_and_failed_write_retries(tmp_path):
+    assert hasattr(UserRepository, "save_navigation")
+    path = tmp_path / "user.db"
+    with UserRepository(path) as repository:
+        repository.save_queue("source", [1, 2], position=0, seed=0)
+        repository.db.execute(
+            """
+            create trigger fail_seen before insert on word_progress
+            begin
+              select raise(abort, 'synthetic persistence failure');
+            end
+            """
+        )
+
+        result = repository.save_navigation(
+            "source",
+            [1, 2],
+            position=1,
+            seed=0,
+            seen_word_id=2,
+            event_id="navigation-2",
+        )
+        assert result is False
+        assert repository.load_queue("source") == QueueState((1, 2), 1, 0)
+        assert repository.seen_word_count() == 1
+
+        with sqlite3.connect(path) as observer:
+            assert observer.execute(
+                "select position from session_queue where name='source'"
+            ).fetchone()[0] == 0
+            assert observer.execute("select count(*) from word_progress").fetchone()[0] == 0
+
+        repository.db.execute("drop trigger fail_seen")
+        assert repository.save_setting("study_mode", "reading") is True
+
+    with UserRepository(path) as repository:
+        assert repository.load_queue("source") == QueueState((1, 2), 1, 0)
+        assert repository.db.execute(
+            "select seen_count from word_progress where word_id=2"
+        ).fetchone()[0] == 1
+        assert repository.save_navigation(
+            "source",
+            [1, 2],
+            position=1,
+            seed=0,
+            seen_word_id=2,
+            event_id="navigation-2",
+        ) is True
+        assert repository.db.execute(
+            "select seen_count from word_progress where word_id=2"
+        ).fetchone()[0] == 1
+
+
+def test_user_schema_rejects_wrong_column_types_and_constraints(tmp_path):
+    path = tmp_path / "user.db"
+    with UserRepository(path):
+        pass
+    with sqlite3.connect(path) as database:
+        database.executescript(
+            """
+            alter table settings rename to settings_old;
+            create table settings(
+              key text primary key,
+              value integer
+            );
+            drop table settings_old;
+            """
+        )
+
+    with pytest.raises(user_module.UserSchemaError, match="settings|shape|结构"):
+        UserRepository.open_recovering(path)
+    assert not list(tmp_path.glob("*.corrupt-*"))
+
+
+def test_queue_with_null_name_is_deleted_by_row_identity(tmp_path):
+    path = tmp_path / "user.db"
+    with UserRepository(path):
+        pass
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "insert into session_queue(name, word_ids, position, seed) "
+            "values(NULL, '[1]', 0, 0)"
+        )
+
+    with UserRepository(path) as repository:
+        assert repository.load_queue("source") == QueueState((), 0, 0)
+
+    with sqlite3.connect(path) as database:
+        assert database.execute("select count(*) from session_queue").fetchone()[0] == 0

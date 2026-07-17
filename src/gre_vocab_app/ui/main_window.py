@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction
+import json
+
+from PySide6.QtCore import QRect, Qt, Signal
+from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QToolBar
 
 from .favorites_page import FavoritesPage
@@ -12,9 +14,12 @@ from .study_page import StudyPage
 
 class MainWindow(QMainWindow):
     homeRequested = Signal()
+    findRequested = Signal()
+    closing = Signal()
 
     def __init__(self):
         super().__init__()
+        self._closing_emitted = False
         self.setWindowTitle("GRE 3000 词离线版")
         self.setMinimumSize(820, 620)
         self.resize(980, 760)
@@ -40,6 +45,10 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.settings_action)
         self.home_action.triggered.connect(self.homeRequested.emit)
 
+        self.find_shortcut = QShortcut(QKeySequence.StandardKey.Find, self)
+        self.find_shortcut.setContext(Qt.ApplicationShortcut)
+        self.find_shortcut.activated.connect(self.findRequested.emit)
+
         self.settings_dialog = SettingsDialog(self)
         self.settings_action.triggered.connect(self.show_settings)
         self.statusBar().showMessage("离线模式")
@@ -57,3 +66,55 @@ class MainWindow(QMainWindow):
         self.settings_dialog.show()
         self.settings_dialog.raise_()
         self.settings_dialog.activateWindow()
+
+    def geometry_state(self) -> str:
+        geometry = self.geometry()
+        return json.dumps(
+            {
+                "x": geometry.x(),
+                "y": geometry.y(),
+                "width": geometry.width(),
+                "height": geometry.height(),
+            },
+            separators=(",", ":"),
+        )
+
+    def restore_geometry_state(self, value: str | None) -> bool:
+        try:
+            payload = json.loads(value) if value else None
+            if not isinstance(payload, dict):
+                raise ValueError("geometry payload must be an object")
+            coordinates = tuple(
+                payload[key] for key in ("x", "y", "width", "height")
+            )
+            if any(type(item) is not int for item in coordinates):
+                raise ValueError("geometry values must be integers")
+            rectangle = QRect(*coordinates)
+            if rectangle.width() <= 0 or rectangle.height() <= 0:
+                raise ValueError("geometry size must be positive")
+            if not any(
+                rectangle.intersects(screen.availableGeometry())
+                for screen in QGuiApplication.screens()
+            ):
+                raise ValueError("geometry is outside every available screen")
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            self._use_safe_default_geometry()
+            return False
+        self.setGeometry(rectangle)
+        return True
+
+    def _use_safe_default_geometry(self) -> None:
+        self.resize(980, 760)
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            self.move(
+                available.center().x() - self.width() // 2,
+                available.center().y() - self.height() // 2,
+            )
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if not self._closing_emitted:
+            self._closing_emitted = True
+            self.closing.emit()
+        super().closeEvent(event)

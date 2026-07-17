@@ -4,15 +4,16 @@ from gre_vocab_app.services.speech import SpeechService, VoiceOption
 
 
 class FakeSpeechBackend:
-    def __init__(self, available=True, *, fail=False):
+    def __init__(self, available=True, *, fail=False, voices=None):
         self.available = available
         self.fail = fail
         self.rate = 0.0
         self.selected = ""
         self.spoken = []
+        self._voices = voices
 
     def voices(self):
-        return (
+        return self._voices or (
             VoiceOption(name="Microsoft David", locale="en-US"),
             VoiceOption(name="Microsoft Huihui", locale="zh-CN"),
         )
@@ -90,3 +91,55 @@ def test_discovery_error_is_delivered_after_service_construction(qtbot):
         pass
 
     assert signal.args == ["无法读取语音列表。", "voice discovery exploded"]
+
+
+def test_no_english_voice_uses_default_engine_and_returns_notice_once():
+    backend = FakeSpeechBackend(
+        voices=(VoiceOption(name="Microsoft Huihui", locale="zh-CN"),)
+    )
+    service = SpeechService(backend=backend)
+
+    assert hasattr(service, "using_default_voice")
+    assert service.available is True
+    assert service.using_default_voice is True
+    assert service.voice_names() == ()
+    assert service.speak("abate") is True
+    assert backend.spoken == ["abate"]
+    notice = service.take_availability_notice()
+    assert notice is not None
+    assert "英文语音包" in notice
+    assert service.take_availability_notice() is None
+
+
+class MutableAvailabilityBackend(QObject):
+    errorOccurred = Signal(str, str)
+
+    def __init__(self):
+        super().__init__()
+        self.available = True
+
+    def voices(self):
+        return (VoiceOption(name="Microsoft David", locale="en-US"),)
+
+    def select_voice(self, _name):
+        return True
+
+    def set_rate(self, _value):
+        return None
+
+    def say(self, _text):
+        return self.available
+
+
+def test_async_backend_failure_updates_service_availability(qtbot):
+    backend = MutableAvailabilityBackend()
+    service = SpeechService(backend=backend)
+    assert hasattr(service, "availabilityChanged")
+    assert service.available is True
+
+    backend.available = False
+    with qtbot.waitSignal(service.availabilityChanged) as changed:
+        backend.errorOccurred.emit("朗读不可用", "engine entered error state")
+
+    assert changed.args == [False]
+    assert service.available is False

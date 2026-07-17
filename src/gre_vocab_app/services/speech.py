@@ -146,6 +146,7 @@ class QtSpeechBackend(QObject):
 
 class SpeechService(QObject):
     errorOccurred = Signal(str, str)
+    availabilityChanged = Signal(bool)
 
     def __init__(
         self, backend: SpeechBackend | None = None, parent: QObject | None = None
@@ -154,6 +155,10 @@ class SpeechService(QObject):
         self._backend = backend or QtSpeechBackend(self)
         self._pending_errors: list[tuple[str, str]] = []
         self._error_flush_scheduled = False
+        self._voices: tuple[VoiceOption, ...] = ()
+        self._available = bool(self._backend.available)
+        self._using_default_voice = self._available
+        self._availability_notice: str | None = None
         backend_error = getattr(self._backend, "errorOccurred", None)
         if backend_error is not None and hasattr(backend_error, "connect"):
             backend_error.connect(self._relay_error)
@@ -166,10 +171,32 @@ class SpeechService(QObject):
             for voice in self._backend.voices()
             if voice.locale.replace("_", "-").casefold().startswith("en")
         )
+        backend_available = bool(self._backend.available)
+        self._using_default_voice = backend_available and not self._voices
+        self._available = backend_available
+        if not backend_available:
+            self._availability_notice = (
+                "未检测到可用的语音引擎，朗读功能已禁用；其他功能仍可正常使用。"
+            )
+        elif self._using_default_voice:
+            self._availability_notice = (
+                "未检测到英文语音，将使用系统默认语音；建议安装英文语音包。"
+            )
+        else:
+            self._availability_notice = None
 
     @property
     def available(self) -> bool:
-        return bool(self._backend.available and self._voices)
+        return self._available
+
+    @property
+    def using_default_voice(self) -> bool:
+        return self._using_default_voice
+
+    def take_availability_notice(self) -> str | None:
+        notice = self._availability_notice
+        self._availability_notice = None
+        return notice
 
     def voice_names(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys(voice.name for voice in self._voices))
@@ -194,16 +221,31 @@ class SpeechService(QObject):
         value = headword.strip()
         if not value or not self.available:
             return False
+        if not self._backend.available:
+            self._set_available(False)
+            return False
         try:
-            return bool(self._backend.say(value))
+            spoken = bool(self._backend.say(value))
+            if not spoken and not self._backend.available:
+                self._set_available(False)
+            return spoken
         except (RuntimeError, TypeError) as error:
             self._emit_exception("朗读失败，请检查 Windows 语音设置。", error)
             return False
 
     def _relay_error(self, user_message: str, technical: str) -> None:
+        self._set_available(bool(self._backend.available))
         self._queue_error(user_message, technical)
 
+    def _set_available(self, available: bool) -> None:
+        value = bool(available)
+        if value == self._available:
+            return
+        self._available = value
+        self.availabilityChanged.emit(value)
+
     def _emit_exception(self, user_message: str, error: Exception) -> None:
+        self._set_available(bool(self._backend.available))
         self._queue_error(
             user_message, f"{type(error).__name__}: {error}"
         )

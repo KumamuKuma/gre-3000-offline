@@ -1,6 +1,6 @@
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QSignalSpy
-from PySide6.QtWidgets import QLineEdit
+from PySide6.QtWidgets import QLineEdit, QPushButton
 
 from gre_vocab_app.domain import BrowseOrder, SessionSnapshot, StudyMode
 from gre_vocab_app.ui.study_page import StudyPage
@@ -93,3 +93,55 @@ def test_random_snapshot_exposes_reshuffle_and_end_boundary(qtbot, sample_word):
     assert not page.next_button.isEnabled()
     with qtbot.waitSignal(page.reshuffleRequested):
         page.reshuffle_button.click()
+
+
+def test_recall_reveal_control_supports_mouse_and_focused_space(qtbot, sample_word):
+    page = StudyPage()
+    qtbot.addWidget(page)
+    page.show()
+    page.render(snapshot(sample_word, mode=StudyMode.RECALL, answer_visible=False))
+
+    assert page.word_detail.reveal_button.isVisible()
+    assert page.word_detail.reveal_button.text() == "点击显示释义"
+    assert page.word_detail.reveal_button.focusPolicy() & Qt.StrongFocus
+    with qtbot.waitSignal(page.answerToggleRequested):
+        qtbot.mouseClick(page.word_detail.reveal_button, Qt.LeftButton)
+    with qtbot.waitSignal(page.answerToggleRequested):
+        page.word_detail.reveal_button.setFocus()
+        qtbot.keyClick(page.word_detail.reveal_button, Qt.Key_Space)
+
+
+def test_reading_space_keeps_normal_focused_button_behavior(qtbot, sample_word):
+    page = StudyPage()
+    qtbot.addWidget(page)
+    page.show()
+    page.render(snapshot(sample_word, mode=StudyMode.READING))
+    ordinary = QPushButton("ordinary", page)
+    ordinary.show()
+    ordinary.setFocus()
+    clicks = QSignalSpy(ordinary.clicked)
+    answer = QSignalSpy(page.answerToggleRequested)
+
+    qtbot.keyClick(ordinary, Qt.Key_Space)
+
+    assert clicks.count() == 1
+    assert answer.count() == 0
+
+
+def test_unavailable_speech_disables_button_and_p_shortcut(qtbot, sample_word):
+    page = StudyPage()
+    qtbot.addWidget(page)
+    page.show()
+    assert hasattr(page, "set_speech_available")
+    page.set_speech_available(False)
+    page.render(snapshot(sample_word))
+    speech = QSignalSpy(page.speechRequested)
+
+    assert not page.word_detail.speech_button.isEnabled()
+    assert not page.speech_shortcut.isEnabled()
+    qtbot.keyClick(page, Qt.Key_P)
+    assert speech.count() == 0
+
+    page.set_speech_available(True)
+    assert page.word_detail.speech_button.isEnabled()
+    assert page.speech_shortcut.isEnabled()

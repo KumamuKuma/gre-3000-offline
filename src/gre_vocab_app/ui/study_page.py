@@ -36,6 +36,7 @@ class StudyPage(QWidget):
         super().__init__(parent)
         self.setObjectName("appSurface")
         self.snapshot: SessionSnapshot | None = None
+        self._speech_available = True
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 22, 28, 24)
         root.setSpacing(13)
@@ -90,10 +91,10 @@ class StudyPage(QWidget):
             lambda checked: self.favoriteRequested.emit(bool(checked))
         )
         self.word_detail.speechRequested.connect(self.speechRequested.emit)
+        self.word_detail.revealRequested.connect(self.answerToggleRequested.emit)
 
         self.previous_shortcut = self._shortcut(Qt.Key_Left, self._previous)
         self.next_shortcut = self._shortcut(Qt.Key_Right, self._next)
-        self.answer_shortcut = self._shortcut(Qt.Key_Space, self._toggle_answer)
         self.speech_shortcut = self._shortcut(Qt.Key_P, self._speak)
         self.favorite_shortcut = self._shortcut(Qt.Key_S, self._toggle_favorite)
 
@@ -116,7 +117,11 @@ class StudyPage(QWidget):
             self.favorite_button.setChecked(snapshot.favorite)
         self.favorite_button.setText("已收藏" if snapshot.favorite else "收藏")
         reveal = snapshot.mode is StudyMode.READING or snapshot.answer_visible
-        self.word_detail.set_word(snapshot.word, reveal=reveal)
+        self.word_detail.set_word(
+            snapshot.word,
+            reveal=reveal,
+            recall=snapshot.mode is StudyMode.RECALL,
+        )
 
     def _editable_has_focus(self) -> bool:
         focus = QApplication.focusWidget()
@@ -141,8 +146,17 @@ class StudyPage(QWidget):
             self.answerToggleRequested.emit()
 
     def _speak(self) -> None:
-        if self.snapshot is not None and not self._editable_has_focus():
+        if (
+            self._speech_available
+            and self.snapshot is not None
+            and not self._editable_has_focus()
+        ):
             self.speechRequested.emit(self.snapshot.word.headword)
+
+    def set_speech_available(self, available: bool) -> None:
+        self._speech_available = bool(available)
+        self.speech_shortcut.setEnabled(self._speech_available)
+        self.word_detail.set_speech_available(self._speech_available)
 
     def _toggle_favorite(self) -> None:
         if self.snapshot is not None and not self._editable_has_focus():
@@ -152,10 +166,12 @@ class StudyPage(QWidget):
         handlers = {
             Qt.Key_Left: self._previous,
             Qt.Key_Right: self._next,
-            Qt.Key_Space: self._toggle_answer,
-            Qt.Key_P: self._speak,
             Qt.Key_S: self._toggle_favorite,
         }
+        if self._speech_available:
+            handlers[Qt.Key_P] = self._speak
+        if self.snapshot is not None and self.snapshot.mode is StudyMode.RECALL:
+            handlers[Qt.Key_Space] = self._toggle_answer
         handler = handlers.get(event.key())
         if handler is not None and event.modifiers() == Qt.NoModifier:
             handler()

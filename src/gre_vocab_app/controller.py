@@ -61,6 +61,8 @@ class ApplicationController:
         favorites.favoriteRemoved.connect(self._remove_favorite)
 
         self.window.homeRequested.connect(self._show_home)
+        self.window.findRequested.connect(self._find_home)
+        self.window.closing.connect(self._save_window_geometry)
         settings.voiceSelected.connect(self._select_voice)
         settings.rateChanged.connect(self._set_rate)
         settings.defaultModeChanged.connect(self._set_default_mode)
@@ -70,8 +72,16 @@ class ApplicationController:
         backend_error = getattr(self.speech, "errorOccurred", None)
         if backend_error is not None and hasattr(backend_error, "connect"):
             backend_error.connect(self._speech_error)
+        availability_changed = getattr(self.speech, "availabilityChanged", None)
+        if availability_changed is not None and hasattr(
+            availability_changed, "connect"
+        ):
+            availability_changed.connect(self._speech_availability_changed)
 
     def start(self) -> None:
+        self.window.restore_geometry_state(
+            self.user.load_setting("window_geometry")
+        )
         self._configure_settings()
         self._refresh_stats()
         self._refresh_favorites()
@@ -81,9 +91,17 @@ class ApplicationController:
         names = tuple(self.speech.voice_names())
         saved_voice = self.user.load_setting("voice_name")
         selected = saved_voice if saved_voice in names else (names[0] if names else None)
-        self.window.settings_dialog.set_voice_names(names, selected)
+        using_default_voice = bool(
+            getattr(self.speech, "using_default_voice", False)
+        )
+        self.window.settings_dialog.set_voice_names(
+            names,
+            selected,
+            using_default_voice=using_default_voice,
+        )
         if selected:
             self.speech.select_voice(selected)
+        self.window.study_page.set_speech_available(bool(self.speech.available))
 
         raw_rate = self.user.load_setting("speech_rate")
         try:
@@ -100,6 +118,12 @@ class ApplicationController:
         except ValueError:
             mode = StudyMode.READING
         self.window.settings_dialog.set_default_mode(mode)
+
+        take_notice = getattr(self.speech, "take_availability_notice", None)
+        if callable(take_notice):
+            notice = take_notice()
+            if notice:
+                self._show_status(notice)
 
     def _refresh_stats(self) -> None:
         self.window.home_page.set_stats(
@@ -130,6 +154,10 @@ class ApplicationController:
         self._refresh_stats()
         self.window.show_home()
 
+    def _find_home(self) -> None:
+        self._show_home()
+        self.window.home_page.focus_search()
+
     def _search_home(self, query: str) -> None:
         self.window.home_page.set_results(self.search.search(query))
 
@@ -152,6 +180,7 @@ class ApplicationController:
         self.window.study_page.render(snapshot)
         self.window.show_study()
         self._refresh_stats()
+        self._report_persistence_issue()
 
     def _open_detail(self, word: WordEntry, origin: str) -> None:
         raw_mode = self.user.load_setting("study_mode")
@@ -192,6 +221,7 @@ class ApplicationController:
         if before.at_start:
             self._show_status("已经是第一个词。")
         self._refresh_stats()
+        self._report_persistence_issue()
 
     def _next(self) -> None:
         if self._detail_snapshot is not None:
@@ -203,6 +233,7 @@ class ApplicationController:
         if before.at_end:
             self._show_status("已经到最后一个词。")
         self._refresh_stats()
+        self._report_persistence_issue()
 
     def _set_mode(self, mode: StudyMode) -> None:
         if self._detail_snapshot is not None:
@@ -212,6 +243,7 @@ class ApplicationController:
         else:
             self.window.study_page.render(self.study.set_mode(mode))
         self.window.settings_dialog.set_default_mode(mode)
+        self._report_persistence_issue()
 
     def _toggle_answer(self) -> None:
         if self._detail_snapshot is not None:
@@ -235,15 +267,20 @@ class ApplicationController:
             self.window.study_page.render(self.study.set_favorite(favorite))
         self._refresh_stats()
         self._refresh_favorites(self.window.favorites_page.search_edit.text())
+        self._report_persistence_issue()
 
     def _remove_favorite(self, word_id: int) -> None:
         self.user.set_favorite(word_id, False)
         self._refresh_stats()
         self._refresh_favorites(self.window.favorites_page.search_edit.text())
+        self._report_persistence_issue()
 
     def _speak(self, headword: str) -> None:
         if not self.speech.speak(headword):
-            self._show_status("当前没有可用的英文语音。")
+            self.window.study_page.set_speech_available(
+                bool(self.speech.available)
+            )
+            self._show_status("当前没有可用的语音，朗读功能已禁用。")
 
     def _reshuffle(self) -> None:
         if self._detail_snapshot is not None:
@@ -251,6 +288,7 @@ class ApplicationController:
         self.window.study_page.render(self.study.reshuffle())
         self._refresh_stats()
         self._show_status("随机顺序已重新洗牌。")
+        self._report_persistence_issue()
 
     def _open_favorites(self) -> None:
         self._detail_snapshot = None
@@ -263,35 +301,64 @@ class ApplicationController:
     def _select_voice(self, name: str) -> None:
         if self.speech.select_voice(name):
             self.user.save_setting("voice_name", name)
+            self._report_persistence_issue()
         else:
             self._show_status("无法使用所选英文语音。")
 
     def _set_rate(self, rate: float) -> None:
         self.speech.set_rate(rate)
         self.user.save_setting("speech_rate", f"{rate:.1f}")
+        self._report_persistence_issue()
 
     def _set_default_mode(self, mode: StudyMode) -> None:
         self.user.save_setting("study_mode", StudyMode(mode).value)
+        self._report_persistence_issue()
 
     def _reset_positions(self) -> None:
+        self._show_status("学习位置已重置。")
         self.user.reset_position(BrowseOrder.SOURCE.value)
         self.user.reset_position(BrowseOrder.RANDOM.value)
-        if self._detail_snapshot is None and self.window.stack.currentWidget() is self.window.study_page:
+        if (
+            self._detail_snapshot is None
+            and self.window.stack.currentWidget() is self.window.study_page
+        ):
             self._open_study(self.study.current().order)
-        self._show_status("学习位置已重置。")
+        self._report_persistence_issue()
 
     def _clear_all(self) -> None:
+        self._show_status("本地收藏、进度、队列和设置已清空。")
         self.user.clear_all()
         self._detail_snapshot = None
         self._configure_settings()
         self._refresh_stats()
         self._refresh_favorites()
         self.window.show_home()
-        self._show_status("本地收藏、进度、队列和设置已清空。")
+        self._report_persistence_issue()
+
+    def _save_window_geometry(self) -> None:
+        self.user.save_setting(
+            "window_geometry", self.window.geometry_state()
+        )
+        self._report_persistence_issue()
+
+    def _report_persistence_issue(self) -> None:
+        take_issue = getattr(self.user, "take_persistence_issue", None)
+        if not callable(take_issue):
+            return
+        issue = take_issue()
+        if issue is None:
+            return
+        LOGGER.error("User persistence failure: %s", issue.technical)
+        self._show_status(issue.user_message)
 
     def _speech_error(self, user_message: str, technical: str) -> None:
         LOGGER.error("Speech error: %s", technical)
         self._show_status(user_message)
+
+    def _speech_availability_changed(self, available: bool) -> None:
+        self.window.study_page.set_speech_available(bool(available))
+        if not available:
+            self._show_status("语音引擎当前不可用，朗读功能已禁用。")
 
     def _show_status(self, message: str) -> None:
         self.window.statusBar().showMessage(message, 5000)

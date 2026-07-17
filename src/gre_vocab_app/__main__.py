@@ -34,8 +34,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "技术详情已写入应用日志。",
         )
         return 1
-    application.aboutToQuit.connect(result.controller.content.close)
-    application.aboutToQuit.connect(result.controller.user.close)
+    application.aboutToQuit.connect(result.controller.shutdown)
     if result.recovery_notice:
         result.window.statusBar().showMessage(result.recovery_notice)
     result.window.show()

@@ -294,11 +294,21 @@ class UserRepository:
             path.replace(backup)
             return UserOpenResult(cls(path), backup)
 
-    def close(self) -> None:
+    def close(self) -> bool:
         if self._closed:
-            return
-        self.db.close()
+            return True
+        if not self.flush_pending():
+            return False
+        try:
+            self.db.close()
+        except sqlite3.DatabaseError as error:
+            self._last_issue = PersistenceIssue(
+                "本地数据暂时无法安全关闭；请重试。",
+                f"{type(error).__name__}: {error}",
+            )
+            return False
         self._closed = True
+        return True
 
     def __enter__(self) -> Self:
         return self
@@ -392,6 +402,7 @@ class UserRepository:
 
     def flush_pending(self) -> bool:
         if not self._pending:
+            self._last_issue = None
             return True
         if self._closed:
             self._last_issue = PersistenceIssue(
@@ -416,7 +427,12 @@ class UserRepository:
             )
             return False
         self._pending.clear()
+        self._last_issue = None
         return True
+
+    def discard_pending_writes(self) -> None:
+        self._pending.clear()
+        self._last_issue = None
 
     def take_persistence_issue(self) -> PersistenceIssue | None:
         issue = self._last_issue
@@ -426,6 +442,10 @@ class UserRepository:
     @property
     def has_pending_writes(self) -> bool:
         return bool(self._pending)
+
+    @property
+    def is_closed(self) -> bool:
+        return self._closed
 
     def set_favorite(self, word_id: int, favorite: bool) -> bool:
         word_id = int(word_id)

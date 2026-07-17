@@ -127,15 +127,13 @@ class ContentRepository:
                 f"actual={tuple(order_row)}, count={actual_count}"
             )
 
-        for row in self.db.execute("select id, quality_flags from words"):
-            self._quality_flags(row[1], word_id=row[0])
-
-        representative = self.db.execute(
-            "select * from words order by source_order limit 1"
-        ).fetchone()
-        if representative is None:
-            raise ContentDatabaseError("词库缺少可映射的代表词条")
-        self._map(representative)
+        rows = self.db.execute(
+            "select * from words order by source_order"
+        ).fetchall()
+        self._validated_entries = tuple(self._map(row) for row in rows)
+        self._entries_by_id = {
+            entry.id: entry for entry in self._validated_entries
+        }
 
     def _require_columns(self, table: str, expected: tuple[str, ...]) -> None:
         rows = self.db.execute(f'pragma table_info("{table}")').fetchall()
@@ -211,31 +209,24 @@ class ContentRepository:
         return int(self.db.execute("select count(*) from words").fetchone()[0])
 
     def get(self, word_id: int) -> WordEntry:
-        row = self.db.execute(
-            "select * from words where id=?", (word_id,)
-        ).fetchone()
-        if row is None:
-            raise KeyError(word_id)
-        return self._map(row)
+        try:
+            return self._entries_by_id[int(word_id)]
+        except KeyError:
+            raise KeyError(word_id) from None
 
     def ids_in_source_order(self) -> tuple[int, ...]:
-        rows = self.db.execute(
-            "select id from words order by source_order"
-        ).fetchall()
-        return tuple(int(row[0]) for row in rows)
+        return tuple(entry.id for entry in self._validated_entries)
 
     def _build_search_index(self) -> None:
         self._search_index = tuple(
             (
-                int(row[0]),
-                str(row[1]),
-                normalize_search_key(str(row[1])),
-                _accent_insensitive_key(str(row[1])),
-                int(row[2]),
+                entry,
+                entry.headword,
+                normalize_search_key(entry.headword),
+                _accent_insensitive_key(entry.headword),
+                entry.source_order,
             )
-            for row in self.db.execute(
-                "select id, headword, source_order from words"
-            )
+            for entry in self._validated_entries
         )
 
     def search(self, query: str, limit: int = 50) -> list[WordEntry]:
@@ -245,8 +236,8 @@ class ContentRepository:
         key = normalize_search_key(value)
         accent_key = _accent_insensitive_key(value)
         use_accent_fallback = bool(accent_key)
-        prefix: list[tuple[int, str, str, str, int]] = []
-        contains: list[tuple[int, str, str, str, int]] = []
+        prefix: list[tuple[WordEntry, str, str, str, int]] = []
+        contains: list[tuple[WordEntry, str, str, str, int]] = []
         for item in self._search_index:
             _word_id, _headword, word_key, word_accent_key, _source_order = item
             is_prefix = word_key.startswith(key) or (
@@ -261,7 +252,7 @@ class ContentRepository:
                 contains.append(item)
         ordering = lambda item: (len(item[1]), item[2], item[4])
         matches = sorted(prefix, key=ordering) + sorted(contains, key=ordering)
-        return [self.get(item[0]) for item in matches[:limit]]
+        return [item[0] for item in matches[:limit]]
 
     def list_by_ids(self, ids: tuple[int, ...]) -> list[WordEntry]:
         return [self.get(word_id) for word_id in ids]

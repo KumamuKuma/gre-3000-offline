@@ -42,3 +42,12 @@ Environment used the sibling worktree virtualenv, this worktree's `src` on `PYTH
 
 - Final full-suite execution could not re-run the optional retained-generated-DB test because that external artifact was absent; PDF-backed integration and prior 3292-word DB coverage both passed.
 - TTS voice inventory remains platform dependent; the UI now distinguishes English voice, default-voice fallback, and unavailable backend states.
+
+## Independent-review follow-up
+
+- Close now uses an event handshake: geometry and every pending mutation must flush before acceptance; a modal Retry/Cancel/explicit-discard choice keeps the window alive while writes remain. Repository `close()` also refuses to drop pending writes, and `aboutToQuit` uses an exception-containing controller shutdown.
+- Successful flushes clear stale persistence issues.
+- Content startup maps every row before creating the search index; NULL, wrong-type, and empty-headword failures in non-first rows close the connection and fail entry startup before user-data creation.
+- Geometry restoration requires at least a 120-by-24-pixel operable title-bar region, rejects removed-screen/one-pixel remnants, and clamps oversized or partial rectangles to the selected screen.
+- Follow-up focused suite: `17 passed in 1.93s`.
+- Follow-up full suite with the real source PDF: `137 passed, 1 skipped in 9.23s`; the sole skip remains the optional absent `GRE_GENERATED_DB` artifact.

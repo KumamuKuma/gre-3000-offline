@@ -325,3 +325,38 @@ def test_queue_with_null_name_is_deleted_by_row_identity(tmp_path):
 
     with sqlite3.connect(path) as database:
         assert database.execute("select count(*) from session_queue").fetchone()[0] == 0
+
+
+def test_successful_flush_clears_a_previous_persistence_issue(tmp_path):
+    path = tmp_path / "user.db"
+    repository = UserRepository(path)
+    lock = sqlite3.connect(path)
+    lock.execute("begin exclusive")
+    try:
+        assert repository.save_setting("study_mode", "recall") is False
+        assert repository.has_pending_writes
+    finally:
+        lock.rollback()
+        lock.close()
+
+    assert repository.flush_pending() is True
+    assert repository.take_persistence_issue() is None
+    repository.close()
+
+
+def test_close_refuses_to_drop_pending_writes_and_can_retry_after_unlock(tmp_path):
+    path = tmp_path / "user.db"
+    repository = UserRepository(path)
+    lock = sqlite3.connect(path)
+    lock.execute("begin exclusive")
+    try:
+        assert repository.save_setting("study_mode", "recall") is False
+        assert repository.close() is False
+        assert repository.has_pending_writes
+    finally:
+        lock.rollback()
+        lock.close()
+
+    assert repository.close() is True
+    with UserRepository(path) as reopened:
+        assert reopened.load_setting("study_mode") == "recall"

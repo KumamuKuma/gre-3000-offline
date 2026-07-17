@@ -28,6 +28,33 @@ def make_draft(word: str, order: int) -> WordDraft:
     )
 
 
+def relax_words_constraints(path: Path) -> None:
+    with sqlite3.connect(path) as database:
+        database.executescript(
+            """
+            alter table words rename to words_valid;
+            create table words(
+              id integer primary key,
+              source_order integer,
+              source_section text,
+              source_page integer,
+              headword text,
+              phonetic text,
+              definition_en text,
+              definition_zh text,
+              synonyms text,
+              example_en text,
+              example_zh text,
+              raw_definition text,
+              raw_example text,
+              quality_flags text
+            );
+            insert into words select * from words_valid;
+            drop table words_valid;
+            """
+        )
+
+
 @pytest.fixture
 def content_path(tmp_path):
     path = tmp_path / "words.db"
@@ -150,6 +177,41 @@ def test_content_repository_closes_connection_after_contract_failure(
     monkeypatch.setattr(content_module.sqlite3, "connect", capture_connect)
     error_type = getattr(content_module, "ContentDatabaseError", RuntimeError)
     with pytest.raises(error_type):
+        ContentRepository(content_path)
+
+    assert len(connections) == 1
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        connections[0].execute("select 1")
+
+
+@pytest.mark.parametrize(
+    ("column", "value"),
+    (
+        ("phonetic", None),
+        ("source_page", "not-an-integer"),
+        ("headword", ""),
+    ),
+)
+def test_content_repository_rejects_invalid_nonfirst_row_and_closes_connection(
+    content_path, monkeypatch, column, value
+):
+    relax_words_constraints(content_path)
+    with sqlite3.connect(content_path) as database:
+        database.execute(
+            f'update words set "{column}"=? where source_order=2',
+            (value,),
+        )
+
+    connections = []
+    real_connect = content_module.sqlite3.connect
+
+    def capture_connect(*args, **kwargs):
+        connection = real_connect(*args, **kwargs)
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(content_module.sqlite3, "connect", capture_connect)
+    with pytest.raises(content_module.ContentDatabaseError, match="字段|不能为空"):
         ContentRepository(content_path)
 
     assert len(connections) == 1

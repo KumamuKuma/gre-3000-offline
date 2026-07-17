@@ -1,7 +1,10 @@
 import json
 import random
+import sqlite3
 
 from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QMessageBox
 
 from gre_vocab_app.controller import ApplicationController
 from gre_vocab_app.db.user import QueueState, UserRepository
@@ -313,7 +316,12 @@ def test_controller_restores_and_persists_window_geometry_through_user_store(
         _controller, window, _content, _user, _speech = make_controller(
             qtbot, user=user
         )
-        assert (window.width(), window.height()) == (980, 760)
+        available = QGuiApplication.primaryScreen().availableGeometry()
+        assert (window.width(), window.height()) == (
+            min(980, available.width()),
+            min(760, available.height()),
+        )
+        assert available.contains(window.geometry())
         window.setGeometry(30, 40, 900, 700)
         window.close()
 
@@ -382,3 +390,115 @@ def test_controller_propagates_initial_and_async_speech_unavailability(qtbot):
     speech.availabilityChanged.emit(False)
     assert not window.study_page.word_detail.speech_button.isEnabled()
     assert "朗读" in window.statusBar().currentMessage()
+
+
+def test_locked_database_close_keeps_window_and_retries_all_pending_writes(
+    qtbot, tmp_path, monkeypatch
+):
+    path = tmp_path / "user.db"
+    user = UserRepository(path)
+    _controller, window, _content, _user, _speech = make_controller(
+        qtbot, user=user
+    )
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+
+    lock = sqlite3.connect(path)
+    lock.execute("begin exclusive")
+    try:
+        assert user.save_setting("study_mode", "recall") is False
+        choices = iter((QMessageBox.Retry, QMessageBox.Cancel))
+        monkeypatch.setattr(
+            window,
+            "confirm_pending_writes",
+            lambda: next(choices),
+            raising=False,
+        )
+
+        assert window.close() is False
+        assert window.isVisible()
+        assert user.has_pending_writes
+    finally:
+        lock.rollback()
+        lock.close()
+
+    assert window.close() is True
+    assert not window.isVisible()
+    assert not user.has_pending_writes
+    assert user.close() is True
+
+    with UserRepository(path) as reopened:
+        assert reopened.load_setting("study_mode") == "recall"
+        assert reopened.load_setting("window_geometry") is not None
+
+
+def test_locked_database_close_allows_only_explicit_discard(qtbot, tmp_path, monkeypatch):
+    path = tmp_path / "user.db"
+    user = UserRepository(path)
+    _controller, window, _content, _user, _speech = make_controller(
+        qtbot, user=user
+    )
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+
+    lock = sqlite3.connect(path)
+    lock.execute("begin exclusive")
+    try:
+        assert user.save_setting("study_mode", "recall") is False
+        monkeypatch.setattr(
+            window,
+            "confirm_pending_writes",
+            lambda: QMessageBox.Discard,
+            raising=False,
+        )
+
+        assert window.close() is True
+        assert not window.isVisible()
+        assert not user.has_pending_writes
+    finally:
+        lock.rollback()
+        lock.close()
+
+    assert user.close() is True
+    with UserRepository(path) as reopened:
+        assert reopened.load_setting("study_mode") is None
+
+
+def test_controller_shutdown_contains_resource_close_errors(qtbot, caplog):
+    controller, _window, _content, _user, _speech = make_controller(qtbot)
+
+    class FailingResource:
+        def close(self):
+            raise sqlite3.OperationalError("synthetic close failure")
+
+    original_content = controller.content
+    original_user = controller.user
+    try:
+        controller.content = FailingResource()
+        controller.user = FailingResource()
+
+        assert hasattr(controller, "shutdown")
+        controller.shutdown()
+        assert "synthetic close failure" in caplog.text
+    finally:
+        controller.content = original_content
+        controller.user = original_user
+
+
+def test_window_close_after_repository_shutdown_does_not_prompt(qtbot, tmp_path, monkeypatch):
+    user = UserRepository(tmp_path / "user.db")
+    _controller, window, _content, _user, _speech = make_controller(
+        qtbot, user=user
+    )
+    window.show()
+    qtbot.waitUntil(window.isVisible)
+    assert user.close() is True
+    prompts = []
+    monkeypatch.setattr(
+        window,
+        "confirm_pending_writes",
+        lambda: prompts.append(True) or QMessageBox.Discard,
+    )
+
+    assert window.close() is True
+    assert prompts == []

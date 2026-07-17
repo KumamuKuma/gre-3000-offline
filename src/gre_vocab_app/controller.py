@@ -4,6 +4,8 @@ import logging
 from dataclasses import replace
 from typing import Any
 
+from PySide6.QtWidgets import QMessageBox
+
 from gre_vocab_app.domain import BrowseOrder, SessionSnapshot, StudyMode, WordEntry
 from gre_vocab_app.ui.main_window import MainWindow
 
@@ -62,7 +64,8 @@ class ApplicationController:
 
         self.window.homeRequested.connect(self._show_home)
         self.window.findRequested.connect(self._find_home)
-        self.window.closing.connect(self._save_window_geometry)
+        self.window.closing.connect(self._handle_close)
+        self.window.enable_close_guard()
         settings.voiceSelected.connect(self._select_voice)
         settings.rateChanged.connect(self._set_rate)
         settings.defaultModeChanged.connect(self._set_default_mode)
@@ -335,11 +338,54 @@ class ApplicationController:
         self.window.show_home()
         self._report_persistence_issue()
 
-    def _save_window_geometry(self) -> None:
+    def _handle_close(self, event: Any) -> None:
+        event.ignore()
+        if bool(getattr(self.user, "is_closed", False)):
+            LOGGER.info("Window closed after user repository shutdown")
+            event.accept()
+            return
         self.user.save_setting(
             "window_geometry", self.window.geometry_state()
         )
+        flush_pending = getattr(self.user, "flush_pending", None)
+        if callable(flush_pending):
+            flushed = bool(flush_pending())
+        else:
+            flushed = not bool(getattr(self.user, "has_pending_writes", False))
+        if flushed and not bool(getattr(self.user, "has_pending_writes", False)):
+            event.accept()
+            return
+
         self._report_persistence_issue()
+        while bool(getattr(self.user, "has_pending_writes", False)):
+            choice = self.window.confirm_pending_writes()
+            if choice == QMessageBox.Retry:
+                if bool(flush_pending()) and not self.user.has_pending_writes:
+                    event.accept()
+                    return
+                self._report_persistence_issue()
+                continue
+            if choice == QMessageBox.Discard:
+                discard = getattr(self.user, "discard_pending_writes", None)
+                if not callable(discard):
+                    LOGGER.error("User repository cannot explicitly discard pending writes")
+                    return
+                discard()
+                LOGGER.warning("User explicitly discarded pending local writes on close")
+                event.accept()
+            return
+
+    def shutdown(self) -> None:
+        for name, resource in (("user", self.user), ("content", self.content)):
+            try:
+                closed = resource.close()
+                if closed is False:
+                    LOGGER.error(
+                        "%s repository refused shutdown because writes remain pending",
+                        name,
+                    )
+            except Exception:
+                LOGGER.exception("Unable to close %s repository during shutdown", name)
 
     def _report_persistence_issue(self) -> None:
         take_issue = getattr(self.user, "take_persistence_issue", None)

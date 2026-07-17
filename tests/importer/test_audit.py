@@ -1,9 +1,13 @@
 import json
+from pathlib import Path
 
 import fitz
+import pytest
 
+from gre_vocab_app.importer import build as build_module
 from gre_vocab_app.importer.audit import write_audit
-from gre_vocab_app.importer.build import main
+from gre_vocab_app.importer.build import ExtractionDiagnostics, main
+from gre_vocab_app.importer.layout import PhysicalRowCoverage
 from gre_vocab_app.importer.normalize import WordDraft
 
 
@@ -90,6 +94,57 @@ def test_audit_contains_counts_categories_duplicates_and_escaped_html(tmp_path):
         strict_checks=[
             {"name": "source_sha256", "pass": True, "expected": "x", "actual": "x"}
         ],
+    )
+
+
+def _stub_successful_extract(monkeypatch):
+    diagnostics = ExtractionDiagnostics(
+        dewrap_counts={
+            field: {
+                "normal_space": 0,
+                "hard_join": 0,
+                "hard_join_records": 0,
+            }
+            for field in ("definition", "example", "synonyms")
+        },
+        dewrap_events=(),
+    )
+    monkeypatch.setattr(
+        build_module,
+        "_extract_with_diagnostics",
+        lambda _path: (
+            [draft("alpha", 1)],
+            5,
+            PhysicalRowCoverage(1, 0, 0),
+            diagnostics,
+        ),
+    )
+
+
+def _import_arguments(tmp_path, output, audit_json, audit_html):
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"synthetic source")
+    overrides = tmp_path / "overrides.json"
+    overrides.write_text("{}", encoding="utf-8")
+    return [
+        "--pdf",
+        str(source),
+        "--output",
+        str(output),
+        "--audit-json",
+        str(audit_json),
+        "--audit-html",
+        str(audit_html),
+        "--overrides",
+        str(overrides),
+    ]
+
+
+def _publication_leftovers(root: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if ".candidate-" in path.name or ".backup-" in path.name
     )
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))
@@ -250,3 +305,117 @@ def test_cli_returns_one_for_missing_input(tmp_path, capsys):
     )
     assert result == 1
     assert "error:" in capsys.readouterr().err.lower()
+
+
+@pytest.mark.parametrize("failed_publish", [2, 3])
+def test_cli_rolls_back_all_artifacts_when_later_publish_replace_fails(
+    tmp_path, monkeypatch, capsys, failed_publish
+):
+    _stub_successful_extract(monkeypatch)
+    output = tmp_path / "build" / "words.db"
+    audit_json = tmp_path / "audit" / "report.json"
+    audit_html = tmp_path / "audit" / "report.html"
+    output.parent.mkdir()
+    audit_json.parent.mkdir()
+    output.write_bytes(b"trusted database")
+    audit_json.write_text("trusted json", encoding="utf-8")
+    audit_html.write_text("trusted html", encoding="utf-8")
+    final_paths = {
+        Path(path).resolve()
+        for path in (output, audit_json, audit_html)
+    }
+    real_replace = build_module.os.replace
+    publish_calls = 0
+
+    def fail_selected_publish(source, destination):
+        nonlocal publish_calls
+        if Path(destination).resolve() in final_paths:
+            publish_calls += 1
+            if publish_calls == failed_publish:
+                raise OSError(f"publish {failed_publish} failed")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(build_module.os, "replace", fail_selected_publish)
+
+    result = main(
+        _import_arguments(tmp_path, output, audit_json, audit_html)
+    )
+
+    assert result == 1
+    assert output.read_bytes() == b"trusted database"
+    assert audit_json.read_text(encoding="utf-8") == "trusted json"
+    assert audit_html.read_text(encoding="utf-8") == "trusted html"
+    assert _publication_leftovers(tmp_path) == []
+    assert f"publish {failed_publish} failed" in capsys.readouterr().err
+
+
+def test_cli_candidate_write_failure_preserves_old_artifact_set(
+    tmp_path, monkeypatch, capsys
+):
+    _stub_successful_extract(monkeypatch)
+    output = tmp_path / "words.db"
+    audit_json = tmp_path / "audit.json"
+    audit_html = tmp_path / "audit.html"
+    output.write_bytes(b"trusted database")
+    audit_json.write_text("trusted json", encoding="utf-8")
+    audit_html.write_text("trusted html", encoding="utf-8")
+
+    def fail_during_audit_write(_entries, json_path, _html_path, **_kwargs):
+        json_path.write_text("partial candidate", encoding="utf-8")
+        raise OSError("candidate HTML write failed")
+
+    monkeypatch.setattr(build_module, "write_audit", fail_during_audit_write)
+
+    result = main(
+        _import_arguments(tmp_path, output, audit_json, audit_html)
+    )
+
+    assert result == 1
+    assert output.read_bytes() == b"trusted database"
+    assert audit_json.read_text(encoding="utf-8") == "trusted json"
+    assert audit_html.read_text(encoding="utf-8") == "trusted html"
+    assert _publication_leftovers(tmp_path) == []
+    assert "candidate HTML write failed" in capsys.readouterr().err
+
+
+def test_cli_html_output_directory_conflict_preserves_old_database_and_json(
+    tmp_path, monkeypatch, capsys
+):
+    _stub_successful_extract(monkeypatch)
+    output = tmp_path / "words.db"
+    audit_json = tmp_path / "audit.json"
+    audit_html = tmp_path / "audit.html"
+    output.write_bytes(b"trusted database")
+    audit_json.write_text("trusted json", encoding="utf-8")
+    audit_html.mkdir()
+    sentinel = audit_html / "sentinel.txt"
+    sentinel.write_text("trusted directory", encoding="utf-8")
+
+    result = main(
+        _import_arguments(tmp_path, output, audit_json, audit_html)
+    )
+
+    assert result == 1
+    assert output.read_bytes() == b"trusted database"
+    assert audit_json.read_text(encoding="utf-8") == "trusted json"
+    assert sentinel.read_text(encoding="utf-8") == "trusted directory"
+    assert _publication_leftovers(tmp_path) == []
+    assert "artifact output path is not a file" in capsys.readouterr().err
+
+
+def test_cli_rejects_html_path_that_aliases_json_before_writing(
+    tmp_path, monkeypatch, capsys
+):
+    _stub_successful_extract(monkeypatch)
+    output = tmp_path / "words.db"
+    audit = tmp_path / "audit"
+    output.write_bytes(b"trusted database")
+    audit.write_text("trusted audit", encoding="utf-8")
+
+    result = main(_import_arguments(tmp_path, output, audit, audit))
+
+    assert result == 1
+    assert output.read_bytes() == b"trusted database"
+    assert audit.read_text(encoding="utf-8") == "trusted audit"
+    assert _publication_leftovers(tmp_path) == []
+    assert "artifact output paths must be distinct" in capsys.readouterr().err

@@ -61,6 +61,24 @@ def test_visual_lines_cluster_by_center_and_keep_same_line_span_boundaries():
     assert rows[0].columns[2] == "adj. sure \u5fc5\u7136\u7684"
 
 
+def test_visual_line_clustering_does_not_chain_beyond_fixed_tolerance():
+    spans = [
+        TextSpan(19, 70, 70, 81, "alpha", 10),
+        TextSpan(100, 70, 150, 81, "[a]", 10),
+        TextSpan(188, 70, 235, 81, "one ", 10),
+        TextSpan(240, 74, 295, 85, "two ", 10),
+        TextSpan(300, 76, 350, 87, "three", 10),
+    ]
+
+    rows, _ = group_spans_into_rows(
+        spans,
+        page_number=5,
+        state=ParserState(next_order=1, section="list1"),
+    )
+
+    assert rows[0].columns[2] == "one two \nthree"
+
+
 def test_groups_five_columns_and_updates_mid_page_section():
     spans = [
         span(19, 48, "张巍GRE镇考3000词 乱序版 list1"),

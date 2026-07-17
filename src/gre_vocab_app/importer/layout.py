@@ -72,12 +72,7 @@ def _join_cell(spans: Iterable[TextSpan]) -> str:
         if not lines or abs(center - lines[-1][0]) > VISUAL_LINE_TOLERANCE:
             lines.append((center, [item]))
             continue
-        members = lines[-1][1]
-        members.append(item)
-        lines[-1] = (
-            sum(_center_y(member) for member in members) / len(members),
-            members,
-        )
+        lines[-1][1].append(item)
 
     rendered = []
     for _, members in lines:

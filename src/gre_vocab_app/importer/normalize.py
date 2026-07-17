@@ -9,6 +9,8 @@ from .types import RawWordRow
 CJK = re.compile(r"[\u3400-\u9fff]")
 HORIZONTAL_SPACE = re.compile(r"[^\S\r\n]+")
 PHONETIC = re.compile(r"(?:\[[^\[\]\r\n]+\]|/[^/\r\n]+/)")
+ORTHOGRAPHIC_PHONETIC = re.compile(r"[A-Za-z]+(?:[ '-][A-Za-z]+)*")
+ORTHOGRAPHIC_PLACEHOLDER_MIN_LENGTH = 8
 
 VALIDATION_FLAGS = frozenset(
     {
@@ -71,6 +73,18 @@ def _is_latin_letter(character: str) -> bool:
     return bool(character) and unicodedata.category(character).startswith(
         "L"
     ) and "LATIN" in unicodedata.name(character, "")
+
+
+def _is_diagnostic_boundary(
+    left: str, right: str, *, include_mixed_right: bool = False
+) -> bool:
+    if not left or not right or not _is_latin_letter(left[-1]):
+        return False
+    first = right[0]
+    return _is_latin_letter(first) or (
+        include_mixed_right
+        and (first.isdigit() or unicodedata.category(first).startswith("P"))
+    )
 
 
 def _strong_script(character: str) -> str | None:
@@ -161,6 +175,7 @@ def _boundary_join(
     field: str,
     events: list[DewrapEvent],
     record_event: bool,
+    include_mixed_right: bool = False,
 ) -> str:
     left_trimmed = left_raw.rstrip()
     right_trimmed = right_raw.lstrip()
@@ -169,10 +184,11 @@ def _boundary_join(
     )
     if (
         record_event
-        and left_trimmed
-        and right_trimmed
-        and _is_latin_letter(left_trimmed[-1])
-        and _is_latin_letter(right_trimmed[0])
+        and _is_diagnostic_boundary(
+            left_trimmed,
+            right_trimmed,
+            include_mixed_right=include_mixed_right,
+        )
     ):
         events.append(
             DewrapEvent(
@@ -275,11 +291,8 @@ def _join_chinese_lines(
     for raw in usable[1:]:
         left = previous_raw.rstrip()
         right = raw.lstrip()
-        if (
-            left
-            and right
-            and _is_latin_letter(left[-1])
-            and _is_latin_letter(right[0])
+        if _is_diagnostic_boundary(
+            left, right, include_mixed_right=True
         ):
             value = _boundary_join(
                 value,
@@ -289,6 +302,7 @@ def _join_chinese_lines(
                 field=field,
                 events=events,
                 record_event=True,
+                include_mixed_right=True,
             )
         else:
             value += raw.strip()
@@ -347,6 +361,22 @@ def split_bilingual(text: str) -> tuple[str, str]:
     return _split_definition(text, [])
 
 
+def _looks_like_long_orthographic_placeholder(
+    phonetic: str, headword: str
+) -> bool:
+    if PHONETIC.fullmatch(phonetic) is None:
+        return False
+    body = phonetic[1:-1].strip()
+    if ORTHOGRAPHIC_PHONETIC.fullmatch(body) is None:
+        return False
+    normalized_body = re.sub(r"[ '-]", "", body).casefold()
+    normalized_headword = re.sub(r"[ '-]", "", headword).casefold()
+    return (
+        len(normalized_headword) >= ORTHOGRAPHIC_PLACEHOLDER_MIN_LENGTH
+        and normalized_body == normalized_headword
+    )
+
+
 def validation_flags(
     draft: WordDraft, *, extra_flags: Iterable[str] = ()
 ) -> tuple[str, ...]:
@@ -359,6 +389,9 @@ def validation_flags(
     elif (
         phonetic.casefold() == draft.headword.strip().casefold()
         or PHONETIC.fullmatch(phonetic) is None
+        or _looks_like_long_orthographic_placeholder(
+            phonetic, draft.headword.strip()
+        )
         or CJK.search(phonetic)
     ):
         flags.add("invalid_phonetic")

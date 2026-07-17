@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from dataclasses import replace
 
 import fitz
 import pytest
@@ -38,14 +39,19 @@ def draft(word: str, order: int, flags: tuple[str, ...] = ()) -> WordDraft:
 
 
 def test_override_marks_reviewed_flags_and_database_keeps_source_order(tmp_path):
-    entries = [draft("beta", 2, ("split_token",)), draft("alpha", 1)]
+    incomplete = replace(
+        draft("beta", 2),
+        definition_zh="",
+        quality_flags=("incomplete_definition",),
+    )
+    entries = [incomplete, draft("alpha", 1)]
     fixed = apply_overrides(
         entries,
-        {"5:beta": {"definition_en": "adj. repaired", "reviewed": True}},
+        {"5:beta": {"definition_zh": "修复", "reviewed": True}},
     )
 
-    assert fixed[0].definition_en == "adj. repaired"
-    assert fixed[0].quality_flags == ("reviewed:split_token",)
+    assert fixed[0].definition_zh == "修复"
+    assert fixed[0].quality_flags == ("reviewed:incomplete_definition",)
 
     path = tmp_path / "words.db"
     build_database(fixed, path)
@@ -61,7 +67,7 @@ def test_override_marks_reviewed_flags_and_database_keeps_source_order(tmp_path)
             db.execute(
                 "select quality_flags from words where headword='beta'"
             ).fetchone()[0]
-        ) == ["reviewed:split_token"]
+        ) == ["reviewed:incomplete_definition"]
         assert db.execute("pragma integrity_check").fetchone()[0] == "ok"
 
 
@@ -149,6 +155,40 @@ def test_override_rejects_invalid_post_override_content():
         )
 
 
+def test_override_rejects_changed_field_outside_original_issue_field_union():
+    original = replace(
+        draft("beta", 2),
+        phonetic="",
+        quality_flags=("missing_phonetic",),
+    )
+
+    with pytest.raises(ValueError, match="unauthorized changed field: headword"):
+        apply_overrides(
+            [original],
+            {"5:beta": {"headword": "gamma", "reviewed": True}},
+        )
+
+
+def test_unknown_override_issue_is_review_only():
+    original = draft("beta", 2, ("split_token",))
+
+    with pytest.raises(ValueError, match="unauthorized changed field: definition_en"):
+        apply_overrides(
+            [original],
+            {
+                "5:beta": {
+                    "definition_en": "adj. repaired",
+                    "reviewed": True,
+                }
+            },
+        )
+
+    reviewed = apply_overrides(
+        [original], {"5:beta": {"reviewed": True}}
+    )
+    assert reviewed[0].quality_flags == ("reviewed:split_token",)
+
+
 def test_override_loader_rejects_duplicate_json_keys(tmp_path):
     path = tmp_path / "overrides.json"
     path.write_text(
@@ -215,6 +255,104 @@ def test_wrap_scan_checks_latin_names_that_belong_to_the_chinese_example():
     result = semantic_checks([entry], diagnostics)
 
     assert next(item for item in result if item["name"] == "normal_wrap_overjoin")[
+        "pass"
+    ] is True
+
+
+@pytest.mark.parametrize(
+    "english_sense",
+    [
+        "vt. to make something better",
+        "vi. to become calm",
+        "pron. used to refer to a person",
+        "conj. joining two clauses",
+        "det. identifying a noun",
+        "aux. used with another verb",
+        "interj. expressing surprise",
+        "unable to change",
+        "inflexible",
+    ],
+)
+def test_semantic_scan_detects_full_pos_and_unlabelled_english_senses(
+    english_sense,
+):
+    entry = replace(
+        draft("contaminated", 42),
+        definition_zh=f"中文释义 {english_sense}",
+    )
+
+    result = semantic_checks(
+        [entry], ExtractionDiagnostics(dewrap_counts={}, dewrap_events=())
+    )
+
+    check = next(
+        item
+        for item in result
+        if item["name"] == "definition_zh_contains_english_sense"
+    )
+    assert check == {
+        "name": "definition_zh_contains_english_sense",
+        "pass": False,
+        "count": 1,
+        "source_orders": [42],
+    }
+
+
+@pytest.mark.parametrize(
+    "proper_name",
+    ["Toyota", "New York", "DNA", "eBay"],
+)
+def test_semantic_scan_does_not_treat_proper_names_as_english_senses(
+    proper_name,
+):
+    entry = replace(
+        draft("named", 43),
+        definition_zh=f"中文专名{proper_name}公司",
+    )
+
+    result = semantic_checks(
+        [entry], ExtractionDiagnostics(dewrap_counts={}, dewrap_events=())
+    )
+
+    check = next(
+        item
+        for item in result
+        if item["name"] == "definition_zh_contains_english_sense"
+    )
+    assert check["pass"] is True
+    assert check["source_orders"] == []
+
+
+@pytest.mark.parametrize(
+    "kind,rendered",
+    [
+        ("normal_space", "型号Model 3已经发布。"),
+        ("hard_join", "型号Model3已经发布。"),
+    ],
+)
+def test_semantic_wrap_scan_covers_mixed_chinese_block_boundaries(
+    kind, rendered
+):
+    entry = replace(draft("model", 44), example_zh=rendered)
+    diagnostics = ExtractionDiagnostics(
+        dewrap_counts={},
+        dewrap_events=(
+            RecordDewrapEvent(
+                source_order=44,
+                field="example",
+                kind=kind,
+                left="型号Model " if kind == "normal_space" else "型号Model",
+                right="3已经发布。",
+            ),
+        ),
+    )
+
+    result = semantic_checks([entry], diagnostics)
+
+    check_name = (
+        "normal_wrap_overjoin" if kind == "normal_space" else "hard_wrap_residue"
+    )
+    assert next(item for item in result if item["name"] == check_name)[
         "pass"
     ] is True
 

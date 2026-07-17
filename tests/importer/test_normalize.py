@@ -247,13 +247,46 @@ def test_latin_name_wrapped_inside_chinese_block_keeps_its_source_space():
 
 
 @pytest.mark.parametrize(
+    "left,right,expected,expected_kind",
+    [
+        ("型号Model ", "3已经发布。", "型号Model 3已经发布。", "normal_space"),
+        ("型号Model", "3已经发布。", "型号Model3已经发布。", "hard_join"),
+        ("接口API ", "(v2)已升级。", "接口API (v2)已升级。", "normal_space"),
+        ("接口API", "(v2)已升级。", "接口API(v2)已升级。", "hard_join"),
+    ],
+)
+def test_chinese_block_latin_to_digit_or_punctuation_uses_source_boundary(
+    left, right, expected, expected_kind
+):
+    row = RawWordRow(
+        source_page=100,
+        source_order=1000,
+        source_section="list10",
+        columns=(
+            "candidate",
+            "[c]",
+            "n. person 人",
+            "",
+            f"He spoke. \n{left}\n{right}",
+        ),
+    )
+
+    draft, events = normalize_row_with_diagnostics(row)
+
+    assert draft.example_zh == expected
+    assert [(event.field, event.kind) for event in events] == [
+        ("example", expected_kind)
+    ]
+
+
+@pytest.mark.parametrize(
     "phonetic, expected_flag",
     [
         ("", "missing_phonetic"),
         ("ameliorate", "invalid_phonetic"),
         ("not ipa", "invalid_phonetic"),
-        ("[ameliorate]", None),
-        ("/ameliorate/", None),
+        ("[ameliorate]", "invalid_phonetic"),
+        ("/ameliorate/", "invalid_phonetic"),
     ],
 )
 def test_phonetic_validation_rejects_empty_equal_and_unbracketed_values(
@@ -279,3 +312,20 @@ def test_phonetic_validation_rejects_empty_equal_and_unbracketed_values(
         assert "invalid_phonetic" not in flags
     else:
         assert expected_flag in flags
+
+
+def test_short_transparent_bracketed_phonetic_remains_valid():
+    row = RawWordRow(
+        source_page=18,
+        source_order=179,
+        source_section="list2",
+        columns=(
+            "meld",
+            "[meld]",
+            "v. combine 合并",
+            "",
+            "The colors meld. 颜色融合了。",
+        ),
+    )
+
+    assert "invalid_phonetic" not in normalize_row(row).quality_flags

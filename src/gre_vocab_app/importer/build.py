@@ -17,7 +17,7 @@ import fitz
 
 from gre_vocab_app.db.schema import CONTENT_SCHEMA, CONTENT_SCHEMA_VERSION
 
-from .audit import write_audit
+from .audit import AuditSummary, write_audit
 from .layout import (
     PhysicalRowCoverage,
     extract_page_spans,
@@ -31,6 +31,12 @@ from .normalize import (
     WordDraft,
     normalize_row_with_diagnostics,
     validation_flags,
+)
+from .publication import (
+    ArtifactSlot,
+    cleanup_artifact_slots,
+    plan_artifact_publication,
+    publish_artifact_slots,
 )
 from .types import ParserState
 
@@ -89,9 +95,18 @@ FORBIDDEN_OVERRIDE_FIELDS = frozenset(
     }
 )
 OVERRIDE_KEY = re.compile(r"^[1-9]\d*:.+\S$")
-ENGLISH_SENSE_IN_CHINESE = re.compile(
-    r"(?:^|[\s(①-⑳])(?:adj|adv|n|v|prep|phrase)\.", re.IGNORECASE
+ENGLISH_POS_IN_CHINESE = re.compile(
+    r"(?<![A-Za-z])(?:adj|adv|n|v|vt|vi|pron|prep|conj|det|aux|"
+    r"interj|int|num|art|modal|phrase)\.",
+    re.IGNORECASE,
 )
+LATIN_RUN_IN_CHINESE = re.compile(
+    r"(?<![A-Za-z])"
+    r"[A-Za-z]+(?:['-][A-Za-z]+)*"
+    r"(?:[ \t]+[A-Za-z]+(?:['-][A-Za-z]+)*)*"
+    r"(?![A-Za-z])"
+)
+LATIN_WORD = re.compile(r"[A-Za-z]+(?:['-][A-Za-z]+)*")
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,6 +222,22 @@ def apply_overrides_with_audit(
         changed_fields = sorted(
             field for field, value in values.items() if getattr(original, field) != value
         )
+        allowed_changed_fields = frozenset().union(
+            *(_issue_fields(issue) for issue in original_issues)
+        )
+        unauthorized_changed_fields = sorted(
+            set(changed_fields) - allowed_changed_fields
+        )
+        if unauthorized_changed_fields:
+            label = (
+                "field"
+                if len(unauthorized_changed_fields) == 1
+                else "fields"
+            )
+            raise ValueError(
+                f"override {key!r} has unauthorized changed {label}: "
+                + ", ".join(unauthorized_changed_fields)
+            )
         if values and not changed_fields:
             raise ValueError(f"stale override {key!r} changes no content")
 
@@ -426,6 +457,21 @@ def _boundary_context(left: str, right: str, separator: str) -> str:
     return left_context + separator + right_context
 
 
+def _definition_zh_has_english_sense(text: str) -> bool:
+    if ENGLISH_POS_IN_CHINESE.search(text):
+        return True
+    for match in LATIN_RUN_IN_CHINESE.finditer(text):
+        words = LATIN_WORD.findall(match.group())
+        if not words:
+            continue
+        normalized = [word.replace("-", "").replace("'", "") for word in words]
+        if not all(word.islower() for word in normalized):
+            continue
+        if len(words) > 1 or len(normalized[0]) >= 4:
+            return True
+    return False
+
+
 def semantic_checks(
     entries: Sequence[WordDraft], diagnostics: ExtractionDiagnostics
 ) -> list[dict[str, Any]]:
@@ -438,7 +484,7 @@ def semantic_checks(
     chinese_english_sense = sorted(
         entry.source_order
         for entry in entries
-        if ENGLISH_SENSE_IN_CHINESE.search(entry.definition_zh)
+        if _definition_zh_has_english_sense(entry.definition_zh)
     )
     hard_residue: set[int] = set()
     normal_overjoin: set[int] = set()
@@ -654,6 +700,48 @@ def _facts(
     }
 
 
+def _validate_artifact_candidates(
+    entries: Sequence[WordDraft],
+    slots: Sequence[ArtifactSlot],
+    summary: AuditSummary,
+) -> None:
+    database_path, json_path, html_path = (
+        slot.candidate for slot in slots
+    )
+    database = sqlite3.connect(database_path)
+    try:
+        integrity = database.execute("pragma integrity_check").fetchone()
+        record_count = database.execute(
+            "select count(*) from words"
+        ).fetchone()[0]
+    finally:
+        database.close()
+    if integrity is None or integrity[0] != "ok":
+        raise sqlite3.IntegrityError(
+            f"candidate database integrity check failed: {integrity}"
+        )
+    if record_count != len(entries):
+        raise ValueError(
+            "candidate database record count mismatch: "
+            f"expected {len(entries)}, got {record_count}"
+        )
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(payload, dict)
+        or payload.get("record_count") != len(entries)
+    ):
+        raise ValueError("candidate audit JSON record count mismatch")
+    html = html_path.read_text(encoding="utf-8")
+    if (
+        not html.startswith("<!doctype html>")
+        or "<title>Vocabulary import audit</title>" not in html
+    ):
+        raise ValueError("candidate audit HTML validation failed")
+    if summary.record_count != len(entries):
+        raise ValueError("candidate audit summary record count mismatch")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build the offline GRE word database")
     parser.add_argument("--pdf", required=True, type=Path)
@@ -687,23 +775,32 @@ def _run(args: argparse.Namespace) -> int:
         if failed:
             raise ValueError("strict validation failed: " + ", ".join(failed))
 
-    # No trusted output path is touched until every strict gate above has passed.
-    build_database(entries, args.output)
-    summary = write_audit(
-        entries,
-        args.audit_json,
-        args.audit_html,
-        source_path=args.pdf,
-        page_count=page_count,
-        approved_source_profile=APPROVED_SOURCE_PROFILE,
-        physical_coverage=facts["physical_coverage"],
-        continuity=facts["continuity"],
-        page_range=facts["page_range"],
-        dewrap_counts=diagnostics.dewrap_counts,
-        override_details=override_details,
-        semantic_checks=semantic,
-        strict_checks=strict_checks,
+    # Generate and validate a complete sibling candidate set before publishing
+    # any fixed output path. Publication rolls back the whole set on failure.
+    slots = plan_artifact_publication(
+        (args.output, args.audit_json, args.audit_html)
     )
+    try:
+        build_database(entries, slots[0].candidate)
+        summary = write_audit(
+            entries,
+            slots[1].candidate,
+            slots[2].candidate,
+            source_path=args.pdf,
+            page_count=page_count,
+            approved_source_profile=APPROVED_SOURCE_PROFILE,
+            physical_coverage=facts["physical_coverage"],
+            continuity=facts["continuity"],
+            page_range=facts["page_range"],
+            dewrap_counts=diagnostics.dewrap_counts,
+            override_details=override_details,
+            semantic_checks=semantic,
+            strict_checks=strict_checks,
+        )
+        _validate_artifact_candidates(entries, slots, summary)
+        publish_artifact_slots(slots)
+    finally:
+        cleanup_artifact_slots(slots)
     print(
         f"physical_row_bands={coverage.physical_row_bands} "
         f"empty_row_bands={coverage.empty_row_bands} "

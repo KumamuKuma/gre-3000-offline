@@ -125,6 +125,67 @@ git diff --check
 # exit 0
 ```
 
+## Follow-up review fixes
+
+The follow-up Important 2-6 review was handled in a second strict TDD wave.
+Release expected-reviewed wiring remained outside this importer-only change.
+
+RED evidence:
+
+- Second/third artifact publication failure tests returned success because only
+  the database used `os.replace`; JSON and HTML were written directly.
+- Candidate audit-write and HTML-directory-conflict tests showed the new DB had
+  already replaced the trusted DB when the later audit operation failed.
+- Overrides for `missing_phonetic` could change `headword`, and an unknown
+  `split_token` issue could change `definition_en`; neither raised an error.
+- Chinese-block Latin-to-digit/punctuation tests either lost source boundary
+  spaces or emitted no de-wrap diagnostic in all four cases.
+- Nine semantic cases were missed: `vt.`, `vi.`, `pron.`, `conj.`, `det.`,
+  `aux.`, `interj.`, a multiword unlabelled sense, and a single-word unlabelled
+  sense.
+- Centers at 10/14/16 chained into one visual line even though the total range
+  exceeded the four-point tolerance.
+- Long orthographic placeholders `[ameliorate]` and `/ameliorate/` were accepted
+  as phonetics.
+
+Implemented behavior:
+
+- DB, JSON, and HTML are generated and validated at sibling candidate paths.
+  Existing targets are copied to sibling backups before fixed-order publication.
+  Any candidate write, path conflict, or second/third replacement failure restores
+  the complete prior artifact set and removes candidates/backups.
+- Override content changes are limited to the union of `_issue_fields` for all
+  original issues. Unknown issues are review-only.
+- Chinese example blocks preserve or join Latin-to-digit/punctuation boundaries
+  from source whitespace and emit normal/hard diagnostics.
+- Semantic scanning covers the expanded POS set and conservative all-lowercase
+  unlabelled English senses, while excluding Toyota, New York, DNA, and eBay.
+- Visual-line clustering uses the first span center as its fixed anchor.
+- Long, wrapped, purely orthographic headword placeholders are conservatively
+  invalid; short transparent `[meld]` remains valid and unresolved-free.
+
+Fresh follow-up verification:
+
+```text
+python -m pytest tests/importer -q -p no:cacheprovider
+110 passed in 6.81s
+
+QT_QPA_PLATFORM=offscreen python -m pytest -q -p no:cacheprovider
+160 passed in 8.44s
+
+python -m gre_vocab_app.importer.build ... --strict
+physical_row_bands=3292 empty_row_bands=0 multi_anchor_row_bands=0
+records=3292 unresolved=0 reviewed=5
+publication_leftovers=0
+```
+
+Independent checks remained exact: SQLite integrity `ok`, source orders
+`1..3292`, pages `5..288`, approved section counts unchanged, the approved
+de-wrap profile unchanged, all four semantic counts zero, no strict failures,
+and `[meld]` retained with `quality_flags=[]`. `compileall` and
+`git diff --check` exited zero; `tmp`, test temp, candidates, and backups were
+removed.
+
 ## Remaining concerns
 
 No unresolved importer ambiguity remains. The five reviewed records deliberately preserve visible source defects or source incompleteness. Source wording and typos are otherwise preserved rather than silently rewritten.

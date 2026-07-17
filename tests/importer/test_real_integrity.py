@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from gre_vocab_app.importer.build import _extract_with_diagnostics
+from gre_vocab_app.importer.build import _extract_with_diagnostics, semantic_checks
 
 
 @pytest.fixture(scope="module")
@@ -103,4 +103,17 @@ def test_real_pdf_dewrap_profile_matches_reviewed_geometry(real_import):
             "hard_join": 255,
             "hard_join_records": 237,
         },
+    }
+
+
+def test_real_pdf_semantic_scans_remain_zero(real_import):
+    rows, _, _, diagnostics = real_import
+
+    checks = semantic_checks(list(rows.values()), diagnostics)
+
+    assert {item["name"]: item["count"] for item in checks} == {
+        "english_fields_contain_cjk": 0,
+        "definition_zh_contains_english_sense": 0,
+        "hard_wrap_residue": 0,
+        "normal_wrap_overjoin": 0,
     }

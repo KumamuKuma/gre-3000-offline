@@ -4,7 +4,13 @@ import json
 
 from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QKeySequence, QShortcut
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QStackedWidget, QToolBar
+from PySide6.QtWidgets import (
+    QDialog,
+    QMainWindow,
+    QMessageBox,
+    QStackedWidget,
+    QToolBar,
+)
 
 from .favorites_page import FavoritesPage
 from .home_page import HomePage
@@ -223,17 +229,23 @@ class MainWindow(QMainWindow):
         self._close_guard_installed = True
         self._close_guard_enabled = True
 
+    def _close_settings_windows(self) -> None:
+        for dialog in self.settings_dialog.findChildren(QDialog):
+            if dialog.isWindow():
+                dialog.close()
+        self.settings_dialog.close()
+
     def closeEvent(self, event: QCloseEvent) -> None:
         if not self._close_guard_enabled:
             if not self._close_guard_installed:
                 self.closing.emit(event)
             if event.isAccepted():
-                self.settings_dialog.close()
+                self._close_settings_windows()
                 super().closeEvent(event)
             return
         event.ignore()
         self.closing.emit(event)
         if event.isAccepted():
             self._close_guard_enabled = False
-            self.settings_dialog.close()
+            self._close_settings_windows()
             super().closeEvent(event)

@@ -84,18 +84,40 @@ def test_accepted_guarded_close_also_closes_visible_settings_once(qtbot):
     assert closing.count() == 1
 
 
+def test_accepted_guarded_close_closes_settings_owned_message_boxes(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    window.show_settings()
+    message = QMessageBox(window.settings_dialog)
+    message.setWindowTitle("确认本地数据操作")
+    message.show()
+    qtbot.waitUntil(message.isVisible)
+    window.enable_close_guard()
+    window.closing.connect(lambda event: event.accept())
+
+    assert window.close() is True
+
+    assert not window.settings_dialog.isVisible()
+    assert not message.isVisible()
+
+
 def test_rejected_guarded_close_keeps_visible_settings_open(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
     window.show()
     window.show_settings()
     qtbot.waitUntil(window.settings_dialog.isVisible)
+    message = QMessageBox(window.settings_dialog)
+    message.show()
+    qtbot.waitUntil(message.isVisible)
     window.enable_close_guard()
     window.closing.connect(lambda event: event.ignore())
 
     assert window.close() is False
 
     assert window.settings_dialog.isVisible()
+    assert message.isVisible()
 
     window.closing.disconnect()
     window.closing.connect(lambda event: event.accept())
@@ -105,12 +127,15 @@ def test_rejected_guarded_close_keeps_visible_settings_open(qtbot):
 def test_geometry_rejects_removed_secondary_and_one_pixel_titlebar(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
-    available = QGuiApplication.primaryScreen().availableGeometry()
+    available_geometries = [
+        screen.availableGeometry() for screen in QGuiApplication.screens()
+    ]
+    topmost = min(available_geometries, key=lambda geometry: geometry.top())
 
     removed_secondary = json.dumps(
         {
-            "x": available.right() + 200,
-            "y": available.top() + 20,
+            "x": max(geometry.right() for geometry in available_geometries) + 200,
+            "y": topmost.top() + 20,
             "width": 900,
             "height": 700,
         }
@@ -119,8 +144,8 @@ def test_geometry_rejects_removed_secondary_and_one_pixel_titlebar(qtbot):
 
     one_pixel_titlebar = json.dumps(
         {
-            "x": available.right(),
-            "y": available.top() + 20,
+            "x": topmost.left() + 20,
+            "y": topmost.top() - 31,
             "width": 500,
             "height": 400,
         }

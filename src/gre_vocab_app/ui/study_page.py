@@ -97,6 +97,11 @@ class StudyPage(QWidget):
         self.next_shortcut = self._shortcut(Qt.Key_Right, self._next)
         self.speech_shortcut = self._shortcut(Qt.Key_P, self._speak)
         self.favorite_shortcut = self._shortcut(Qt.Key_S, self._toggle_favorite)
+        self.answer_shortcut = self._shortcut(Qt.Key_Space, self._toggle_answer)
+        application = QApplication.instance()
+        if application is not None:
+            application.focusChanged.connect(self._sync_shortcut_state)
+        self._sync_shortcut_state()
 
     def _shortcut(self, key: Qt.Key, callback) -> QShortcut:
         shortcut = QShortcut(QKeySequence(key), self)
@@ -122,26 +127,43 @@ class StudyPage(QWidget):
             reveal=reveal,
             recall=snapshot.mode is StudyMode.RECALL,
         )
+        self._sync_shortcut_state()
 
-    def _editable_has_focus(self) -> bool:
+    def _focus_uses_native_keys(self) -> bool:
         focus = QApplication.focusWidget()
-        return focus is not None and self.isAncestorOf(focus) and isinstance(
+        if focus is None or not self.isAncestorOf(focus):
+            return False
+        if isinstance(
             focus, (QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox)
+        ):
+            return True
+        text_interaction_flags = getattr(focus, "textInteractionFlags", None)
+        return callable(text_interaction_flags) and bool(
+            text_interaction_flags() & Qt.TextSelectableByKeyboard
         )
 
+    def _sync_shortcut_state(self, *_focus_widgets: QWidget | None) -> None:
+        active = self.snapshot is not None and not self._focus_uses_native_keys()
+        self.previous_shortcut.setEnabled(active)
+        self.next_shortcut.setEnabled(active)
+        self.favorite_shortcut.setEnabled(active)
+        self.speech_shortcut.setEnabled(active and self._speech_available)
+        recall = self.snapshot is not None and self.snapshot.mode is StudyMode.RECALL
+        self.answer_shortcut.setEnabled(active and recall)
+
     def _previous(self) -> None:
-        if self.snapshot is not None and not self._editable_has_focus():
+        if self.snapshot is not None and not self._focus_uses_native_keys():
             self.previousRequested.emit()
 
     def _next(self) -> None:
-        if self.snapshot is not None and not self._editable_has_focus():
+        if self.snapshot is not None and not self._focus_uses_native_keys():
             self.nextRequested.emit()
 
     def _toggle_answer(self) -> None:
         if (
             self.snapshot is not None
             and self.snapshot.mode is StudyMode.RECALL
-            and not self._editable_has_focus()
+            and not self._focus_uses_native_keys()
         ):
             self.answerToggleRequested.emit()
 
@@ -149,20 +171,23 @@ class StudyPage(QWidget):
         if (
             self._speech_available
             and self.snapshot is not None
-            and not self._editable_has_focus()
+            and not self._focus_uses_native_keys()
         ):
             self.speechRequested.emit(self.snapshot.word.headword)
 
     def set_speech_available(self, available: bool) -> None:
         self._speech_available = bool(available)
-        self.speech_shortcut.setEnabled(self._speech_available)
+        self._sync_shortcut_state()
         self.word_detail.set_speech_available(self._speech_available)
 
     def _toggle_favorite(self) -> None:
-        if self.snapshot is not None and not self._editable_has_focus():
+        if self.snapshot is not None and not self._focus_uses_native_keys():
             self.favoriteRequested.emit(not self.snapshot.favorite)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        if self._focus_uses_native_keys():
+            super().keyPressEvent(event)
+            return
         handlers = {
             Qt.Key_Left: self._previous,
             Qt.Key_Right: self._next,

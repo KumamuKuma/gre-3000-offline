@@ -65,3 +65,51 @@ def test_production_main_forwards_real_arguments_and_inherits_callers_cwd(
     observed_cwd, observed_arguments = marker.read_text().splitlines()
     assert Path(observed_cwd) == tmp_path
     assert observed_arguments == "alpha|\u4e2d\u6587"
+
+
+def test_launcher_does_not_duplicate_an_error_already_reported_by_child(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import scripts.unicode_launcher as launcher
+
+    shown = []
+    monkeypatch.setattr(launcher, "launch_runtime", lambda *_args: 20)
+    monkeypatch.setattr(launcher, "embedded_runtime_path", lambda: Path("runtime.exe"))
+    monkeypatch.setattr(launcher, "show_error", shown.append)
+
+    assert launcher.main() == 20
+    assert shown == []
+
+
+def test_launcher_still_reports_unknown_nonzero_child_exit(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import scripts.unicode_launcher as launcher
+
+    shown = []
+    monkeypatch.setattr(launcher, "launch_runtime", lambda *_args: 7)
+    monkeypatch.setattr(launcher, "embedded_runtime_path", lambda: Path("runtime.exe"))
+    monkeypatch.setattr(launcher, "show_error", shown.append)
+
+    assert launcher.main() == 7
+    assert len(shown) == 1
+    assert "7" in shown[0]
+
+
+def test_launcher_still_reports_runtime_start_failure(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import scripts.unicode_launcher as launcher
+
+    shown = []
+
+    def fail_launch(*_args):
+        raise OSError("synthetic process start failure")
+
+    monkeypatch.setattr(launcher, "launch_runtime", fail_launch)
+    monkeypatch.setattr(launcher, "embedded_runtime_path", lambda: Path("runtime.exe"))
+    monkeypatch.setattr(launcher, "show_error", shown.append)
+
+    assert launcher.main() == 1
+    assert len(shown) == 1
+    assert "synthetic process start failure" in shown[0]

@@ -106,7 +106,45 @@ def test_main_rejects_invalid_nonfirst_content_row_before_creating_user_db(
             captured[0].window.close()
             captured[0].controller.shutdown()
 
-    assert result == 1
+    assert result == 20
     assert shown and shown[0][1] == "应用启动失败"
     assert "headword" in caplog.text
     assert not paths.user_db.exists()
+
+
+def test_main_reports_log_initialization_failure_truthfully(
+    qapp, tmp_path, monkeypatch
+):
+    paths = AppPaths(
+        tmp_path / "words.db",
+        tmp_path / "user" / "user.db",
+        tmp_path / "blocked" / "app.log",
+    )
+    error = PermissionError("synthetic log directory denial")
+    monkeypatch.setattr(
+        main_module.AppPaths,
+        "resolve",
+        classmethod(lambda cls: paths),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "bootstrap",
+        lambda _paths: (_ for _ in ()).throw(error),
+    )
+    shown = []
+
+    class MessageBoxProbe:
+        @staticmethod
+        def critical(parent, title, message):
+            shown.append((parent, title, message))
+
+    monkeypatch.setattr(main_module, "QMessageBox", MessageBoxProbe)
+
+    assert main_module.main([]) == 20
+    assert len(shown) == 1
+    assert shown[0][1] == "应用启动失败"
+    assert "PermissionError" in shown[0][2]
+    assert str(error) in shown[0][2]
+    assert str(paths.log_file) in shown[0][2]
+    assert "若可写" in shown[0][2]
+    assert "已写入" not in shown[0][2]

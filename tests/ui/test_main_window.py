@@ -1,8 +1,10 @@
 import json
 
 import pytest
+from PySide6.QtCore import QCoreApplication, QEvent, QRect
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtTest import QSignalSpy
+from PySide6.QtWidgets import QMessageBox
 
 from gre_vocab_app.ui.main_window import MainWindow
 
@@ -64,6 +66,40 @@ def test_successful_guarded_close_is_not_requested_twice(qtbot):
     assert closing.count() == 1
     assert window.close() is True
     assert closing.count() == 1
+
+
+def test_accepted_guarded_close_also_closes_visible_settings_once(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    window.show_settings()
+    qtbot.waitUntil(window.settings_dialog.isVisible)
+    closing = QSignalSpy(window.closing)
+    window.enable_close_guard()
+    window.closing.connect(lambda event: event.accept())
+
+    assert window.close() is True
+
+    assert not window.settings_dialog.isVisible()
+    assert closing.count() == 1
+
+
+def test_rejected_guarded_close_keeps_visible_settings_open(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    window.show_settings()
+    qtbot.waitUntil(window.settings_dialog.isVisible)
+    window.enable_close_guard()
+    window.closing.connect(lambda event: event.ignore())
+
+    assert window.close() is False
+
+    assert window.settings_dialog.isVisible()
+
+    window.closing.disconnect()
+    window.closing.connect(lambda event: event.accept())
+    window.close()
 
 
 def test_geometry_rejects_removed_secondary_and_one_pixel_titlebar(qtbot):
@@ -135,3 +171,54 @@ def test_geometry_rejects_values_outside_qt_signed_int_range(
 
     assert window.restore_geometry_state(json.dumps(payload)) is False
     assert available.contains(window.geometry())
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {"x": 2**31 - 1, "y": 0, "width": 2, "height": 400},
+        {"x": 0, "y": 2**31 - 1, "width": 500, "height": 2},
+    ),
+)
+def test_geometry_rejects_right_or_bottom_overflow_before_qrect(qtbot, payload):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    available = QGuiApplication.primaryScreen().availableGeometry()
+
+    assert window.restore_geometry_state(json.dumps(payload)) is False
+    assert available.contains(window.geometry())
+
+
+def test_geometry_accepts_negative_coordinates_on_a_secondary_screen(
+    qtbot, monkeypatch
+):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    secondary = QRect(-1920, -200, 1920, 1080)
+    monkeypatch.setattr(
+        MainWindow,
+        "_target_available_geometry",
+        staticmethod(lambda _rectangle: secondary),
+    )
+    payload = {"x": -1800, "y": -100, "width": 900, "height": 700}
+
+    assert window.restore_geometry_state(json.dumps(payload)) is True
+    assert secondary.contains(window.geometry())
+
+
+def test_pending_write_prompts_are_deleted_after_each_choice(qtbot, monkeypatch):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: 0)
+    monkeypatch.setattr(
+        QMessageBox,
+        "clickedButton",
+        lambda self: self.defaultButton(),
+    )
+
+    for _ in range(5):
+        assert window.confirm_pending_writes() == QMessageBox.Retry
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        QCoreApplication.processEvents()
+
+    assert window.findChildren(QMessageBox) == []

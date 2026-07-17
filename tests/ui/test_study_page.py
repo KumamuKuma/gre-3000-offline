@@ -1,6 +1,7 @@
+import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QSignalSpy
-from PySide6.QtWidgets import QLineEdit, QPushButton
+from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton
 
 from gre_vocab_app.domain import BrowseOrder, SessionSnapshot, StudyMode
 from gre_vocab_app.ui.study_page import StudyPage
@@ -126,6 +127,69 @@ def test_reading_space_keeps_normal_focused_button_behavior(qtbot, sample_word):
 
     assert clicks.count() == 1
     assert answer.count() == 0
+
+
+@pytest.mark.parametrize(
+    "button_name",
+    ("recall_button", "favorite_button", "next_button"),
+)
+def test_recall_space_on_an_ordinary_button_only_reveals_answer(
+    qtbot, sample_word, button_name
+):
+    page = StudyPage()
+    qtbot.addWidget(page)
+    page.show()
+    page.render(snapshot(sample_word, mode=StudyMode.RECALL))
+    button = getattr(page, button_name)
+    button.setFocus()
+    qtbot.waitUntil(lambda: button.hasFocus())
+    clicks = QSignalSpy(button.clicked)
+    answers = QSignalSpy(page.answerToggleRequested)
+
+    qtbot.keyClick(button, Qt.Key_Space)
+
+    assert answers.count() == 1
+    assert clicks.count() == 0
+
+
+def test_keyboard_selectable_text_receives_study_shortcut_keys(qtbot, sample_word):
+    class KeyRecordingLabel(QLabel):
+        def __init__(self, parent):
+            super().__init__("selectable", parent)
+            self.received_keys = []
+
+        def keyPressEvent(self, event):
+            self.received_keys.append(event.key())
+            super().keyPressEvent(event)
+
+    page = StudyPage()
+    qtbot.addWidget(page)
+    page.show()
+    page.render(snapshot(sample_word, mode=StudyMode.RECALL, at_start=False))
+    label = KeyRecordingLabel(page)
+    label.setTextInteractionFlags(
+        Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
+    )
+    label.setFocusPolicy(Qt.StrongFocus)
+    label.show()
+    label.setFocus()
+    qtbot.waitUntil(lambda: label.hasFocus())
+    signal_spies = (
+        QSignalSpy(page.previousRequested),
+        QSignalSpy(page.nextRequested),
+        QSignalSpy(page.speechRequested),
+        QSignalSpy(page.favoriteRequested),
+        QSignalSpy(page.answerToggleRequested),
+    )
+
+    for key in (Qt.Key_Left, Qt.Key_Right, Qt.Key_P, Qt.Key_S, Qt.Key_Space):
+        counts_before = tuple(spy.count() for spy in signal_spies)
+        label.received_keys.clear()
+
+        qtbot.keyClick(label, key)
+
+        assert label.received_keys == [key]
+        assert tuple(spy.count() for spy in signal_spies) == counts_before
 
 
 def test_unavailable_speech_disables_button_and_p_shortcut(qtbot, sample_word):

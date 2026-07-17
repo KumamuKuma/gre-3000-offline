@@ -110,6 +110,13 @@ class MainWindow(QMainWindow):
                 raise ValueError("geometry values exceed Qt integer limits")
             if coordinates[2] <= 0 or coordinates[3] <= 0:
                 raise ValueError("geometry size must be positive")
+            right = coordinates[0] + coordinates[2] - 1
+            bottom = coordinates[1] + coordinates[3] - 1
+            if not (
+                _QT_INT_MIN <= right <= _QT_INT_MAX
+                and _QT_INT_MIN <= bottom <= _QT_INT_MAX
+            ):
+                raise ValueError("geometry edges exceed Qt integer limits")
             rectangle = QRect(*coordinates)
             available = self._target_available_geometry(rectangle)
             if available is None:
@@ -200,13 +207,17 @@ class MainWindow(QMainWindow):
         cancel = message.addButton("取消", QMessageBox.RejectRole)
         message.setDefaultButton(retry)
         message.setEscapeButton(cancel)
-        message.exec()
-        clicked = message.clickedButton()
-        if clicked is retry:
-            return QMessageBox.Retry
-        if clicked is discard:
-            return QMessageBox.Discard
-        return QMessageBox.Cancel
+        try:
+            message.exec()
+            clicked = message.clickedButton()
+            if clicked is retry:
+                return QMessageBox.Retry
+            if clicked is discard:
+                return QMessageBox.Discard
+            return QMessageBox.Cancel
+        finally:
+            message.close()
+            message.deleteLater()
 
     def enable_close_guard(self) -> None:
         self._close_guard_installed = True
@@ -217,10 +228,12 @@ class MainWindow(QMainWindow):
             if not self._close_guard_installed:
                 self.closing.emit(event)
             if event.isAccepted():
+                self.settings_dialog.close()
                 super().closeEvent(event)
             return
         event.ignore()
         self.closing.emit(event)
         if event.isAccepted():
             self._close_guard_enabled = False
+            self.settings_dialog.close()
             super().closeEvent(event)

@@ -11,6 +11,7 @@ RUNTIME_NAME = "GRE3000OfflineRuntime.exe"
 APP_TITLE = "GRE 3000 词离线版"
 MB_OK = 0x00000000
 MB_ICONERROR = 0x00000010
+STARTUP_ERROR_REPORTED_EXIT_CODE = 20
 
 
 def embedded_runtime_path(launcher_file: Path | None = None) -> Path:
@@ -51,7 +52,7 @@ def main() -> int:
     except OSError as error:
         show_error(f"应用无法启动。\n\n{error}")
         return 1
-    if exit_code != 0:
+    if exit_code not in (0, STARTUP_ERROR_REPORTED_EXIT_CODE):
         show_error(f"应用异常退出，错误码：{exit_code}")
     return exit_code
 

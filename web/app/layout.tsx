@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
       type: "website",
       title: "GRE 3000",
       description: "原书词序 · 离线学习",
-      images: [{ url: ogImage, width: 1734, height: 907 }],
+      images: [{ url: ogImage, width: 1200, height: 628 }],
     },
     twitter: {
       card: "summary_large_image",

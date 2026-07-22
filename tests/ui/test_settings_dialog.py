@@ -37,6 +37,11 @@ def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
     with qtbot.waitSignal(dialog.autoSpeakChanged) as auto_speak:
         dialog.auto_speak_checkbox.setChecked(True)
     assert auto_speak.args == [True]
+
+    with qtbot.waitSignal(dialog.exportProgressRequested):
+        dialog.export_button.click()
+    with qtbot.waitSignal(dialog.importProgressRequested):
+        dialog.import_button.click()
     dialog.set_auto_speak(False)
     assert not dialog.auto_speak_checkbox.isChecked()
 

@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import logging
+import json
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from gre_vocab_app.domain import BrowseOrder, SessionSnapshot, StudyMode, WordEntry
+from gre_vocab_app.progress_transfer import (
+    ProgressFormatError,
+    export_progress,
+    import_progress,
+)
 from gre_vocab_app.ui.main_window import MainWindow
 from gre_vocab_app.ui.word_list_page import WordListRow
 
@@ -77,6 +84,8 @@ class ApplicationController:
         settings.rateChanged.connect(self._set_rate)
         settings.defaultModeChanged.connect(self._set_default_mode)
         settings.autoSpeakChanged.connect(self._set_auto_speak)
+        settings.exportProgressRequested.connect(self._export_progress)
+        settings.importProgressRequested.connect(self._import_progress)
         settings.resetPositionRequested.connect(self._reset_positions)
         settings.clearAllRequested.connect(self._clear_all)
 
@@ -469,6 +478,67 @@ class ApplicationController:
         self._show_status("学习位置已重置。")
         if active is not None and active.list_key is not None:
             self._open_study(active.list_key, active.star_filter)
+        self._report_persistence_issue()
+
+    def _export_progress(self) -> None:
+        path, _selected_filter = QFileDialog.getSaveFileName(
+            self.window.settings_dialog,
+            "导出学习进度",
+            "GRE-3000-学习进度.json",
+            "JSON 文件 (*.json)",
+        )
+        if not path:
+            return
+        try:
+            payload = export_progress(self.user, self.content)
+            Path(path).write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except (OSError, TypeError, ValueError) as error:
+            LOGGER.exception("Unable to export progress")
+            QMessageBox.warning(
+                self.window.settings_dialog,
+                "导出失败",
+                f"无法导出学习进度：{error}",
+            )
+            return
+        self._show_status("学习进度已导出，可在 iPhone 网页版中导入。")
+
+    def _import_progress(self) -> None:
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self.window.settings_dialog,
+            "导入学习进度",
+            "",
+            "JSON 文件 (*.json)",
+        )
+        if not path:
+            return
+        try:
+            payload = json.loads(Path(path).read_text(encoding="utf-8"))
+            summary = import_progress(self.user, self.content, payload)
+        except (OSError, json.JSONDecodeError, ProgressFormatError) as error:
+            LOGGER.exception("Unable to import progress")
+            QMessageBox.warning(
+                self.window.settings_dialog,
+                "导入失败",
+                f"无法导入学习进度：{error}",
+            )
+            return
+        self._detail_snapshot = None
+        self._configure_settings()
+        self.window.home_page.set_source_lists(
+            self._source_lists,
+            self.user.list_completion_counts(),
+            selected_key=self.user.load_setting("study_list"),
+        )
+        self._refresh_stats()
+        self._refresh_word_list()
+        self.window.show_home()
+        self._show_status(
+            f"已导入 {summary.star_count} 个星级和 "
+            f"{summary.list_count} 个 List 的进度。"
+        )
         self._report_persistence_issue()
 
     def _clear_all(self) -> None:

@@ -25,6 +25,8 @@ class SettingsDialog(QDialog):
     rateChanged = Signal(float)
     defaultModeChanged = Signal(object)
     autoSpeakChanged = Signal(bool)
+    exportProgressRequested = Signal()
+    importProgressRequested = Signal()
     resetPositionRequested = Signal()
     clearAllRequested = Signal()
 
@@ -62,14 +64,20 @@ class SettingsDialog(QDialog):
         data_group = QGroupBox("本地数据")
         data_layout = QVBoxLayout(data_group)
         data_note = QLabel(
-            "学习位置、List 完成次数、星级评分和设置仅保存在这台电脑。"
+            "可导出学习位置、List 完成次数、星级和设置，并在网页版或另一台电脑导入。"
         )
         data_note.setObjectName("muted")
         data_note.setWordWrap(True)
         self.reset_button = QPushButton("重置学习位置")
+        transfer_row = QHBoxLayout()
+        self.export_button = QPushButton("导出进度")
+        self.import_button = QPushButton("导入进度")
+        transfer_row.addWidget(self.export_button)
+        transfer_row.addWidget(self.import_button)
         self.clear_button = QPushButton("清空全部本地数据")
         self.clear_button.setObjectName("dangerButton")
         data_layout.addWidget(data_note)
+        data_layout.addLayout(transfer_row)
         data_layout.addWidget(self.reset_button)
         data_layout.addWidget(self.clear_button)
         root.addWidget(data_group)
@@ -82,6 +90,8 @@ class SettingsDialog(QDialog):
         self.rate_slider.valueChanged.connect(self._rate_changed)
         self.mode_combo.currentIndexChanged.connect(self._mode_changed)
         self.auto_speak_checkbox.toggled.connect(self.autoSpeakChanged.emit)
+        self.export_button.clicked.connect(self.exportProgressRequested.emit)
+        self.import_button.clicked.connect(self.importProgressRequested.emit)
         self.reset_button.clicked.connect(self.resetPositionRequested.emit)
         self.clear_button.clicked.connect(self._confirm_clear)
 

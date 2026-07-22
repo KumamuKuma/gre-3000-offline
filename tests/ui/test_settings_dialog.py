@@ -42,6 +42,14 @@ def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
         dialog.export_button.click()
     with qtbot.waitSignal(dialog.importProgressRequested):
         dialog.import_button.click()
+    with qtbot.waitSignal(dialog.cloudTokenChanged) as token:
+        dialog.cloud_token_input.setText("gre_test")
+        dialog.cloud_token_input.editingFinished.emit()
+    assert token.args == ["gre_test"]
+    with qtbot.waitSignal(dialog.cloudUploadRequested):
+        dialog.cloud_upload_button.click()
+    with qtbot.waitSignal(dialog.cloudDownloadRequested):
+        dialog.cloud_download_button.click()
     dialog.set_auto_speak(False)
     assert not dialog.auto_speak_checkbox.isChecked()
 

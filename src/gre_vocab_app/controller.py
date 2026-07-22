@@ -14,6 +14,12 @@ from gre_vocab_app.progress_transfer import (
     export_progress,
     import_progress,
 )
+from gre_vocab_app.services.cloud_sync import (
+    DEFAULT_CLOUD_ENDPOINT,
+    CloudSyncError,
+    download_progress,
+    upload_progress,
+)
 from gre_vocab_app.ui.main_window import MainWindow
 from gre_vocab_app.ui.word_list_page import WordListRow
 
@@ -86,6 +92,9 @@ class ApplicationController:
         settings.autoSpeakChanged.connect(self._set_auto_speak)
         settings.exportProgressRequested.connect(self._export_progress)
         settings.importProgressRequested.connect(self._import_progress)
+        settings.cloudTokenChanged.connect(self._set_cloud_token)
+        settings.cloudUploadRequested.connect(self._upload_cloud_progress)
+        settings.cloudDownloadRequested.connect(self._download_cloud_progress)
         settings.resetPositionRequested.connect(self._reset_positions)
         settings.clearAllRequested.connect(self._clear_all)
 
@@ -160,6 +169,9 @@ class ApplicationController:
         )
         self.window.settings_dialog.set_auto_speak(
             self._auto_speak_enabled
+        )
+        self.window.settings_dialog.set_cloud_token(
+            self.user.load_setting("cloud_token")
         )
 
         take_notice = getattr(self.speech, "take_availability_notice", None)
@@ -540,6 +552,50 @@ class ApplicationController:
             f"{summary.list_count} 个 List 的进度。"
         )
         self._report_persistence_issue()
+
+    def _set_cloud_token(self, token: str) -> None:
+        self.user.save_setting("cloud_token", token.strip())
+        self._report_persistence_issue()
+
+    def _cloud_token(self) -> str:
+        return (self.user.load_setting("cloud_token") or "").strip()
+
+    def _upload_cloud_progress(self) -> None:
+        try:
+            payload = export_progress(self.user, self.content)
+            upload_progress(DEFAULT_CLOUD_ENDPOINT, self._cloud_token(), payload)
+        except (CloudSyncError, TypeError, ValueError) as error:
+            self._show_status(f"云同步上传失败：{error}")
+            return
+        self._show_status("本机学习进度已上传到云端。")
+
+    def _download_cloud_progress(self) -> None:
+        try:
+            payload = download_progress(
+                DEFAULT_CLOUD_ENDPOINT,
+                self._cloud_token(),
+            )
+            if payload is None:
+                self._show_status("云端还没有学习进度，请先上传一次。")
+                return
+            summary = import_progress(self.user, self.content, payload)
+        except (CloudSyncError, ProgressFormatError, TypeError, ValueError) as error:
+            self._show_status(f"云同步恢复失败：{error}")
+            return
+        self._detail_snapshot = None
+        self._configure_settings()
+        self.window.home_page.set_source_lists(
+            self._source_lists,
+            self.user.list_completion_counts(),
+            selected_key=self.user.load_setting("study_list"),
+        )
+        self._refresh_stats()
+        self._refresh_word_list()
+        self.window.show_home()
+        self._show_status(
+            f"已从云端恢复 {summary.star_count} 个星级和 "
+            f"{summary.list_count} 个 List 的进度。"
+        )
 
     def _clear_all(self) -> None:
         self._show_status("本地星级、List 完成次数、进度和设置已清空。")

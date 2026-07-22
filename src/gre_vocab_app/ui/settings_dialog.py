@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QSlider,
@@ -27,6 +28,9 @@ class SettingsDialog(QDialog):
     autoSpeakChanged = Signal(bool)
     exportProgressRequested = Signal()
     importProgressRequested = Signal()
+    cloudTokenChanged = Signal(str)
+    cloudUploadRequested = Signal()
+    cloudDownloadRequested = Signal()
     resetPositionRequested = Signal()
     clearAllRequested = Signal()
 
@@ -82,6 +86,26 @@ class SettingsDialog(QDialog):
         data_layout.addWidget(self.clear_button)
         root.addWidget(data_group)
 
+        cloud_group = QGroupBox("跨设备云同步")
+        cloud_layout = QVBoxLayout(cloud_group)
+        cloud_note = QLabel(
+            "在 iPhone 网页版登录后生成 Windows 设备令牌，粘贴到这里即可双向同步。"
+        )
+        cloud_note.setObjectName("muted")
+        cloud_note.setWordWrap(True)
+        self.cloud_token_input = QLineEdit()
+        self.cloud_token_input.setPlaceholderText("gre_ 开头的设备令牌")
+        self.cloud_token_input.setEchoMode(QLineEdit.Password)
+        cloud_buttons = QHBoxLayout()
+        self.cloud_upload_button = QPushButton("上传本机进度")
+        self.cloud_download_button = QPushButton("从云端恢复")
+        cloud_buttons.addWidget(self.cloud_upload_button)
+        cloud_buttons.addWidget(self.cloud_download_button)
+        cloud_layout.addWidget(cloud_note)
+        cloud_layout.addWidget(self.cloud_token_input)
+        cloud_layout.addLayout(cloud_buttons)
+        root.addWidget(cloud_group)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.close)
         root.addWidget(buttons)
@@ -92,6 +116,11 @@ class SettingsDialog(QDialog):
         self.auto_speak_checkbox.toggled.connect(self.autoSpeakChanged.emit)
         self.export_button.clicked.connect(self.exportProgressRequested.emit)
         self.import_button.clicked.connect(self.importProgressRequested.emit)
+        self.cloud_token_input.editingFinished.connect(
+            lambda: self.cloudTokenChanged.emit(self.cloud_token_input.text().strip())
+        )
+        self.cloud_upload_button.clicked.connect(self.cloudUploadRequested.emit)
+        self.cloud_download_button.clicked.connect(self.cloudDownloadRequested.emit)
         self.reset_button.clicked.connect(self.resetPositionRequested.emit)
         self.clear_button.clicked.connect(self._confirm_clear)
 
@@ -132,6 +161,10 @@ class SettingsDialog(QDialog):
     def set_auto_speak(self, enabled: bool) -> None:
         with QSignalBlocker(self.auto_speak_checkbox):
             self.auto_speak_checkbox.setChecked(bool(enabled))
+
+    def set_cloud_token(self, token: str | None) -> None:
+        with QSignalBlocker(self.cloud_token_input):
+            self.cloud_token_input.setText(token or "")
 
     def _voice_changed(self, name: str) -> None:
         if self.voice_combo.isEnabled() and name:

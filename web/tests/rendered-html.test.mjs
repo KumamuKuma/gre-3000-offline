@@ -32,4 +32,5 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(page, /GRE-3000-学习进度\.json/);
   assert.match(page, /自动云同步/);
   assert.match(worker, /data\/words\.json/);
+  assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);
 });

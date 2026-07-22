@@ -11,7 +11,7 @@
 从本项目的 [Releases](https://github.com/KumamuKuma/gre-3000-offline/releases) 页面下载最新版：
 
 ```text
-GRE 3000 词离线版.exe
+GRE-3000-Offline-Windows.exe
 ```
 
 程序是单文件版本，无需安装，也不需要一直联网。当前构建的 SHA-256 为：
@@ -23,7 +23,7 @@ GRE 3000 词离线版.exe
 在 PowerShell 中可以这样核对下载文件：
 
 ```powershell
-Get-FileHash -Algorithm SHA256 ".\GRE 3000 词离线版.exe"
+Get-FileHash -Algorithm SHA256 ".\GRE-3000-Offline-Windows.exe"
 ```
 
 ### 2. 启动

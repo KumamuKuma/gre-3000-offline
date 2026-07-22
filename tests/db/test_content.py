@@ -8,6 +8,10 @@ import gre_vocab_app.db.content as content_module
 from gre_vocab_app.db.content import ContentRepository
 from gre_vocab_app.importer.build import build_database
 from gre_vocab_app.importer.normalize import WordDraft
+from gre_vocab_app.importer.reference_sources import (
+    EquivalenceEdge,
+    Machine7Membership,
+)
 
 
 def make_draft(word: str, order: int) -> WordDraft:
@@ -131,6 +135,42 @@ def test_content_get_and_list_by_ids_preserve_contract(content_path):
         ]
         with pytest.raises(KeyError, match="999"):
             repository.get(999)
+
+
+def test_content_repository_exposes_source_lists_and_section_ids(content_path):
+    with ContentRepository(content_path) as repository:
+        source_lists = repository.source_lists()
+        assert len(source_lists) == 1
+        assert source_lists[0].key == "list1"
+        assert source_lists[0].label == "List 1"
+        assert source_lists[0].word_count == 3
+        assert repository.ids_for_section("list1") == (1, 2, 3)
+        assert repository.source_list("list1") == source_lists[0]
+        with pytest.raises(KeyError):
+            repository.ids_for_section("missing")
+
+
+def test_content_repository_exposes_bidirectional_equivalence_and_machine7_marker(
+    tmp_path,
+):
+    path = tmp_path / "reference-words.db"
+    build_database(
+        [make_draft("abate", 1), make_draft("mitigate", 2)],
+        path,
+        equivalence_edges=(EquivalenceEdge(1, 2, (5, 20)),),
+        machine7_memberships=(Machine7Membership(2, 49, "mitigate"),),
+    )
+
+    with ContentRepository(path) as repository:
+        assert [word.headword for word in repository.equivalents(1)] == [
+            "mitigate"
+        ]
+        assert [word.headword for word in repository.equivalents(2)] == [
+            "abate"
+        ]
+        assert not repository.in_machine7(1)
+        assert repository.in_machine7(2)
+        assert repository.machine7_source(2) == (49, "mitigate")
 
 
 def test_content_repository_rejects_schema_mismatch(content_path):
@@ -301,5 +341,68 @@ def test_real_generated_database_supports_accented_unicode_queries():
     path = Path(os.environ["GRE_GENERATED_DB"])
     with ContentRepository(path) as repository:
         assert repository.count() == 3292
+        assert len(repository.source_lists()) == 32
+        assert repository.source_lists()[0].label == "List 1"
+        assert repository.source_lists()[-1].label == "补充 List 2"
         assert repository.search("NAÏVETÉ")[0].headword == "naiveté"
         assert repository.search("CLICHE\N{COMBINING ACUTE ACCENT}")[0].headword == "cliché"
+
+
+@pytest.mark.skipif(
+    not os.environ.get("GRE_GENERATED_DB"),
+    reason="GRE_GENERATED_DB is not configured",
+)
+def test_real_generated_database_has_strict_symmetric_reference_relations():
+    path = Path(os.environ["GRE_GENERATED_DB"])
+    with ContentRepository(path) as repository:
+        def exact(headword):
+            return next(
+                word
+                for word in repository.search(headword)
+                if word.headword == headword
+            )
+
+        baffle = exact("baffle")
+        perplex = exact("perplex")
+        assert {word.headword for word in repository.equivalents(baffle.id)} >= {
+            "perplex"
+        }
+        assert {word.headword for word in repository.equivalents(perplex.id)} >= {
+            "baffle"
+        }
+        assert repository.in_machine7(baffle.id)
+
+        resurgent = exact("resurgent")
+        surg_words = {
+            word.headword
+            for family in repository.root_families(resurgent.id)
+            if family.root.startswith("surg")
+            for word in family.words
+        }
+        assert {"resurrect", "insurrection", "upsurge"} <= surg_words
+        resurrect = exact("resurrect")
+        assert all(
+            not family.root.startswith("rect")
+            for family in repository.root_families(resurrect.id)
+        )
+        tactic = exact("tactic")
+        assert all(
+            not family.root.startswith("tact")
+            for family in repository.root_families(tactic.id)
+        )
+
+        for left, right in (("mold", "mould"), ("bloom", "boom")):
+            left_word = exact(left)
+            assert right not in {
+                word.headword for word in repository.lookalikes(left_word.id)
+            }
+        assert repository.lookalikes(exact("per se").id) == ()
+
+        for word_id in repository.ids_in_source_order():
+            equivalent_ids = {
+                word.word_id for word in repository.equivalents(word_id)
+            }
+            lookalike_ids = {
+                word.word_id for word in repository.lookalikes(word_id)
+            }
+            assert equivalent_ids.isdisjoint(lookalike_ids)

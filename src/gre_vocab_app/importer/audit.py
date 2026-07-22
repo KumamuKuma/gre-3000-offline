@@ -105,6 +105,7 @@ def build_audit_payload(
     override_details: Sequence[Mapping[str, Any]] = (),
     semantic_checks: Sequence[Mapping[str, Any]] = (),
     strict_checks: Sequence[Mapping[str, Any]] = (),
+    reference_sources: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     ordered = sorted(entries, key=lambda item: item.source_order)
     unresolved = [
@@ -121,6 +122,15 @@ def build_audit_payload(
         sorted(Counter(entry.source_section for entry in ordered).items())
     )
     duplicates = _duplicates(ordered)
+    override_kind_counts = dict(
+        sorted(
+            Counter(
+                kind
+                for item in override_details
+                for kind in item.get("kinds", ["legacy_review"])
+            ).items()
+        )
+    )
     actual_profile = {
         "sha256": source_sha256,
         "overrides_sha256": overrides_sha256,
@@ -146,8 +156,10 @@ def build_audit_payload(
             field: dict(values) for field, values in (dewrap_counts or {}).items()
         },
         "override_details": [dict(item) for item in override_details],
+        "override_kind_counts": override_kind_counts,
         "semantic_checks": [dict(item) for item in semantic_checks],
         "strict_checks": [dict(item) for item in strict_checks],
+        "reference_sources": dict(reference_sources or {}),
         "unresolved_records": unresolved,
         "reviewed_records": reviewed,
         "duplicate_headwords": duplicates,
@@ -195,7 +207,13 @@ def render_audit_html(
         (
             item.get("key", ""),
             item.get("source_order", ""),
+            ", ".join(item.get("kinds", ["legacy_review"])),
+            item.get("reason", ""),
+            _json_cell(item.get("evidence", [])),
+            item.get("reviewed", False),
             ", ".join(item.get("original_issues", [])),
+            ", ".join(item.get("resolved_original_issues", [])),
+            ", ".join(item.get("remaining_original_issues", [])),
             ", ".join(item.get("changed_fields", [])),
             _json_cell(item.get("before", {})),
             _json_cell(item.get("after", {})),
@@ -219,6 +237,10 @@ def render_audit_html(
             _json_cell(item.get("actual")),
         )
         for item in payload["strict_checks"]
+    ]
+    reference_rows = [
+        (name, _json_cell(values))
+        for name, values in payload.get("reference_sources", {}).items()
     ]
     return "".join(
         [
@@ -254,11 +276,30 @@ def render_audit_html(
             ),
             "<h2>Override details</h2>",
             _table(
-                ("Key", "Order", "Original issues", "Changed fields", "Before", "After"),
+                ("Correction kind", "Records"),
+                payload["override_kind_counts"].items(),
+            ),
+            _table(
+                (
+                    "Key",
+                    "Order",
+                    "Kinds",
+                    "Reason",
+                    "Evidence",
+                    "Reviewed",
+                    "Original issues",
+                    "Resolved issues",
+                    "Remaining issues",
+                    "Changed fields",
+                    "Before",
+                    "After",
+                ),
                 override_rows,
             ),
             "<h2>Semantic checks</h2>",
             _table(("Check", "Pass", "Count", "Source orders"), semantic_rows),
+            "<h2>Reference sources</h2>",
+            _table(("Source", "Extraction and matching facts"), reference_rows),
             "<h2>Strict checks</h2>",
             _table(("Check", "Pass", "Expected", "Actual"), strict_rows),
             "<h2>Unresolved records</h2>",
@@ -295,6 +336,7 @@ def write_audit(
     override_details: Sequence[Mapping[str, Any]] = (),
     semantic_checks: Sequence[Mapping[str, Any]] = (),
     strict_checks: Sequence[Mapping[str, Any]] = (),
+    reference_sources: Mapping[str, Any] | None = None,
 ) -> AuditSummary:
     actual_source_sha256 = (
         source_sha256 if source_sha256 is not None else _source_hash(source_path)
@@ -312,6 +354,7 @@ def write_audit(
         override_details=override_details,
         semantic_checks=semantic_checks,
         strict_checks=strict_checks,
+        reference_sources=reference_sources,
     )
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_bytes = (

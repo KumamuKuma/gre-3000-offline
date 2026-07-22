@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -23,6 +24,7 @@ class SettingsDialog(QDialog):
     voiceSelected = Signal(str)
     rateChanged = Signal(float)
     defaultModeChanged = Signal(object)
+    autoSpeakChanged = Signal(bool)
     resetPositionRequested = Signal()
     clearAllRequested = Signal()
 
@@ -38,7 +40,9 @@ class SettingsDialog(QDialog):
         form = QFormLayout(study_group)
         self.mode_combo = QComboBox()
         self.mode_combo.addItem("阅读模式", StudyMode.READING)
+        self.mode_combo.addItem("简义模式", StudyMode.BRIEF)
         self.mode_combo.addItem("回忆模式", StudyMode.RECALL)
+        self.mode_combo.addItem("四选一", StudyMode.QUIZ)
         self.voice_combo = QComboBox()
         self.rate_slider = QSlider(Qt.Horizontal)
         self.rate_slider.setRange(-10, 10)
@@ -48,14 +52,18 @@ class SettingsDialog(QDialog):
         rate_row = QHBoxLayout()
         rate_row.addWidget(self.rate_slider, 1)
         rate_row.addWidget(self.rate_value)
+        self.auto_speak_checkbox = QCheckBox("切换到下一词时自动朗读一次")
         form.addRow("默认模式", self.mode_combo)
         form.addRow("英文语音", self.voice_combo)
         form.addRow("朗读速度", rate_row)
+        form.addRow("自动朗读", self.auto_speak_checkbox)
         root.addWidget(study_group)
 
         data_group = QGroupBox("本地数据")
         data_layout = QVBoxLayout(data_group)
-        data_note = QLabel("学习进度、收藏和设置仅保存在这台电脑。")
+        data_note = QLabel(
+            "学习位置、List 完成次数、星级评分和设置仅保存在这台电脑。"
+        )
         data_note.setObjectName("muted")
         data_note.setWordWrap(True)
         self.reset_button = QPushButton("重置学习位置")
@@ -73,6 +81,7 @@ class SettingsDialog(QDialog):
         self.voice_combo.currentTextChanged.connect(self._voice_changed)
         self.rate_slider.valueChanged.connect(self._rate_changed)
         self.mode_combo.currentIndexChanged.connect(self._mode_changed)
+        self.auto_speak_checkbox.toggled.connect(self.autoSpeakChanged.emit)
         self.reset_button.clicked.connect(self.resetPositionRequested.emit)
         self.clear_button.clicked.connect(self._confirm_clear)
 
@@ -110,6 +119,10 @@ class SettingsDialog(QDialog):
             with QSignalBlocker(self.mode_combo):
                 self.mode_combo.setCurrentIndex(index)
 
+    def set_auto_speak(self, enabled: bool) -> None:
+        with QSignalBlocker(self.auto_speak_checkbox):
+            self.auto_speak_checkbox.setChecked(bool(enabled))
+
     def _voice_changed(self, name: str) -> None:
         if self.voice_combo.isEnabled() and name:
             self.voiceSelected.emit(name)
@@ -122,11 +135,11 @@ class SettingsDialog(QDialog):
     def _mode_changed(self, index: int) -> None:
         mode = self.mode_combo.itemData(index)
         if mode is not None:
-            self.defaultModeChanged.emit(mode)
+            self.defaultModeChanged.emit(StudyMode(mode))
 
     def _confirm_clear(self) -> None:
         message = (
-            "这会清空本机保存的收藏、学习进度、随机队列和应用设置。"
+            "这会清空本机保存的星级评分、List 完成次数、学习位置和应用设置。"
             "词库文件不会被删除。此操作无法撤销，是否继续？"
         )
         answer = QMessageBox.question(

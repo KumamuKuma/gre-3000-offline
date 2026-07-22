@@ -7,6 +7,12 @@ from gre_vocab_app.ui.settings_dialog import SettingsDialog
 def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
     dialog = SettingsDialog()
     qtbot.addWidget(dialog)
+    assert [dialog.mode_combo.itemData(index) for index in range(4)] == [
+        StudyMode.READING,
+        StudyMode.BRIEF,
+        StudyMode.RECALL,
+        StudyMode.QUIZ,
+    ]
     dialog.set_voice_names(("Microsoft Zira", "Microsoft David"), "Microsoft Zira")
     assert dialog.voice_combo.currentText() == "Microsoft Zira"
 
@@ -20,9 +26,19 @@ def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
 
     with qtbot.waitSignal(dialog.defaultModeChanged) as mode:
         dialog.mode_combo.setCurrentIndex(
-            dialog.mode_combo.findData(StudyMode.RECALL)
+            dialog.mode_combo.findData(StudyMode.QUIZ)
         )
-    assert mode.args == [StudyMode.RECALL]
+    assert mode.args == [StudyMode.QUIZ]
+    assert mode.args[0] is StudyMode.QUIZ
+
+    dialog.set_default_mode(StudyMode.BRIEF)
+    assert dialog.mode_combo.currentData() == StudyMode.BRIEF
+
+    with qtbot.waitSignal(dialog.autoSpeakChanged) as auto_speak:
+        dialog.auto_speak_checkbox.setChecked(True)
+    assert auto_speak.args == [True]
+    dialog.set_auto_speak(False)
+    assert not dialog.auto_speak_checkbox.isChecked()
 
 
 def test_clear_all_requires_named_confirmation(qtbot, monkeypatch):
@@ -38,7 +54,10 @@ def test_clear_all_requires_named_confirmation(qtbot, monkeypatch):
     with qtbot.assertNotEmitted(dialog.clearAllRequested):
         dialog.clear_button.click()
     assert calls
-    assert "收藏" in calls[0][0][2] and "学习进度" in calls[0][0][2]
+    message = calls[0][0][2]
+    assert "List 完成次数" in message and "学习位置" in message
+    assert "星级评分" in message
+    assert "收藏" not in message
 
     monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
     with qtbot.waitSignal(dialog.clearAllRequested):

@@ -2,11 +2,16 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from gre_vocab_app.domain import BrowseOrder, StudyMode, WordEntry
+from gre_vocab_app.domain import (
+    BrowseOrder,
+    SessionSnapshot,
+    StudyMode,
+    WordEntry,
+)
 
 
-def test_word_entry_is_immutable_and_preserves_quality_flags():
-    word = WordEntry(
+def make_word() -> WordEntry:
+    return WordEntry(
         id=7,
         source_order=4,
         source_section="list1",
@@ -23,9 +28,43 @@ def test_word_entry_is_immutable_and_preserves_quality_flags():
         quality_flags=("reviewed_split",),
     )
 
+
+def test_word_entry_is_immutable_and_preserves_quality_flags():
+    word = make_word()
+
     assert word.headword == "abate"
     assert word.quality_flags == ("reviewed_split",)
-    assert StudyMode.READING.value == "reading"
-    assert BrowseOrder.RANDOM.value == "random"
     with pytest.raises(FrozenInstanceError):
         word.headword = "wane"
+
+
+def test_study_modes_and_source_only_order_are_explicit():
+    assert tuple(mode.value for mode in StudyMode) == (
+        "reading",
+        "brief",
+        "recall",
+        "quiz",
+    )
+    assert tuple(order.value for order in BrowseOrder) == ("source",)
+
+
+def test_session_snapshot_annotation_and_quiz_fields_default_safely():
+    snapshot = SessionSnapshot(
+        word=make_word(),
+        index=0,
+        total=1,
+        mode=StudyMode.READING,
+        order=BrowseOrder.SOURCE,
+        answer_visible=False,
+        at_start=True,
+        at_end=True,
+    )
+
+    assert snapshot.star_rating == 0
+    assert snapshot.star_filter is None
+    assert snapshot.list_key is None
+    assert snapshot.root_families == ()
+    assert snapshot.lookalikes == ()
+    assert snapshot.quiz_choices == ()
+    assert snapshot.quiz_correct_index is None
+    assert snapshot.quiz_selected_index is None

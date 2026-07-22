@@ -387,17 +387,21 @@ def validation_flags(
     if not phonetic:
         flags.add("missing_phonetic")
     elif (
-        phonetic.casefold() == draft.headword.strip().casefold()
+        phonetic != draft.phonetic
+        or phonetic.casefold() == draft.headword.strip().casefold()
         or PHONETIC.fullmatch(phonetic) is None
+        or not phonetic[1:-1].strip()
         or _looks_like_long_orthographic_placeholder(
             phonetic, draft.headword.strip()
         )
         or CJK.search(phonetic)
     ):
         flags.add("invalid_phonetic")
-    if not draft.definition_en or not draft.definition_zh:
+    if not draft.definition_en.strip() or not draft.definition_zh.strip():
         flags.add("incomplete_definition")
-    if draft.raw_example and (not draft.example_en or not draft.example_zh):
+    if draft.raw_example and (
+        not draft.example_en.strip() or not draft.example_zh.strip()
+    ):
         flags.add("incomplete_example")
     if CJK.search(draft.definition_en):
         flags.add("definition_en_contains_cjk")

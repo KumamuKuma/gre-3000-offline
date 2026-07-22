@@ -3,7 +3,15 @@ from pathlib import Path
 
 import pytest
 
-from gre_vocab_app.importer.build import _extract_with_diagnostics, semantic_checks
+from gre_vocab_app.importer import build as build_module
+from gre_vocab_app.importer.build import (
+    APPROVED_SOURCE_PROFILE,
+    _extract_with_diagnostics,
+    apply_overrides_with_audit,
+    load_overrides,
+    semantic_checks,
+)
+from gre_vocab_app.importer.reference_sources import load_reference_data
 
 
 @pytest.fixture(scope="module")
@@ -20,6 +28,120 @@ def real_import():
         coverage,
         diagnostics,
     )
+
+
+@pytest.fixture(scope="module")
+def reviewed_import(real_import):
+    rows, _, _, _ = real_import
+    override_path = Path(build_module.__file__).with_name("overrides.json")
+    entries, details = apply_overrides_with_audit(
+        list(rows.values()), load_overrides(override_path)
+    )
+    return {entry.source_order: entry for entry in entries}, details
+
+
+@pytest.fixture(scope="module")
+def real_reference_import(reviewed_import):
+    equivalence = os.environ.get("GRE_EQUIVALENCE_PDF")
+    machine7 = os.environ.get("GRE_MACHINE7_PDF")
+    if not equivalence or not machine7:
+        pytest.skip("GRE reference PDFs are not configured")
+    rows, _details = reviewed_import
+    return load_reference_data(
+        list(rows.values()),
+        equivalence_pdf=Path(equivalence),
+        machine7_pdf=Path(machine7),
+    )
+
+
+def test_real_pdf_curated_manifest_is_traceable_and_exhaustive(reviewed_import):
+    rows, details = reviewed_import
+
+    assert len(details) == APPROVED_SOURCE_PROFILE["override_count"] == 203
+    assert all(detail["kinds"] for detail in details)
+    assert all(detail["reason"] for detail in details)
+    assert all(detail["evidence"] for detail in details)
+    assert all(detail["reviewed"] is True for detail in details)
+    assert all(not detail["remaining_original_issues"] for detail in details)
+    assert not [
+        entry.source_order
+        for entry in rows.values()
+        if any(
+            not flag.startswith("reviewed:")
+            for flag in entry.quality_flags
+        )
+    ]
+
+    kind_counts: dict[str, int] = {}
+    for detail in details:
+        for kind in detail["kinds"]:
+            kind_counts[kind] = kind_counts.get(kind, 0) + 1
+    assert kind_counts == {
+        "content_completion": 4,
+        "definition": 32,
+        "example": 129,
+        "part_of_speech": 20,
+        "phonetic": 32,
+    }
+
+
+def test_real_pdf_high_risk_corrections_have_the_reviewed_final_values(
+    reviewed_import,
+):
+    rows, details = reviewed_import
+    corrected_orders = {detail["source_order"] for detail in details}
+
+    assert rows[116].definition_en == "adj. merciless or cruel"
+    assert rows[529].phonetic == "[əˈmiːljəreɪt]"
+    assert rows[884].phonetic == "[raʊ]"
+    assert rows[1009].phonetic == (
+        "[v. ɑːˈtɪkjəleɪt; adj. ɑːˈtɪkjələt]"
+    )
+    assert rows[1808].phonetic == "[maɪˈnjuːt]"
+    assert rows[2765].phonetic == "[spɑːk]"
+    assert rows[3159].example_en == (
+        "He puffed himself up in front of the girls."
+    )
+    assert rows[3164].definition_en.startswith("n. a short, memorable statement")
+    assert rows[3182].definition_en.startswith("phrase. to have great power")
+    assert rows[3231].example_en == (
+        "He does not seem the least bit tractable."
+    )
+    assert rows[598].example_en.startswith("The blighted roses")
+    assert rows[1172].example_en.startswith("The report revealed a strong bias")
+    assert rows[2982].example_en == (
+        "Bright cushions accent the dark furniture."
+    )
+    assert rows[3051].phonetic == "[ˌʃɔːtˈlɪvd]"
+    assert rows[10].example_zh == "不要极力向别人宣扬你的工作或观点。"
+    assert rows[93].example_zh == "工会领导人已要求政府取消这次涨价。"
+    assert rows[837].example_zh.endswith("能不断给人惊喜并使人着迷。")
+    assert rows[1323].example_en.endswith("registered for less than $10.")
+    assert rows[1524].example_zh.endswith("种种弊病的长篇悲叹。")
+    assert rows[2900].example_zh.startswith("与特朗普相比")
+    assert rows[3154].example_zh.endswith("在原址建一座办公楼。")
+    assert rows[3290].definition_zh.startswith("就其本身而言")
+
+    rejected_fragments = (
+        "变节你的工作",
+        "感到惊讶和催眠",
+        "特别小的组委会",
+        "反对祸害，反对网络",
+        "相对于普京来说",
+        "竖立一座办公大楼在网站上",
+        "包纳交集很多",
+        "最无法无天的怪家伙",
+    )
+    assert not [
+        (entry.source_order, fragment)
+        for entry in rows.values()
+        for fragment in rejected_fragments
+        if fragment in entry.example_zh
+    ]
+
+    # These are valid boundary cases deliberately excluded after adjudication.
+    assert {1002, 3246}.isdisjoint(corrected_orders)
+    assert "have rebounded" in rows[1002].example_en
 
 
 def test_real_pdf_named_semantic_regressions(real_import):
@@ -117,3 +239,23 @@ def test_real_pdf_semantic_scans_remain_zero(real_import):
         "hard_wrap_residue": 0,
         "normal_wrap_overjoin": 0,
     }
+
+
+def test_real_reference_pdfs_match_reviewed_direct_relationship_profile(
+    real_reference_import,
+):
+    facts = real_reference_import.facts
+    equivalence = facts["equivalence"]
+    machine7 = facts["machine7"]
+
+    assert len(real_reference_import.equivalence_edges) == 547
+    assert len(real_reference_import.machine7_memberships) == 1410
+    assert equivalence["row_count"] == 940
+    assert equivalence["matched_headword_rows"] == 864
+    assert equivalence["matched_equivalent_mentions"] == 931
+    assert machine7["unique_headword_count"] == 1450
+    assert machine7["matched_count"] == 1410
+    assert all(
+        edge.left_word_id < edge.right_word_id
+        for edge in real_reference_import.equivalence_edges
+    )

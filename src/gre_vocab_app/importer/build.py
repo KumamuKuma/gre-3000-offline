@@ -49,12 +49,12 @@ from .types import ParserState
 
 APPROVED_SOURCE_PROFILE: dict[str, Any] = {
     "sha256": "8270d259f3457711a16c9f7a7d79f2d95f89fa83228a1b89e656546882f303a0",
-    "overrides_sha256": "f4dafd4c42da35af47953064555312e20d2567cb123254d851d53932e8cbf074",
+    "overrides_sha256": "47fa8c54daa5fa7acc36a9ec50280d952c87ec2a4238ae6fc76fb7f3053d2d8e",
     "page_count": 288,
     "physical_row_bands": 3292,
     "record_count": 3292,
-    "override_count": 5,
-    "reviewed_count": 5,
+    "override_count": 203,
+    "reviewed_count": 203,
     "first_source_order": 1,
     "last_source_order": 3292,
     "first_source_page": 5,
@@ -82,6 +82,30 @@ APPROVED_SOURCE_PROFILE: dict[str, Any] = {
             "hard_join_records": 237,
         },
     },
+    "reference_sources": {
+        "equivalence": {
+            "configured": True,
+            "sha256": "c6f3c2326963319aa4281496295fc6d92569dfdf8b36da833bdd1bed70efaefd",
+            "page_count": 32,
+            "row_count": 940,
+            "unique_headword_count": 930,
+            "equivalent_mention_count": 1285,
+            "matched_headword_rows": 864,
+            "matched_equivalent_mentions": 931,
+            "edge_count": 547,
+            "unmatched_headword_count": 76,
+            "unmatched_equivalent_count": 354,
+        },
+        "machine7": {
+            "configured": True,
+            "sha256": "2841887fc8fb9a65b39c10ae3b3a19fdd9b0d514c4e6de0520f0c5a9f85e5c65",
+            "page_count": 157,
+            "headword_count": 1450,
+            "unique_headword_count": 1450,
+            "matched_count": 1410,
+            "unmatched_headword_count": 40,
+        },
+    },
 }
 
 CONTENT_OVERRIDE_FIELDS = (
@@ -92,6 +116,35 @@ CONTENT_OVERRIDE_FIELDS = (
     "synonyms",
     "example_en",
     "example_zh",
+)
+from .reference_sources import (
+    EquivalenceEdge,
+    Machine7Membership,
+    ReferenceData,
+    load_reference_data,
+)
+CURATED_OVERRIDE_FIELDS = frozenset(
+    {
+        "source_order",
+        "kinds",
+        "reason",
+        "evidence",
+        "expected_before",
+        "changes",
+        "reviewed",
+    }
+)
+CORRECTION_KIND_FIELDS: dict[str, frozenset[str]] = {
+    "phonetic": frozenset({"phonetic"}),
+    "definition": frozenset({"definition_en", "definition_zh"}),
+    "part_of_speech": frozenset({"definition_en", "definition_zh"}),
+    "example": frozenset({"example_en", "example_zh"}),
+    "content_completion": frozenset(
+        {"definition_en", "definition_zh", "example_en", "example_zh"}
+    ),
+}
+NONEMPTY_CONTENT_FIELDS = frozenset(
+    {"definition_en", "definition_zh", "example_en", "example_zh"}
 )
 FORBIDDEN_OVERRIDE_FIELDS = frozenset(
     {
@@ -196,6 +249,201 @@ def _issue_fields(issue: str) -> frozenset[str]:
     }.get(issue, frozenset())
 
 
+def _curated_override(
+    key: str,
+    original: WordDraft,
+    raw_values: Mapping[str, Any],
+) -> tuple[WordDraft, dict[str, Any]]:
+    unknown = set(raw_values) - CURATED_OVERRIDE_FIELDS
+    if unknown:
+        raise ValueError(
+            "unknown curated override field: " + ", ".join(sorted(unknown))
+        )
+    if raw_values.get("reviewed") is not True:
+        raise ValueError(f"override {key!r} must set reviewed to true")
+
+    source_order = raw_values.get("source_order")
+    if source_order is None:
+        raise ValueError(f"override {key!r} must declare source_order")
+    if not isinstance(source_order, int) or isinstance(source_order, bool):
+        raise ValueError(f"override {key!r} source_order must be an integer")
+    if source_order != original.source_order:
+        raise ValueError(
+            f"override {key!r} source_order mismatch: "
+            f"expected {original.source_order}, got {source_order}"
+        )
+
+    kinds = raw_values.get("kinds")
+    if (
+        not isinstance(kinds, list)
+        or not kinds
+        or any(not isinstance(kind, str) or not kind.strip() for kind in kinds)
+    ):
+        raise ValueError(f"override {key!r} must declare correction kinds")
+    if len(kinds) != len(set(kinds)):
+        raise ValueError(f"override {key!r} has duplicate correction kinds")
+    unknown_kinds = sorted(set(kinds) - set(CORRECTION_KIND_FIELDS))
+    if unknown_kinds:
+        raise ValueError(
+            f"override {key!r} has unknown correction kind: "
+            + ", ".join(unknown_kinds)
+        )
+
+    reason = raw_values.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError(f"override {key!r} must include a reason")
+    evidence = raw_values.get("evidence")
+    if (
+        not isinstance(evidence, list)
+        or not evidence
+        or any(not isinstance(item, str) or not item.strip() for item in evidence)
+    ):
+        raise ValueError(f"override {key!r} must include evidence")
+    if len(evidence) != len(set(evidence)):
+        raise ValueError(f"override {key!r} has duplicate evidence")
+
+    expected_before = raw_values.get("expected_before")
+    if not isinstance(expected_before, Mapping):
+        raise ValueError(f"override {key!r} must include expected_before")
+    changes = raw_values.get("changes")
+    if not isinstance(changes, Mapping) or not changes:
+        raise ValueError(f"override {key!r} must include changes")
+    expected_before = dict(expected_before)
+    changes = dict(changes)
+    if set(expected_before) != set(changes):
+        raise ValueError(
+            f"override {key!r} expected_before must cover exactly the changed fields"
+        )
+    forbidden = set(changes) & FORBIDDEN_OVERRIDE_FIELDS
+    if forbidden:
+        raise ValueError(
+            "forbidden override field: " + ", ".join(sorted(forbidden))
+        )
+    unknown_changes = set(changes) - set(CONTENT_OVERRIDE_FIELDS)
+    if unknown_changes:
+        raise ValueError(
+            "unknown override field: " + ", ".join(sorted(unknown_changes))
+        )
+    if any(
+        not isinstance(value, str)
+        for value in (*expected_before.values(), *changes.values())
+    ):
+        raise ValueError(f"override {key!r} content values must be strings")
+    blank_changed_fields = sorted(
+        field
+        for field, value in changes.items()
+        if field in NONEMPTY_CONTENT_FIELDS and not value.strip()
+    )
+    if blank_changed_fields:
+        raise ValueError(
+            f"override {key!r} has blank changed content: "
+            + ", ".join(blank_changed_fields)
+        )
+
+    stale_fields = sorted(
+        field
+        for field, expected in expected_before.items()
+        if getattr(original, field) != expected
+    )
+    if stale_fields:
+        raise ValueError(
+            f"override {key!r} expected_before mismatch: "
+            + ", ".join(stale_fields)
+        )
+    changed_fields = sorted(
+        field for field, value in changes.items() if getattr(original, field) != value
+    )
+    if set(changed_fields) != set(changes):
+        raise ValueError(f"stale override {key!r} changes no content")
+    completion_fields = {
+        field
+        for field in changed_fields
+        if field in CORRECTION_KIND_FIELDS["content_completion"]
+        and not getattr(original, field).strip()
+        and changes[field].strip()
+    }
+    effective_kind_fields = {
+        kind: (
+            frozenset(completion_fields)
+            if kind == "content_completion"
+            else CORRECTION_KIND_FIELDS[kind]
+        )
+        for kind in kinds
+    }
+    allowed_changed_fields = frozenset().union(*effective_kind_fields.values())
+    unauthorized_changed_fields = sorted(
+        set(changed_fields) - allowed_changed_fields
+    )
+    if unauthorized_changed_fields:
+        label = "field" if len(unauthorized_changed_fields) == 1 else "fields"
+        raise ValueError(
+            f"override {key!r} has unauthorized changed {label}: "
+            + ", ".join(unauthorized_changed_fields)
+        )
+    unused_kinds = sorted(
+        kind
+        for kind in kinds
+        if not set(changed_fields) & effective_kind_fields[kind]
+    )
+    if unused_kinds:
+        raise ValueError(
+            f"override {key!r} has correction kinds without changes: "
+            + ", ".join(unused_kinds)
+        )
+
+    original_issues = _original_issues(original)
+    extra_flags = [
+        issue for issue in original_issues if issue not in VALIDATION_FLAGS
+    ]
+    updated = replace(original, **changes, quality_flags=())
+    if bool(updated.example_en.strip()) != bool(updated.example_zh.strip()):
+        raise ValueError(
+            f"override {key!r} must keep English and Chinese examples paired"
+        )
+    detected = validation_flags(updated, extra_flags=extra_flags)
+    new_issues = sorted(set(detected) - set(original_issues))
+    invalid_changed_fields = sorted(
+        {
+            field
+            for issue in detected
+            for field in _issue_fields(issue)
+            if field in changed_fields
+        }
+    )
+    if new_issues or invalid_changed_fields:
+        problems = new_issues or invalid_changed_fields
+        raise ValueError(
+            f"override {key!r} is invalid after override: {', '.join(problems)}"
+        )
+    remaining_issues = [issue for issue in detected if issue in original_issues]
+    resolved_issues = [
+        issue for issue in original_issues if issue not in remaining_issues
+    ]
+    reviewed_flags = list(remaining_issues)
+    reviewed_flags.extend(f"reviewed:{issue}" for issue in resolved_issues)
+    reviewed_flags.extend(f"reviewed:curated_{kind}" for kind in kinds)
+    updated = replace(updated, quality_flags=tuple(dict.fromkeys(reviewed_flags)))
+    detail = {
+        "key": key,
+        "source_order": original.source_order,
+        "source_page": original.source_page,
+        "source_section": original.source_section,
+        "headword": original.headword,
+        "reviewed": not remaining_issues,
+        "kinds": list(kinds),
+        "reason": reason.strip(),
+        "evidence": list(evidence),
+        "expected_before": expected_before,
+        "original_issues": list(original_issues),
+        "resolved_original_issues": resolved_issues,
+        "remaining_original_issues": remaining_issues,
+        "changed_fields": changed_fields,
+        "before": _content_snapshot(original),
+        "after": _content_snapshot(updated),
+    }
+    return updated, detail
+
+
 def apply_overrides_with_audit(
     entries: Sequence[WordDraft], overrides: Mapping[str, Mapping[str, Any]]
 ) -> tuple[list[WordDraft], list[dict[str, Any]]]:
@@ -214,6 +462,21 @@ def apply_overrides_with_audit(
         if not isinstance(raw_values, Mapping):
             raise ValueError(f"override {key!r} must be a JSON object")
 
+        index = matched[0]
+        original = result[index]
+        curated_markers = {
+            "kinds",
+            "reason",
+            "evidence",
+            "expected_before",
+            "changes",
+        }
+        if set(raw_values) & curated_markers:
+            updated, detail = _curated_override(key, original, raw_values)
+            result[index] = updated
+            details.append(detail)
+            continue
+
         values = dict(raw_values)
         forbidden = set(values) & FORBIDDEN_OVERRIDE_FIELDS
         if forbidden:
@@ -230,8 +493,6 @@ def apply_overrides_with_audit(
         if any(not isinstance(value, str) for value in values.values()):
             raise ValueError(f"override {key!r} content values must be strings")
 
-        index = matched[0]
-        original = result[index]
         original_issues = _original_issues(original)
         if not original_issues:
             raise ValueError(f"override {key!r} has no original issue to review")
@@ -316,7 +577,13 @@ def _validate(entries: Sequence[WordDraft]) -> None:
             raise ValueError(f"blank headword at source_order {entry.source_order}")
 
 
-def build_database(entries: Sequence[WordDraft], output_path: Path) -> None:
+def build_database(
+    entries: Sequence[WordDraft],
+    output_path: Path,
+    *,
+    equivalence_edges: Sequence[EquivalenceEdge] = (),
+    machine7_memberships: Sequence[Machine7Membership] = (),
+) -> None:
     ordered = sorted(entries, key=lambda item: item.source_order)
     _validate(ordered)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -331,12 +598,15 @@ def build_database(entries: Sequence[WordDraft], output_path: Path) -> None:
     try:
         database = sqlite3.connect(temporary)
         try:
+            database.execute("pragma foreign_keys=on")
             database.executescript(CONTENT_SCHEMA)
             database.executemany(
                 "insert into metadata(key, value) values(?, ?)",
                 (
                     ("schema_version", str(CONTENT_SCHEMA_VERSION)),
                     ("record_count", str(len(ordered))),
+                    ("equivalence_edge_count", str(len(equivalence_edges))),
+                    ("machine7_membership_count", str(len(machine7_memberships))),
                 ),
             )
             database.executemany(
@@ -370,6 +640,47 @@ def build_database(entries: Sequence[WordDraft], output_path: Path) -> None:
                     for entry in ordered
                 ),
             )
+            database.executemany(
+                """
+                insert into equivalence_edges(
+                  left_word_id, right_word_id, source_pages
+                ) values (?, ?, ?)
+                """,
+                (
+                    (
+                        edge.left_word_id,
+                        edge.right_word_id,
+                        json.dumps(
+                            list(edge.source_pages),
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
+                    )
+                    for edge in equivalence_edges
+                ),
+            )
+            database.executemany(
+                """
+                insert into machine7_membership(
+                  word_id, source_page, source_headword
+                ) values (?, ?, ?)
+                """,
+                (
+                    (
+                        membership.word_id,
+                        membership.source_page,
+                        membership.source_headword,
+                    )
+                    for membership in machine7_memberships
+                ),
+            )
+            foreign_key_errors = database.execute(
+                "pragma foreign_key_check"
+            ).fetchall()
+            if foreign_key_errors:
+                raise sqlite3.IntegrityError(
+                    f"content database foreign-key check failed: {foreign_key_errors}"
+                )
             check = database.execute("pragma integrity_check").fetchone()
             if check is None or check[0] != "ok":
                 raise sqlite3.IntegrityError(
@@ -489,7 +800,8 @@ def _definition_zh_has_english_sense(text: str) -> bool:
 
 
 def semantic_checks(
-    entries: Sequence[WordDraft], diagnostics: ExtractionDiagnostics
+    entries: Sequence[WordDraft],
+    diagnostics: ExtractionDiagnostics,
 ) -> list[dict[str, Any]]:
     by_order = {entry.source_order: entry for entry in entries}
     english_cjk = sorted(
@@ -540,6 +852,22 @@ def semantic_checks(
     ]
 
 
+def semantic_checks_after_overrides(
+    source_entries: Sequence[WordDraft],
+    reviewed_entries: Sequence[WordDraft],
+    diagnostics: ExtractionDiagnostics,
+) -> list[dict[str, Any]]:
+    source_checks = semantic_checks(source_entries, diagnostics)
+    final_checks = semantic_checks(
+        reviewed_entries,
+        ExtractionDiagnostics(dewrap_counts={}, dewrap_events=()),
+    )
+    # Language assignment belongs to the reviewed final content. Physical
+    # de-wrap checks belong to the source extraction that produced the rows;
+    # replacement examples and definitions intentionally have no source wrap.
+    return final_checks[:2] + source_checks[2:]
+
+
 def _unresolved_count(entries: Sequence[WordDraft]) -> int:
     return sum(
         any(not flag.startswith("reviewed:") for flag in entry.quality_flags)
@@ -582,12 +910,68 @@ def _check(
     return {"name": name, "pass": bool(passed), "expected": expected, "actual": actual}
 
 
+def _reference_strict_profile(
+    reference_sources: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    equivalence = dict(reference_sources.get("equivalence", {}))
+    machine7 = dict(reference_sources.get("machine7", {}))
+    return {
+        "equivalence": {
+            "configured": equivalence.get("configured", False),
+            "sha256": equivalence.get("sha256", ""),
+            "page_count": equivalence.get("page_count", 0),
+            "row_count": equivalence.get("row_count", 0),
+            "unique_headword_count": equivalence.get(
+                "unique_headword_count", 0
+            ),
+            "equivalent_mention_count": equivalence.get(
+                "equivalent_mention_count", 0
+            ),
+            "matched_headword_rows": equivalence.get(
+                "matched_headword_rows", 0
+            ),
+            "matched_equivalent_mentions": equivalence.get(
+                "matched_equivalent_mentions", 0
+            ),
+            "edge_count": equivalence.get("edge_count", 0),
+            "unmatched_headword_count": (
+                len(equivalence["unmatched_headwords"])
+                if "unmatched_headwords" in equivalence
+                else int(equivalence.get("unmatched_headword_count", 0))
+            ),
+            "unmatched_equivalent_count": (
+                len(equivalence["unmatched_equivalents"])
+                if "unmatched_equivalents" in equivalence
+                else int(equivalence.get("unmatched_equivalent_count", 0))
+            ),
+        },
+        "machine7": {
+            "configured": machine7.get("configured", False),
+            "sha256": machine7.get("sha256", ""),
+            "page_count": machine7.get("page_count", 0),
+            "headword_count": machine7.get("headword_count", 0),
+            "unique_headword_count": machine7.get(
+                "unique_headword_count", 0
+            ),
+            "matched_count": machine7.get("matched_count", 0),
+            "unmatched_headword_count": (
+                len(machine7["unmatched_headwords"])
+                if "unmatched_headwords" in machine7
+                else int(machine7.get("unmatched_headword_count", 0))
+            ),
+        },
+    }
+
+
 def strict_checks_from_facts(facts: Mapping[str, Any]) -> list[dict[str, Any]]:
     coverage = facts["physical_coverage"]
     continuity = facts["continuity"]
     page_range = facts["page_range"]
     override_use = facts["override_use"]
     semantic = facts["semantic_checks"]
+    reference_profile = _reference_strict_profile(
+        facts.get("reference_sources", {})
+    )
     expected_continuity = {
         "first_source_order": APPROVED_SOURCE_PROFILE["first_source_order"],
         "last_source_order": APPROVED_SOURCE_PROFILE["last_source_order"],
@@ -693,6 +1077,12 @@ def strict_checks_from_facts(facts: Mapping[str, Any]) -> list[dict[str, Any]]:
             facts["dewrap_counts"],
         ),
         _check(
+            "reference_sources",
+            reference_profile == APPROVED_SOURCE_PROFILE["reference_sources"],
+            APPROVED_SOURCE_PROFILE["reference_sources"],
+            reference_profile,
+        ),
+        _check(
             "semantic_scans",
             all(item.get("pass") is True for item in semantic),
             "all pass",
@@ -712,6 +1102,7 @@ def _facts(
     override_declared: int,
     override_applied: int,
     checks: Sequence[Mapping[str, Any]],
+    reference_sources: Mapping[str, Any],
 ) -> dict[str, Any]:
     return {
         "source_sha256": source_sha256,
@@ -739,6 +1130,7 @@ def _facts(
         ),
         "dewrap_counts": diagnostics.dewrap_counts,
         "semantic_checks": list(checks),
+        "reference_sources": dict(reference_sources),
     }
 
 
@@ -766,6 +1158,7 @@ def _validate_artifact_candidates(
     *,
     facts: Mapping[str, Any],
     override_details: Sequence[Mapping[str, Any]],
+    reference_data: ReferenceData,
     strict: bool,
 ) -> None:
     database_path, json_path, html_path = (
@@ -776,6 +1169,24 @@ def _validate_artifact_candidates(
             database_entries = tuple(
                 repository.get(word_id)
                 for word_id in repository.ids_in_source_order()
+            )
+            database_edges = tuple(
+                EquivalenceEdge(
+                    int(row[0]),
+                    int(row[1]),
+                    tuple(json.loads(str(row[2]))),
+                )
+                for row in repository.db.execute(
+                    "select left_word_id, right_word_id, source_pages "
+                    "from equivalence_edges order by left_word_id, right_word_id"
+                )
+            )
+            database_memberships = tuple(
+                Machine7Membership(int(row[0]), int(row[1]), str(row[2]))
+                for row in repository.db.execute(
+                    "select word_id, source_page, source_headword "
+                    "from machine7_membership order by word_id"
+                )
             )
     except ContentDatabaseError as error:
         raise ValueError(
@@ -810,6 +1221,10 @@ def _validate_artifact_candidates(
                     "candidate database field mismatch at source_order "
                     f"{expected.source_order}: {field}"
                 )
+    if database_edges != reference_data.equivalence_edges:
+        raise ValueError("candidate database equivalence edges mismatch")
+    if database_memberships != reference_data.machine7_memberships:
+        raise ValueError("candidate database machine 7.0 memberships mismatch")
 
     json_bytes = json_path.read_bytes()
     try:
@@ -838,6 +1253,7 @@ def _validate_artifact_candidates(
         override_details=override_details,
         semantic_checks=facts["semantic_checks"],
         strict_checks=expected_strict_checks,
+        reference_sources=facts["reference_sources"],
     )
     expected_json_bytes = (
         json.dumps(
@@ -896,6 +1312,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--audit-json", required=True, type=Path)
     parser.add_argument("--audit-html", required=True, type=Path)
     parser.add_argument("--overrides", required=True, type=Path)
+    parser.add_argument("--equivalence-pdf", type=Path)
+    parser.add_argument("--machine7-pdf", type=Path)
     parser.add_argument("--strict", action="store_true")
     return parser
 
@@ -906,9 +1324,27 @@ def _run(args: argparse.Namespace) -> int:
     source_hash_after = _source_sha256(args.pdf)
     if source_hash_after != source_hash:
         raise ValueError("source PDF changed during extraction")
+    source_entries = entries
     overrides, overrides_hash = _load_overrides_with_hash(args.overrides)
-    entries, override_details = apply_overrides_with_audit(entries, overrides)
-    semantic = semantic_checks(entries, diagnostics)
+    entries, override_details = apply_overrides_with_audit(
+        source_entries, overrides
+    )
+    semantic = semantic_checks_after_overrides(
+        source_entries,
+        entries,
+        diagnostics,
+    )
+    if bool(args.equivalence_pdf) != bool(args.machine7_pdf):
+        raise ValueError(
+            "equivalence PDF and machine 7.0 PDF must be configured together"
+        )
+    reference_data = ReferenceData.empty()
+    if args.equivalence_pdf is not None and args.machine7_pdf is not None:
+        reference_data = load_reference_data(
+            entries,
+            equivalence_pdf=args.equivalence_pdf,
+            machine7_pdf=args.machine7_pdf,
+        )
     facts = _facts(
         entries,
         source_sha256=source_hash,
@@ -919,6 +1355,7 @@ def _run(args: argparse.Namespace) -> int:
         override_declared=len(overrides),
         override_applied=len(override_details),
         checks=semantic,
+        reference_sources=reference_data.facts or {},
     )
     strict_checks = strict_checks_from_facts(facts)
     if args.strict:
@@ -932,7 +1369,17 @@ def _run(args: argparse.Namespace) -> int:
         (args.output, args.audit_json, args.audit_html)
     )
     try:
-        build_database(entries, slots[0].candidate)
+        reference_database_arguments: dict[str, object] = {}
+        if args.equivalence_pdf is not None:
+            reference_database_arguments = {
+                "equivalence_edges": reference_data.equivalence_edges,
+                "machine7_memberships": reference_data.machine7_memberships,
+            }
+        build_database(
+            entries,
+            slots[0].candidate,
+            **reference_database_arguments,
+        )
         summary = write_audit(
             entries,
             slots[1].candidate,
@@ -949,6 +1396,7 @@ def _run(args: argparse.Namespace) -> int:
             override_details=override_details,
             semantic_checks=semantic,
             strict_checks=strict_checks,
+            reference_sources=facts["reference_sources"],
         )
         _validate_artifact_candidates(
             entries,
@@ -956,6 +1404,7 @@ def _run(args: argparse.Namespace) -> int:
             summary,
             facts=facts,
             override_details=override_details,
+            reference_data=reference_data,
             strict=args.strict,
         )
         publish_artifact_slots(slots)

@@ -1,17 +1,3456 @@
 {
+  "7:complimentary": {
+    "source_order": 29,
+    "kinds": ["example"],
+    "reason": "例句说传记作者对女儿的评价并不赞许；原译颠倒了评价者与被评价者。",
+    "evidence": ["source_pdf:page:7", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "梅格的妈妈在书中自己写到：自己是不应该被女儿称赞的。"},
+    "changes": {"example_zh": "梅格的母亲苏珊·乔丹在她写的传记中对女儿评价并不高。"},
+    "reviewed": true
+  },
+  "10:inadvertent": {
+    "source_order": 68,
+    "kinds": ["definition"],
+    "reason": "inadvertent 表示无意或疏忽造成，并非泛指做事不认真；例句中的 error 也采用这一义项。",
+    "evidence": ["source_pdf:page:10", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "不认真的"},
+    "changes": {"definition_zh": "无意的；疏忽造成的"},
+    "reviewed": true
+  },
+  "12:atomize": {
+    "source_order": 92,
+    "kinds": ["definition"],
+    "reason": "英文释义和推进剂例句均为化成微粒或雾化；原译“分裂”遗漏了例句所用核心义项。",
+    "evidence": ["source_pdf:page:12", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "分裂"},
+    "changes": {"definition_zh": "使成为微粒；使雾化"},
+    "reviewed": true
+  },
+  "12:rescind": {
+    "source_order": 93,
+    "kinds": ["example"],
+    "reason": "rescind the price rise 是撤销已经作出的涨价决定，不是事前阻止价格上涨。",
+    "evidence": ["source_pdf:page:12", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "工会领导已经要求政府阻止价格上涨。"},
+    "changes": {"example_zh": "工会领导人已要求政府取消这次涨价。"},
+    "reviewed": true
+  },
+  "12:paraphernalia": {
+    "source_order": 95,
+    "kinds": ["definition"],
+    "reason": "fishing paraphernalia 指钓鱼所需的一套用具；仅译为“私人物品”无法覆盖例句义项。",
+    "evidence": ["source_pdf:page:12", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_en": "n. personal belongings", "definition_zh": "私人物品"},
+    "changes": {"definition_en": "n. personal belongings or the equipment used for a particular activity", "definition_zh": "随身用品；（特定活动所需的）装备"},
+    "reviewed": true
+  },
+  "19:quench": {
+    "source_order": 172,
+    "kinds": ["definition"],
+    "reason": "例句 quench his thirst 使用“解渴”义，而原释义只列“终结”，造成释义与例句不吻合。",
+    "evidence": ["source_pdf:page:19", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_en": "v. to terminate by or as if by destroying", "definition_zh": "结束，终结"},
+    "changes": {"definition_en": "(1)v. to satisfy (thirst) (2)v. to extinguish or suppress", "definition_zh": "(1)解（渴） (2)扑灭；抑制"},
+    "reviewed": true
+  },
+  "48:redoubtable": {
+    "source_order": 513,
+    "kinds": ["example"],
+    "reason": "redoubtable fighter 是令人敬畏、难以对付的斗士，不是“攻击性战士”。",
+    "evidence": ["source_pdf:page:48", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "她是个攻击性战士，陌生的猫在一轮较量中就会被征服。"},
+    "changes": {"example_zh": "她是个令人敬畏的斗士，陌生的猫一轮就会被她击败。"},
+    "reviewed": true
+  },
+  "55:verity": {
+    "source_order": 600,
+    "kinds": ["example"],
+    "reason": "原译缺少谓语，无法表达 reveals；补全为“揭示了”。",
+    "evidence": ["source_pdf:page:55", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "这本书关于人性的一些事实。"},
+    "changes": {"example_zh": "这本书揭示了关于人性的一些真理。"},
+    "reviewed": true
+  },
+  "57:wealth": {
+    "source_order": 614,
+    "kinds": ["example"],
+    "reason": "句中 industry 指工业，不是“勤劳”；原译把名词义项误换成了另一词义。",
+    "evidence": ["source_pdf:page:57", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "勤劳的目的是致富。"},
+    "changes": {"example_zh": "工业的目的是创造财富。"},
+    "reviewed": true
+  },
+  "73:founder": {
+    "source_order": 807,
+    "kinds": ["definition"],
+    "reason": "原中文把动词和名词两个义项直接粘成“失败创建人”，既缺少词性也容易误解。",
+    "evidence": ["source_pdf:page:73", "manual:definition-sense-boundary-adjudication"],
+    "expected_before": {"definition_zh": "失败创建人"},
+    "changes": {"definition_zh": "(1)失败；垮掉 (2)创办人"},
+    "reviewed": true
+  },
+  "75:mesmerize": {
+    "source_order": 837,
+    "kinds": ["example"],
+    "reason": "surprise and mesmerize 的宾语是读者；原译把 mesmerize 机械译为“催眠”且句法不成立。",
+    "evidence": ["source_pdf:page:75", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "像所有伟大的著作，它有一个持久的力量感到惊讶和催眠。"},
+    "changes": {"example_zh": "像所有伟大的著作一样，它拥有持久的力量，能不断给人惊喜并使人着迷。"},
+    "reviewed": true
+  },
+  "82:infallibility": {
+    "source_order": 913,
+    "kinds": ["definition"],
+    "reason": "infallibility 是不会出错或绝对正确的性质；“无过失”会误导为法律上的无过错。",
+    "evidence": ["source_pdf:page:82", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "无过失"},
+    "changes": {"definition_zh": "不会犯错；绝对正确"},
+    "reviewed": true
+  },
+  "83:flush": {
+    "source_order": 921,
+    "kinds": ["definition"],
+    "reason": "例句 flushed with fury 描写因愤怒而满脸通红；原译只写“激动”遗漏了直接呈现的义项。",
+    "evidence": ["source_pdf:page:83", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "激动"},
+    "changes": {"definition_zh": "使脸红；使激动"},
+    "reviewed": true
+  },
+  "86:primacy": {
+    "source_order": 950,
+    "kinds": ["definition"],
+    "reason": "primacy 是居首或占主导的地位，不等同于泛泛的“卓越”；例句指州的优先地位。",
+    "evidence": ["source_pdf:page:86", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "卓越"},
+    "changes": {"definition_zh": "首要地位；主导权"},
+    "reviewed": true
+  },
+  "89:adjudicate": {
+    "source_order": 993,
+    "kinds": ["example"],
+    "reason": "subcommittee 是“小组委员会”，原译“特别小的组委会”错误切分了复合词。",
+    "evidence": ["source_pdf:page:89", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "有一个特别小的组委会裁决规划申请项目。"},
+    "changes": {"example_zh": "一个特别小组委员会负责裁定规划申请。"},
+    "reviewed": true
+  },
+  "95:decipher": {
+    "source_order": 1060,
+    "kinds": ["definition"],
+    "reason": "garbled messages 需要“破译、解读”，原译“解释”过宽且没有体现辨读困难信息的语义。",
+    "evidence": ["source_pdf:page:95", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "解释"},
+    "changes": {"definition_zh": "破译；解读"},
+    "reviewed": true
+  },
+  "96:unnerve": {
+    "source_order": 1064,
+    "kinds": ["definition"],
+    "reason": "unnerve 指使失去勇气、信心或镇定，并不表示“使疲倦”。",
+    "evidence": ["source_pdf:page:96", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "使失去勇气，使疲倦"},
+    "changes": {"definition_zh": "使失去勇气、信心或镇定"},
+    "reviewed": true
+  },
+  "97:usage": {
+    "source_order": 1076,
+    "kinds": ["definition"],
+    "reason": "例句 constant usage 明确指持续使用；原释义“对待方式”与例句义项不符。",
+    "evidence": ["source_pdf:page:97", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_en": "n. manner of treating", "definition_zh": "对待方式"},
+    "changes": {"definition_en": "n. the act, manner, or amount of using something", "definition_zh": "使用；用法"},
+    "reviewed": true
+  },
+  "118:catchy": {
+    "source_order": 1323,
+    "kinds": ["example"],
+    "reason": "版面中的金额行被错误归入中文栏，导致英文句子截断且中文以 $10 开头；按原始行顺序复原双语边界。",
+    "evidence": ["source_pdf:page:118", "manual:raw-example-column-boundary-adjudication"],
+    "expected_before": {"example_en": "If you can think of a catchy domain name, get it registered for less than", "example_zh": "$10.如果你能想到的一个引人注目的域名，注册用不了10美元。"},
+    "changes": {"example_en": "If you can think of a catchy domain name, get it registered for less than $10.", "example_zh": "如果你能想到一个引人注目的域名，注册费用不到 10 美元。"},
+    "reviewed": true
+  },
+  "130:disenchant": {
+    "source_order": 1469,
+    "kinds": ["example"],
+    "reason": "原译无依据地加入“以往的成绩”，并漏掉 If something...it would be 的判断结构。",
+    "evidence": ["source_pdf:page:130", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "一个依赖以往的成绩和无所不能的形象来争取选票的政治领导人, 只会使选民感到失望。"},
+    "changes": {"example_zh": "如果有什么会让选民失望，那就是政治领导人靠塑造无所不能的形象来拉票。"},
+    "reviewed": true
+  },
+  "136:jeremiad": {
+    "source_order": 1524,
+    "kinds": ["example"],
+    "reason": "jeremiad against the ills 是对弊病的长篇悲叹；原译把 against 拆成两次“反对”，并误译 visited upon。",
+    "evidence": ["source_pdf:page:136", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "西格尔的书是一本哀史，它反对祸害，反对网络，这些已经逗留在我们生命中的东西。"},
+    "changes": {"example_zh": "西格尔的书是一篇针对互联网给我们生活带来种种弊病的长篇悲叹。"},
+    "reviewed": true
+  },
+  "138:whimsical": {
+    "source_order": 1555,
+    "kinds": ["definition"],
+    "reason": "例句采用“异想天开的”义项，原释义只列“难以预测的”，造成义项脱节。",
+    "evidence": ["source_pdf:page:138", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_en": "adj. subject to erratic behavior or unpredictable change", "definition_zh": "难以预测的"},
+    "changes": {"definition_en": "adj. fanciful or playfully unusual; also subject to unpredictable change", "definition_zh": "异想天开的；反复无常的"},
+    "reviewed": true
+  },
+  "139:brackish": {
+    "source_order": 1560,
+    "kinds": ["definition"],
+    "reason": "brackish 的本义是微咸，亦可指味道难以下咽；原译“令人恶心”过强且遗漏本义。",
+    "evidence": ["source_pdf:page:139", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_en": "adj. distasteful, unpalatable", "definition_zh": "令人恶心的"},
+    "changes": {"definition_en": "adj. slightly salty; distasteful or unpalatable", "definition_zh": "微咸的；难以下咽的"},
+    "reviewed": true
+  },
+  "155:ecumenical": {
+    "source_order": 1746,
+    "kinds": ["definition", "example"],
+    "reason": "住房事工语境中的 ecumenical 指跨基督教派；原译“向大众提供普通屋”误解了宗教义项和 housing ministry。",
+    "evidence": ["source_pdf:page:155", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_en": "adj. worldwide or general in extent, influence, or application", "definition_zh": "普遍的，世界范围的", "example_zh": "国际人类住房项目成立于1976年，是一个向大众提供普通屋的非营利性教会组织。"},
+    "changes": {"definition_en": "adj. worldwide in scope; promoting unity among Christian churches", "definition_zh": "普遍的；跨基督教派的", "example_zh": "国际仁人家园成立于 1976 年，是一个非营利性的跨教派住房事工组织。"},
+    "reviewed": true
+  },
+  "174:importunate": {
+    "source_order": 1962,
+    "kinds": ["example"],
+    "reason": "importunate prayer 在此指反复、恳切而不懈的祈祷；“强求性祈祷”是生硬误译。",
+    "evidence": ["source_pdf:page:174", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "他的胜利说明了强求性祈祷的力量。"},
+    "changes": {"example_zh": "他的胜利证明了恳切不懈的祈祷所具有的力量。"},
+    "reviewed": true
+  },
+  "190:arousal": {
+    "source_order": 2157,
+    "kinds": ["example"],
+    "reason": "stress hormones 是“应激激素”，perpetual arousal 是持续警觉或亢奋；原译“压迫性荷尔蒙/永久的唤醒状态”均不准确。",
+    "evidence": ["source_pdf:page:190", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "这类沉思和忧虑激发压迫性荷尔蒙，使我们处在一种永久的唤醒状态。"},
+    "changes": {"example_zh": "这类反复思虑和焦躁会激活应激激素，使我们长期处于亢奋和警觉状态。"},
+    "reviewed": true
+  },
+  "192:voluminous": {
+    "source_order": 2174,
+    "kinds": ["definition"],
+    "reason": "voluminous file 指篇幅或数量庞大的档案；“容量大的”不能自然表达该义项。",
+    "evidence": ["source_pdf:page:192", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "容量大的"},
+    "changes": {"definition_zh": "大量的；卷帙浩繁的"},
+    "reviewed": true
+  },
+  "192:people": {
+    "source_order": 2177,
+    "kinds": ["definition"],
+    "reason": "这里 people 是动词，表示使某处充满人物；原译“充满人”缺少使动结构。",
+    "evidence": ["source_pdf:page:192", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "充满人"},
+    "changes": {"definition_zh": "使充满人；居住于"},
+    "reviewed": true
+  },
+  "194:abstemious": {
+    "source_order": 2198,
+    "kinds": ["example"],
+    "reason": "eccentrically abstemious 是节制得显得古怪，不是“看起来像怪物”；原译把形容行为方式误成名词身份。",
+    "evidence": ["source_pdf:page:194", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "美国大部分地方，那些尝试过简朴生活的人，已经看起来象怪物了。"},
+    "changes": {"example_zh": "在美国大部分地区，想过健康生活的人会显得节制得有些古怪。"},
+    "reviewed": true
+  },
+  "198:anatomize": {
+    "source_order": 2242,
+    "kinds": ["example"],
+    "reason": "dimension 应译为“维度”，原译“纬度”是形近字导致的术语错误。",
+    "evidence": ["source_pdf:page:198", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "论文试图从现代国家构建的纬度来探析中国的区域差距问题。"},
+    "changes": {"example_zh": "论文试图从现代国家构建的维度来剖析中国的区域差距问题。"},
+    "reviewed": true
+  },
+  "199:affirm": {
+    "source_order": 2254,
+    "kinds": ["definition"],
+    "reason": "affirm 是说话者有把握地断言或证实；“确信”只描述内在状态，词性搭配也不完整。",
+    "evidence": ["source_pdf:page:199", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "确信"},
+    "changes": {"definition_zh": "断言；证实"},
+    "reviewed": true
+  },
+  "205:hand-wringing": {
+    "source_order": 2325,
+    "kinds": ["definition"],
+    "reason": "hand-wringing 表示过度焦虑或忧心忡忡，不等于绝望；例句也是对债务的担忧。",
+    "evidence": ["source_pdf:page:205", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "绝望"},
+    "changes": {"definition_zh": "忧心忡忡；过度焦虑"},
+    "reviewed": true
+  },
+  "222:coterminous": {
+    "source_order": 2522,
+    "kinds": ["definition", "example"],
+    "reason": "coterminous 强调边界重合或范围相同，不只是毗邻；中国与泰国并不接壤，原例句事实错误，改用中性可核验例句。",
+    "evidence": ["source_pdf:page:222", "manual:definition-example-factual-adjudication"],
+    "expected_before": {"definition_zh": "毗邻的", "example_en": "China and Thailand are coterminous.", "example_zh": "中国和泰国是毗连的。"},
+    "changes": {"definition_zh": "边界重合的；范围相同的", "example_en": "The two jurisdictions are coterminous.", "example_zh": "这两个司法辖区的边界重合。"},
+    "reviewed": true
+  },
+  "223:interlope": {
+    "source_order": 2543,
+    "kinds": ["example"],
+    "reason": "原例句把物理学中的 interpolate 误写成 interlope，并把 anyons 误译为介子，不能示范本词“闯入他人领域”的用法。",
+    "evidence": ["source_pdf:page:223", "manual:independent-example-semantic-adjudication"],
+    "expected_before": {"example_en": "The anyons interlope between bosons and fermions.", "example_zh": "介子在玻色子和费米子之间插入。"},
+    "changes": {"example_en": "He was accused of interloping in a field outside his expertise.", "example_zh": "他被指责擅自插手自己专业之外的领域。"},
+    "reviewed": true
+  },
+  "228:asseverate": {
+    "source_order": 2609,
+    "kinds": ["example"],
+    "reason": "asseverate my conviction 是郑重声明自己的确信；原译把 conviction 误作“判决”并导致句法错误。",
+    "evidence": ["source_pdf:page:228", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "我坚持她是有罪的判决。"},
+    "changes": {"example_zh": "我将郑重声明：我确信她有罪。"},
+    "reviewed": true
+  },
+  "234:oblivious": {
+    "source_order": 2661,
+    "kinds": ["definition", "example"],
+    "reason": "be oblivious of what is happening 表示没有察觉正在发生的事，不是事后忘却。",
+    "evidence": ["source_pdf:page:234", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "遗忘的", "example_zh": "他已经忘却发生什么事了。"},
+    "changes": {"definition_zh": "未察觉的；不在意的", "example_zh": "他没有察觉正在发生什么。"},
+    "reviewed": true
+  },
+  "243:bemuse": {
+    "source_order": 2757,
+    "kinds": ["example"],
+    "reason": "原译“海外读头雾水”漏字，补全为自然且完整的中文。",
+    "evidence": ["source_pdf:page:243", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "书中提到了捉浣熊的笑话或许会令海外读头雾水。"},
+    "changes": {"example_zh": "书中关于捕猎浣熊的笑话可能会让海外读者摸不着头脑。"},
+    "reviewed": true
+  },
+  "246:secure": {
+    "source_order": 2791,
+    "kinds": ["example"],
+    "reason": "secure a place 是赢得席位；原译“拼得”是明显错字且不自然。",
+    "evidence": ["source_pdf:page:246", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "球队拼得了决赛的一席之地。"},
+    "changes": {"example_zh": "球队成功赢得了一个决赛席位。"},
+    "reviewed": true
+  },
+  "250:plastic": {
+    "source_order": 2837,
+    "kinds": ["example"],
+    "reason": "plastic smiles 在此指虚假、不真诚的笑容；“刻板”没有表达该义项。",
+    "evidence": ["source_pdf:page:250", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "语言陈腐、笑容刻板的电视竞赛节目主持人"},
+    "changes": {"example_zh": "那些说话陈腐、笑容虚假的电视竞赛节目主持人。"},
+    "reviewed": true
+  },
+  "253:portentous": {
+    "source_order": 2884,
+    "kinds": ["definition"],
+    "reason": "原中文把两个形容词义项直接粘连且使用名词短语“不祥之兆的”；按英文释义拆分并改为自然形容词。",
+    "evidence": ["source_pdf:page:253", "manual:definition-sense-boundary-adjudication"],
+    "expected_before": {"definition_en": "adj. showing that something important is going to happen, especially something bad adj. eliciting amazement or wonder", "definition_zh": "不祥之兆的令人惊讶的"},
+    "changes": {"definition_en": "(1)adj. showing that something important, especially something bad, may happen (2)adj. eliciting amazement or wonder", "definition_zh": "(1)预示重大（尤指不祥）事件的 (2)令人惊异的"},
+    "reviewed": true
+  },
+  "255:interlocutor": {
+    "source_order": 2900,
+    "kinds": ["example"],
+    "reason": "英文比较对象是 Mr Trump，原译却无依据地写成普京，并把 interlocutor 误成总统。",
+    "evidence": ["source_pdf:page:255", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "他相对于普京来说是一个更加合适和西方进行愉悦对话的总统。"},
+    "changes": {"example_zh": "与特朗普相比，他是一个更容易被西方接受的对话者。"},
+    "reviewed": true
+  },
+  "259:coax": {
+    "source_order": 2952,
+    "kinds": ["example"],
+    "reason": "the secret 是“秘密”，原译“秘方”无上下文依据。",
+    "evidence": ["source_pdf:page:259", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "他试图哄骗我说出秘方。"},
+    "changes": {"example_zh": "他试图哄我说出秘密。"},
+    "reviewed": true
+  },
+  "268:personable": {
+    "source_order": 3049,
+    "kinds": ["example"],
+    "reason": "in the company of the boss 是“与老板相处时”，不是“在老板的公司里”。",
+    "evidence": ["source_pdf:page:268", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "每个人都知道在老板的公司里聪明的做法是友善、和睦。"},
+    "changes": {"example_zh": "人人都知道，与老板相处时表现得友善而讨人喜欢是明智的。"},
+    "reviewed": true
+  },
+  "269:eligible": {
+    "source_order": 3064,
+    "kinds": ["example"],
+    "reason": "原译“不能参加考试资格”缺少“有/没有”结构，语法不成立。",
+    "evidence": ["source_pdf:page:269", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "迈克不能参加考试资格，因他已超龄"},
+    "changes": {"example_zh": "迈克因年龄超限而没有资格参加考试。"},
+    "reviewed": true
+  },
+  "269:diffident": {
+    "source_order": 3068,
+    "kinds": ["example"],
+    "reason": "原译缺少必要介词且语序不自然；diffident about 表示缺乏自信、不敢做某事。",
+    "evidence": ["source_pdf:page:269", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "他在公开场合表达自己的意见感到胆怯。"},
+    "changes": {"example_zh": "他不敢在公开场合表达自己的意见。"},
+    "reviewed": true
+  },
+  "273:acquittal": {
+    "source_order": 3113,
+    "kinds": ["definition"],
+    "reason": "acquittal 是司法程序作出的无罪判决，不是有罪后获得的赦免。",
+    "evidence": ["source_pdf:page:273", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "赦免"},
+    "changes": {"definition_zh": "无罪判决；宣告无罪"},
+    "reviewed": true
+  },
+  "273:lockstep": {
+    "source_order": 3114,
+    "kinds": ["definition", "example"],
+    "reason": "in lockstep 指机械地步调一致；原释义和例译只给“因循守旧/按部就班”，遗漏一致行动。",
+    "evidence": ["source_pdf:page:273", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "因循守旧", "example_zh": "工会的支持多年来一直按部就班地延续着。"},
+    "changes": {"definition_zh": "步调一致；机械一致", "example_zh": "工会多年来始终步调一致地给予支持。"},
+    "reviewed": true
+  },
+  "274:villain": {
+    "source_order": 3122,
+    "kinds": ["definition"],
+    "reason": "villain 是与主角对立的反派角色；“反派主角”把相反角色概念粘在一起。",
+    "evidence": ["source_pdf:page:274", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "反派主角"},
+    "changes": {"definition_zh": "反派角色；恶棍"},
+    "reviewed": true
+  },
+  "274:tried-and-true": {
+    "source_order": 3125,
+    "kinds": ["example"],
+    "reason": "原译无依据地加入“挥杆八步法”和“高尔夫”，英文只说把久经验证的原则用于自己的比赛。",
+    "evidence": ["source_pdf:page:274", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "现在你能把挥杆八步法的真正原理应用到你自己的高尔夫运动中了。"},
+    "changes": {"example_zh": "现在你可以把这些久经验证的原则运用到自己的比赛中。"},
+    "reviewed": true
+  },
+  "275:denunciate": {
+    "source_order": 3133,
+    "kinds": ["example"],
+    "reason": "原英文含 wet sites 等明显误写，中文也有“博克”等错字；替换为词义明确、双语对应的简洁例句。",
+    "evidence": ["source_pdf:page:275", "manual:independent-example-semantic-adjudication"],
+    "expected_before": {"example_en": "When this story is seen by internet friends at Zhang's blog and some wet sites, thousands of internet friends denunciate their bad behavior.", "example_zh": "这个故事被网友在张的博克及一些网站看到后，成千上万的网友指责他们的行为。"},
+    "changes": {"example_en": "Thousands of readers denounced their bad behavior online.", "example_zh": "成千上万的读者在网上谴责了他们的不良行为。"},
+    "reviewed": true
+  },
+  "276:steep": {
+    "source_order": 3143,
+    "kinds": ["example"],
+    "reason": "be steeped in 表示深深浸润或植根于传统；原译“传统中非常多”不成立。",
+    "evidence": ["source_pdf:page:276", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "这种叫Afrofuturism的美学运动在美国黑人音乐传统中非常多。"},
+    "changes": {"example_zh": "这种名为“非洲未来主义”的美学运动深深植根于非裔美国人的音乐传统。"},
+    "reviewed": true
+  },
+  "276:raze": {
+    "source_order": 3154,
+    "kinds": ["example"],
+    "reason": "on the site 是在原址，不是“在网站上”；同时调整中文语序。",
+    "evidence": ["source_pdf:page:276", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "业主打算夷平酒店和竖立一座办公大楼在网站上。"},
+    "changes": {"example_zh": "业主打算拆除酒店，并在原址建一座办公楼。"},
+    "reviewed": true
+  },
+  "277:undergird": {
+    "source_order": 3160,
+    "kinds": ["example"],
+    "reason": "原译主谓关系断裂；英文说明大脑促成复杂社会组织与技术、经济、科学积累，而这些共同支撑现代文明。",
+    "evidence": ["source_pdf:page:277", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "正是我们的大脑才出现了复杂的社会组织、技术、经济、科学进步的积累不管怎么说，都是这些才奠定了当代文明。"},
+    "changes": {"example_zh": "正是大脑使复杂的社会组织以及技术、经济和科学进步得以积累；无论好坏，正是这些支撑着现代文明。"},
+    "reviewed": true
+  },
+  "278:subsume": {
+    "source_order": 3177,
+    "kinds": ["example"],
+    "reason": "原译“包纳交集很多”无可解释；subsume 表示把较小单位的职责纳入更大单位。",
+    "evidence": ["source_pdf:page:278", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "邦国负责收税也包纳交集很多郡县一级的治理职责。"},
+    "changes": {"example_zh": "各州征收税款，并将郡县的许多治理职责纳入自身职权。"},
+    "reviewed": true
+  },
+  "279:prurient": {
+    "source_order": 3184,
+    "kinds": ["example"],
+    "reason": "with prurient interest 修饰阅读方式，表示带着窥私和色情猎奇兴趣；原译把 interest 错接到流言内容上。",
+    "evidence": ["source_pdf:page:279", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "我们读到关于他们对色欲之兴趣的流言。"},
+    "changes": {"example_zh": "我们怀着窥私猎奇的兴趣阅读关于他们的八卦。"},
+    "reviewed": true
+  },
+  "288:ravenous": {
+    "source_order": 3286,
+    "kinds": ["example"],
+    "reason": "immortal 是“不朽的”，原译“无法无天”完全属于另一概念。",
+    "evidence": ["source_pdf:page:288", "manual:english-chinese-example-semantic-adjudication"],
+    "expected_before": {"example_zh": "类星体就像是宇宙中最贪得无厌，最无法无天的怪家伙。"},
+    "changes": {"example_zh": "类星体或许是宇宙中最贪婪、最不朽的巨兽。"},
+    "reviewed": true
+  },
+  "288:per se": {
+    "source_order": 3290,
+    "kinds": ["definition", "example"],
+    "reason": "per se 是“就其本身而言/严格说来”；physically active 是身体活动量大，不是“体能上很有力”。",
+    "evidence": ["source_pdf:page:288", "manual:definition-example-sense-alignment"],
+    "expected_before": {"definition_zh": "本质上", "example_zh": "我本身不锻炼，但我体能上很有力。"},
+    "changes": {"definition_zh": "就其本身而言；严格说来", "example_zh": "严格说来，我并不专门健身，但我平时身体活动量很大。"},
+    "reviewed": true
+  },
+  "5:proselytize": {
+    "source_order": 10,
+    "kinds": [
+      "example"
+    ],
+    "reason": "例句中的 proselytize 是比喻用法，指极力宣传并劝人接受某项工作或观点；原译“变节”把它误解成 betray/defect，语义和论元结构都不成立。",
+    "evidence": [
+      "source_pdf:page:5",
+      "manual:english-chinese-example-semantic-adjudication",
+      "https://www.merriam-webster.com/dictionary/proselytize",
+      "https://dictionary.cambridge.org/dictionary/english/proselytize"
+    ],
+    "expected_before": {
+      "example_zh": "不要变节你的工作或观念"
+    },
+    "changes": {
+      "example_zh": "不要极力向别人宣扬你的工作或观点。"
+    },
+    "reviewed": true
+  },
+  "5:nefarious": {
+    "source_order": 9,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The source uses a nonstandard first vowel, Greek epsilon, and ASCII stress; normalize to the verified British IPA.",
+    "evidence": [
+      "source_pdf:page:5",
+      "Full 3,292-row structural audit plus local CMUdict comparison.",
+      "https://dictionary.cambridge.org/pronunciation/english/nefarious"
+    ],
+    "expected_before": {
+      "phonetic": "[ni'fεəriəs]"
+    },
+    "changes": {
+      "phonetic": "[nəˈfeəriəs]"
+    },
+    "reviewed": true
+  },
+  "10:indiscriminate": {
+    "source_order": 64,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "The English definition lacks an explicit adjective label.",
+    "evidence": [
+      "source_pdf:page:10",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/indiscriminate"
+    ],
+    "expected_before": {
+      "definition_en": "(1)affecting or harming many people or things in a careless or unfair way (2)not careful in making choices",
+      "definition_zh": "肆意的，不加区别的盲目的"
+    },
+    "changes": {
+      "definition_en": "(1)adj. affecting or harming many people or things without careful distinction (2)adj. not careful in making choices",
+      "definition_zh": "(1)不加区别的；任意的 (2)不加选择的"
+    },
+    "reviewed": true
+  },
+  "11:disjunction": {
+    "source_order": 79,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current example uses the questionable compound mal-disjunction rather than the headword's defined cleavage sense.",
+    "evidence": [
+      "source_pdf:page:11",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "The failure of any process in meiosis can result in chromosome mal-disjunction.",
+      "example_zh": "这个过程中,任何一个环节的错误都可能会导致染色体的异常分离。"
+    },
+    "changes": {
+      "example_en": "There is a sharp disjunction between the government's promises and its actions.",
+      "example_zh": "政府的承诺与行动之间存在明显脱节。"
+    },
+    "reviewed": true
+  },
+  "12:forage": {
+    "source_order": 88,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "标记和例句都是动词，但英文释义 `food for animals...` 是名词义，三者不一致。",
+    "evidence": [
+      "source_pdf:page:12",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/forage"
+    ],
+    "expected_before": {
+      "definition_en": "v. food for animals especially when taken by browsing or grazing"
+    },
+    "changes": {
+      "definition_en": "v. to search for food"
+    },
+    "reviewed": true
+  },
+  "12:disdain": {
+    "source_order": 96,
+    "kinds": [
+      "example"
+    ],
+    "reason": "释义是名词，例句 `disdained` 用作动词。",
+    "evidence": [
+      "source_pdf:page:12",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Jackie disdained the servants that her millions could buy.",
+      "example_zh": "杰姬鄙视那些她用钱就可以收买的奴仆。"
+    },
+    "changes": {
+      "example_en": "She regarded the proposal with disdain.",
+      "example_zh": "她以轻蔑的态度看待这项提议。"
+    },
+    "reviewed": true
+  },
+  "14:assent": {
+    "source_order": 114,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses assent as a noun.",
+    "evidence": [
+      "source_pdf:page:14",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "The director has given her assent to the proposals.",
+      "example_zh": "负责人已表示同意提案。"
+    },
+    "changes": {
+      "example_en": "The board assented to the revised proposal.",
+      "example_zh": "董事会同意了修订后的提案。"
+    },
+    "reviewed": true
+  },
+  "14:ruthless": {
+    "source_order": 116,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "The definition and example are adjectival, but the current part-of-speech label is v.",
+    "evidence": [
+      "source_pdf:page:14",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/ruthless"
+    ],
+    "expected_before": {
+      "definition_en": "v. merciless, cruel",
+      "definition_zh": "无情的，残忍的"
+    },
+    "changes": {
+      "definition_en": "adj. merciless or cruel",
+      "definition_zh": "无情的；残忍的"
+    },
+    "reviewed": true
+  },
+  "16:monitor": {
+    "source_order": 130,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses monitors as a plural noun meaning supervisors.",
+    "evidence": [
+      "source_pdf:page:16",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Government monitors will continue to accompany reporters.",
+      "example_zh": "政府监督员将继续陪同记者。"
+    },
+    "changes": {
+      "example_en": "The agency will continue to monitor the situation closely.",
+      "example_zh": "该机构将继续密切监测事态发展。"
+    },
+    "reviewed": true
+  },
+  "18:esteem": {
+    "source_order": 149,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but 'in high esteem' in the current example is a noun phrase.",
+    "evidence": [
+      "source_pdf:page:18",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "She is held in high esteem by her colleagues.",
+      "example_zh": "她深受同事的敬重。"
+    },
+    "changes": {
+      "example_en": "Her colleagues esteem her for her integrity.",
+      "example_zh": "同事们因她为人正直而敬重她。"
+    },
+    "reviewed": true
+  },
+  "19:exile": {
+    "source_order": 170,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but 'into exile' in the current example uses the noun sense.",
+    "evidence": [
+      "source_pdf:page:19",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Napoleon was sent into exile on an island.",
+      "example_zh": "拿破仑被流放到一个岛上。"
+    },
+    "changes": {
+      "example_en": "The regime exiled its political opponents to remote islands.",
+      "example_zh": "该政权把政治反对者流放到偏远岛屿。"
+    },
+    "reviewed": true
+  },
+  "21:rebuff": {
+    "source_order": 190,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses rebuff as a noun.",
+    "evidence": [
+      "source_pdf:page:21",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Her offer of help was met with a sharp rebuff.",
+      "example_zh": "她主动帮忙，却遭到断然拒绝。"
+    },
+    "changes": {
+      "example_en": "She rebuffed his offer of help.",
+      "example_zh": "她断然拒绝了他的帮助。"
+    },
+    "reviewed": true
+  },
+  "22:commonplace": {
+    "source_order": 204,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The entry defines a noun, while the current example uses commonplace as a predicate adjective.",
+    "evidence": [
+      "source_pdf:page:22",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Vagrancy and begging has become commonplace in London.",
+      "example_zh": "流浪和乞讨在伦敦已变得很常见。"
+    },
+    "changes": {
+      "example_en": "Street begging has become a commonplace in London.",
+      "example_zh": "街头乞讨在伦敦已成了常见现象。"
+    },
+    "reviewed": true
+  },
+  "24:acclimate": {
+    "source_order": 226,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current example uses an uninflected verb after become and contains additional agreement errors.",
+    "evidence": [
+      "source_pdf:page:24",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Jim have become acclimate to this weather since he move here.",
+      "example_zh": "吉姆搬到这里后，他已适应这里的天气。"
+    },
+    "changes": {
+      "example_en": "Jim has acclimated to the weather since he moved here.",
+      "example_zh": "吉姆搬来后已经适应了这里的天气。"
+    },
+    "reviewed": true
+  },
+  "28:defining": {
+    "source_order": 269,
+    "kinds": [
+      "definition"
+    ],
+    "reason": "The English definition contains only the part-of-speech label and no gloss.",
+    "evidence": [
+      "source_pdf:page:28",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/defining"
+    ],
+    "expected_before": {
+      "definition_en": "adj.",
+      "definition_zh": "起决定性作用的"
+    },
+    "changes": {
+      "definition_en": "adj. having a decisive influence on the character or development of something",
+      "definition_zh": "起决定性作用的；界定性的"
+    },
+    "reviewed": true
+  },
+  "29:savvy": {
+    "source_order": 292,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "The noun label and noun example are correct, but the current English gloss is written as an adjective definition.",
+    "evidence": [
+      "source_pdf:page:29",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/savvy"
+    ],
+    "expected_before": {
+      "definition_en": "n. having or showing perception, comprehension, or shrewdness especially in practical matters",
+      "definition_zh": "悟性"
+    },
+    "changes": {
+      "definition_en": "n. practical knowledge, understanding, or shrewdness",
+      "definition_zh": "实际知识；悟性；精明"
+    },
+    "reviewed": true
+  },
+  "31:diffuse": {
+    "source_order": 313,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains adjective and verb senses, whose final consonants differ; label both pronunciations explicitly.",
+    "evidence": [
+      "source_pdf:page:31",
+      "Full mixed-part-of-speech pronunciation audit.",
+      "https://dictionary.cambridge.org/pronunciation/english/diffuse"
+    ],
+    "expected_before": {
+      "phonetic": "[dɪˈfju:s]"
+    },
+    "changes": {
+      "phonetic": "[adj. dɪˈfjuːs; v. dɪˈfjuːz]"
+    },
+    "reviewed": true
+  },
+  "33:design": {
+    "source_order": 332,
+    "kinds": [
+      "example"
+    ],
+    "reason": "释义是名词，例句 `to design` 是动词。",
+    "evidence": [
+      "source_pdf:page:33",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "They wanted to design a machine that was both attractive and practical.",
+      "example_zh": "他们想设计一种既美观又实用的机械。"
+    },
+    "changes": {
+      "example_en": "The machine's design is both attractive and practical.",
+      "example_zh": "这台机器的设计既美观又实用。"
+    },
+    "reviewed": true
+  },
+  "34:abreast": {
+    "source_order": 337,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "The example uses abreast adverbially, while the current entry labels it only as an adjective.",
+    "evidence": [
+      "source_pdf:page:34",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/abreast"
+    ],
+    "expected_before": {
+      "definition_en": "adj. side by side",
+      "definition_zh": "平行的，并列的"
+    },
+    "changes": {
+      "definition_en": "adv. side by side and facing or moving in the same direction",
+      "definition_zh": "并排地；并肩地"
+    },
+    "reviewed": true
+  },
+  "36:revel": {
+    "source_order": 367,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses revels as a plural noun.",
+    "evidence": [
+      "source_pdf:page:36",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Christmas revels with feasting and dancing were common in England.",
+      "example_zh": "圣诞节的狂欢歌舞在英国是很常见的。"
+    },
+    "changes": {
+      "example_en": "They reveled in the success of the project.",
+      "example_zh": "他们陶醉于项目的成功。"
+    },
+    "reviewed": true
+  },
+  "39:approximate": {
+    "source_order": 409,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains adjective and verb senses and the example is verbal; preserve both part-of-speech pronunciations explicitly.",
+    "evidence": [
+      "source_pdf:page:39",
+      "Full mixed-part-of-speech and example-usage audit.",
+      "https://dictionary.cambridge.org/pronunciation/english/approximate"
+    ],
+    "expected_before": {
+      "phonetic": "[ə'prɑksɪmət]"
+    },
+    "changes": {
+      "phonetic": "[adj. əˈprɒksɪmət; v. əˈprɒksɪmeɪt]"
+    },
+    "reviewed": true
+  },
+  "45:altercate": {
+    "source_order": 472,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current sentence incorrectly uses the base verb as a noun subject and is grammatically malformed.",
+    "evidence": [
+      "source_pdf:page:45",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Altercate between friends is just a matter of self-pride, there no victory or defeat for it.",
+      "example_zh": "与朋友的争执本没有谁对谁错，只是大家碍于面子不肯放弃的问题。"
+    },
+    "changes": {
+      "example_en": "The neighbors altercated noisily over the boundary.",
+      "example_zh": "邻居们为边界问题大声争吵。"
+    },
+    "reviewed": true
+  },
+  "45:puncture": {
+    "source_order": 474,
+    "kinds": [
+      "example"
+    ],
+    "reason": "Both listed definitions are verbal, but the current example uses puncture as a noun.",
+    "evidence": [
+      "source_pdf:page:45",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "An instrument called a trocar makes a puncture in the abdominal wall.",
+      "example_zh": "一种叫做套管针的工具在腹壁上刺了一个孔。"
+    },
+    "changes": {
+      "example_en": "The sharp bone punctured his lung.",
+      "example_zh": "尖锐的骨头刺穿了他的肺。"
+    },
+    "reviewed": true
+  },
+  "48:prose": {
+    "source_order": 519,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The adjective sense 'prosaic' is valid, so preserve the GRE definition and replace only the noun example.",
+    "evidence": [
+      "source_pdf:page:48",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Money, which represents the prose of life, and which is hardly spoken of in parlors without an apology, is, in its effects and laws, as beautiful as roses.",
+      "example_zh": "金钱代表生命中单调的一面，很难堂而皇之的赞美它，从它的影响力来看，又美得跟玫瑰一样。"
+    },
+    "changes": {
+      "example_en": "The prose details of the budget bored the audience.",
+      "example_zh": "预算中平淡乏味的细节让听众感到厌烦。"
+    },
+    "reviewed": true
+  },
+  "50:demographic": {
+    "source_order": 526,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "标为名词且释义是 demographics 名词义，例句 `demographic changes` 是形容词。",
+    "evidence": [
+      "source_pdf:page:50",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/demographic"
+    ],
+    "expected_before": {
+      "definition_en": "n. the statistical characteristics of human populations (such as age or income) used especially to identify markets",
+      "definition_zh": "人口统计学，人口统计"
+    },
+    "changes": {
+      "definition_en": "adj. relating to the statistical characteristics of populations",
+      "definition_zh": "人口统计学的；人口结构的"
+    },
+    "reviewed": true
+  },
   "50:ameliorate": {
+    "source_order": 529,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The headword was copied verbatim into the phonetic column instead of a pronunciation.",
+    "evidence": [
+      "source_pdf:page:50",
+      "The only unbracketed phonetic value in the full 3,292-row audit.",
+      "https://dictionary.cambridge.org/pronunciation/english/ameliorate"
+    ],
+    "expected_before": {
+      "phonetic": "ameliorate"
+    },
+    "changes": {
+      "phonetic": "[əˈmiːljəreɪt]"
+    },
+    "reviewed": true
+  },
+  "50:equivalent": {
+    "source_order": 532,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is adjectival, but the current example uses equivalent as a noun and contains a malformed possessive.",
+    "evidence": [
+      "source_pdf:page:50",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Even the cheapest car costs the equivalent of 70 years 'salary for a government worker.",
+      "example_zh": "即使是最便宜的汽车，价格也相当于一个公务员70年的薪水。"
+    },
+    "changes": {
+      "example_en": "The cost of even the cheapest car is equivalent to seventy years' salary for a government worker.",
+      "example_zh": "即使最便宜的汽车，其价格也相当于一名公务员七十年的工资。"
+    },
+    "reviewed": true
+  },
+  "50:grapple": {
+    "source_order": 534,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current perfect construction requires grappled, not the uninflected form grapple.",
+    "evidence": [
+      "source_pdf:page:50",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Many investigators had grapple with the problem, usually with poor results.",
+      "example_zh": "许多研究人员曾设法处理这个问题, 但是往往没有好结果。"
+    },
+    "changes": {
+      "example_en": "Many investigators had grappled with the problem, usually with poor results.",
+      "example_zh": "许多研究人员曾设法处理这个问题，但往往成效不佳。"
+    },
+    "reviewed": true
+  },
+  "50:grandiloquent": {
+    "source_order": 536,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "词性和例句均为形容词，但释义写成名词短语 `a ... style, manner, or quality`。",
+    "evidence": [
+      "source_pdf:page:50",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/grandiloquent"
+    ],
+    "expected_before": {
+      "definition_en": "adj. a lofty, extravagantly colorful, pompous, or bombastic style, manner, or quality especially in language",
+      "definition_zh": "夸大的，夸张的"
+    },
+    "changes": {
+      "definition_en": "adj. using or expressed in lofty, pompous language",
+      "definition_zh": "措辞浮夸的；辞藻华丽的"
+    },
+    "reviewed": true
+  },
+  "51:boo": {
+    "source_order": 540,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "标记和例句都是动词，但释义 `a shout...` 是名词。",
+    "evidence": [
+      "source_pdf:page:51",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/boo"
+    ],
+    "expected_before": {
+      "definition_en": "v. a shout of disapproval or contempt",
+      "definition_zh": "发出嘘声"
+    },
+    "changes": {
+      "definition_en": "v. to express disapproval by shouting 'boo'",
+      "definition_zh": "向……喝倒彩；发嘘声"
+    },
+    "reviewed": true
+  },
+  "53:acclaim": {
+    "source_order": 565,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses acclaim as a noun.",
+    "evidence": [
+      "source_pdf:page:53",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Angela Bassett has won critical acclaim for her excellent performance.",
+      "example_zh": "安吉拉·贝塞特凭借其出色的表演赢得了评论界的好评。"
+    },
+    "changes": {
+      "example_en": "Critics acclaimed Angela Bassett for her excellent performance.",
+      "example_zh": "评论家盛赞安吉拉·贝塞特的出色表演。"
+    },
+    "reviewed": true
+  },
+  "55:barring": {
+    "source_order": 593,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "Barring introduces the exception in the example and is a preposition, not an adjective.",
+    "evidence": [
+      "source_pdf:page:55",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/barring"
+    ],
+    "expected_before": {
+      "definition_en": "adj. excluding by exception",
+      "definition_zh": "除...之外"
+    },
+    "changes": {
+      "definition_en": "prep. except for; unless something happens",
+      "definition_zh": "除……之外；除非"
+    },
+    "reviewed": true
+  },
+  "56:imperative": {
+    "source_order": 611,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definitions are adjectival, but the current example uses imperative as a noun.",
+    "evidence": [
+      "source_pdf:page:56",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Job creation has become an imperative for the government.",
+      "example_zh": "创造就业机会是政府必须做的事。"
+    },
+    "changes": {
+      "example_en": "It is imperative that the government create more jobs.",
+      "example_zh": "政府必须创造更多就业机会。"
+    },
+    "reviewed": true
+  },
+  "60:inchoate": {
+    "source_order": 652,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current example incorrectly uses an adjective as a plural noun and is broadly ungrammatical.",
+    "evidence": [
+      "source_pdf:page:60",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Once people are found out cancered, except few inchoate can be cured by operation, most of others are uncurable.",
+      "example_zh": "人们一旦发现患上癌症，除个别早期可以手术治疗外，其它大部分是无法治愈的。"
+    },
+    "changes": {
+      "example_en": "The plan remained inchoate and lacked clear details.",
+      "example_zh": "这个计划仍未成形，缺乏明确细节。"
+    },
+    "reviewed": true
+  },
+  "62:coy": {
+    "source_order": 672,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The source has /ɒɪ/; the word is pronounced with the /ɔɪ/ diphthong.",
+    "evidence": [
+      "source_pdf:page:62",
+      "Full 3,292-row phonetic comparison.",
+      "https://dictionary.cambridge.org/pronunciation/english/coy"
+    ],
+    "expected_before": {
+      "phonetic": "[kɒɪ]"
+    },
+    "changes": {
+      "phonetic": "[kɔɪ]"
+    },
+    "reviewed": true
+  },
+  "67:coin": {
+    "source_order": 730,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The source has /ɒɪ/; the word is pronounced with the /ɔɪ/ diphthong.",
+    "evidence": [
+      "source_pdf:page:67",
+      "Full 3,292-row phonetic comparison.",
+      "https://dictionary.cambridge.org/pronunciation/english/coin"
+    ],
+    "expected_before": {
+      "phonetic": "[kɒɪn]"
+    },
+    "changes": {
+      "phonetic": "[kɔɪn]"
+    },
+    "reviewed": true
+  },
+  "73:antiquarian": {
+    "source_order": 803,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current sentence coordinates an adjective with the noun books and leaves the construction incomplete.",
+    "evidence": [
+      "source_pdf:page:73",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "The library is rich in historical books and antiquarian.",
+      "example_zh": "家图书馆拥有大量历史和古籍。"
+    },
+    "changes": {
+      "example_en": "The library is rich in historical and antiquarian books.",
+      "example_zh": "这家图书馆藏有大量历史书籍和古籍。"
+    },
+    "reviewed": true
+  },
+  "73:delegate": {
+    "source_order": 804,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition and example are verbal, but the current pronunciation is the noun form.",
+    "evidence": [
+      "source_pdf:page:73",
+      "Part-of-speech pronunciation audit against the example 'delegated'.",
+      "https://dictionary.cambridge.org/pronunciation/english/delegate"
+    ],
+    "expected_before": {
+      "phonetic": "[ˈdelɪgət]"
+    },
+    "changes": {
+      "phonetic": "[ˈdelɪɡeɪt]"
+    },
+    "reviewed": true
+  },
+  "76:monger": {
+    "source_order": 840,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The pronunciation is visibly truncated at a hyphen and omits the final consonant and syllable.",
+    "evidence": [
+      "source_pdf:page:76",
+      "The only phonetic value ending in '-]' in the full structural audit.",
+      "https://www.merriam-webster.com/dictionary/monger"
+    ],
+    "expected_before": {
+      "phonetic": "['mɔŋ-]"
+    },
+    "changes": {
+      "phonetic": "[ˈmʌŋɡə]"
+    },
+    "reviewed": true
+  },
+  "78:advocate": {
+    "source_order": 858,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains noun and verb senses while the example is nominal; retain both labeled pronunciations.",
+    "evidence": [
+      "source_pdf:page:78",
+      "Mixed-part-of-speech audit against the example 'a strong advocate'.",
+      "https://dictionary.cambridge.org/pronunciation/english/advocate"
+    ],
+    "expected_before": {
+      "phonetic": "[ˈædvəkeɪt]"
+    },
+    "changes": {
+      "phonetic": "[n. ˈædvəkət; v. ˈædvəkeɪt]"
+    },
+    "reviewed": true
+  },
+  "80:row": {
+    "source_order": 884,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition and pub-quarrel example require the argument/noise heteronym, not the line or rowing pronunciation.",
+    "evidence": [
+      "source_pdf:page:80",
+      "Heteronym sense audit against definition and example.",
+      "https://dictionary.cambridge.org/pronunciation/english/row"
+    ],
+    "expected_before": {
+      "phonetic": "[ro]"
+    },
+    "changes": {
+      "phonetic": "[raʊ]"
+    },
+    "reviewed": true
+  },
+  "80:appropriate": {
+    "source_order": 885,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains verb and adjective senses with different endings; label both pronunciations explicitly.",
+    "evidence": [
+      "source_pdf:page:80",
+      "Full mixed-part-of-speech pronunciation audit.",
+      "https://dictionary.cambridge.org/pronunciation/english/appropriate"
+    ],
+    "expected_before": {
+      "phonetic": "[əˈprəʊpriət]"
+    },
+    "changes": {
+      "phonetic": "[v. əˈprəʊprieɪt; adj. əˈprəʊpriət]"
+    },
+    "reviewed": true
+  },
+  "80:bent": {
+    "source_order": 887,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The entry defines the noun inclination, but 'bent on' in the current example is an adjective construction.",
+    "evidence": [
+      "source_pdf:page:80",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Mr Putin seems bent on proving only that Russia is again able to say no.",
+      "example_zh": "普京似乎更倾向于试图证明俄罗斯再次可以说“不”。"
+    },
+    "changes": {
+      "example_en": "She has a natural bent for mathematics.",
+      "example_zh": "她在数学方面有天赋。"
+    },
+    "reviewed": true
+  },
+  "83:free-for-all": {
+    "source_order": 918,
+    "kinds": [
+      "part_of_speech",
+      "definition"
+    ],
+    "reason": "释义内容和例句 `a free-for-all` 都是名词，但标为 `adj.`；中文也误写成形容词“自由放任的”，没有表达无规则混战或竞争。",
+    "evidence": [
+      "source_pdf:page:83",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/free-for-all"
+    ],
+    "expected_before": {
+      "definition_en": "adj. a competition, dispute, or fight open to all comers and usually with no rules",
+      "definition_zh": "自由放任的"
+    },
+    "changes": {
+      "definition_en": "n. a competition, dispute, or fight open to all comers and usually with no rules",
+      "definition_zh": "人人可参加的混战；无规则竞争"
+    },
+    "reviewed": true
+  },
+  "87:check": {
+    "source_order": 959,
+    "kinds": [
+      "example"
+    ],
+    "reason": "释义是名词，例句 `checked herself` 是动词。",
+    "evidence": [
+      "source_pdf:page:87",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "She wanted to tell him the whole truth but she checked herself─it wasn't the right moment.",
+      "example_zh": "她本想告诉他全部真相，但是又忍住了—那还不是时候。"
+    },
+    "changes": {
+      "example_en": "The setback put a temporary check on expansion.",
+      "example_zh": "这次挫折暂时遏制了扩张。"
+    },
+    "reviewed": true
+  },
+  "88:reproach": {
+    "source_order": 971,
+    "kinds": [
+      "part_of_speech",
+      "example"
+    ],
+    "reason": "标为动词，释义却是名词；例句还误写为 `was reproach`。",
+    "evidence": [
+      "source_pdf:page:88",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/reproach"
+    ],
+    "expected_before": {
+      "definition_en": "v. an expression of rebuke or disapproval",
+      "definition_zh": "责备",
+      "example_en": "She was reproach by colleagues for leaking the story to the press.",
+      "example_zh": "她因为将这件事透露给新闻媒体而受到同事的指责。"
+    },
+    "changes": {
+      "definition_en": "v. to criticize or express disapproval of",
+      "definition_zh": "责备；指责",
+      "example_en": "Her colleagues reproached her for leaking the story to the press.",
+      "example_zh": "她的同事因她向媒体泄露此事而责备了她。"
+    },
+    "reviewed": true
+  },
+  "88:moderate": {
+    "source_order": 972,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains verb and adjective senses with different endings; label both pronunciations explicitly.",
+    "evidence": [
+      "source_pdf:page:88",
+      "Full mixed-part-of-speech pronunciation audit.",
+      "https://dictionary.cambridge.org/pronunciation/english/moderate"
+    ],
+    "expected_before": {
+      "phonetic": "[ˈmɑdəreɪt]"
+    },
+    "changes": {
+      "phonetic": "[v. ˈmɒdəreɪt; adj. ˈmɒdərət]"
+    },
+    "reviewed": true
+  },
+  "88:cosset": {
+    "source_order": 978,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example treats cosset as a noun and is semantically unnatural.",
+    "evidence": [
+      "source_pdf:page:88",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "From the end of the 1990s, neutral garment has become the most popular cosset.",
+      "example_zh": "从20世纪90年代末，中性化服装却成了流行中的宠儿。"
+    },
+    "changes": {
+      "example_en": "The hotel staff cosseted the guests with constant attention.",
+      "example_zh": "酒店员工无微不至地照顾客人。"
+    },
+    "reviewed": true
+  },
+  "91:articulate": {
+    "source_order": 1009,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains verb and adjective senses with different endings; label both pronunciations explicitly.",
+    "evidence": [
+      "source_pdf:page:91",
+      "Full mixed-part-of-speech pronunciation audit.",
+      "https://dictionary.cambridge.org/pronunciation/english/articulate"
+    ],
+    "expected_before": {
+      "phonetic": "[ɑːrˈtɪkjuleɪt]"
+    },
+    "changes": {
+      "phonetic": "[v. ɑːˈtɪkjəleɪt; adj. ɑːˈtɪkjələt]"
+    },
+    "reviewed": true
+  },
+  "100:inception": {
+    "source_order": 1115,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "The gloss describes a beginning and the example uses inception as a noun, but the entry is labeled adj.",
+    "evidence": [
+      "source_pdf:page:100",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/inception"
+    ],
+    "expected_before": {
+      "definition_en": "adj. the time at which something begins",
+      "definition_zh": "开始"
+    },
+    "changes": {
+      "definition_en": "n. the beginning of an organization, activity, or process",
+      "definition_zh": "开始；开端；创立"
+    },
+    "reviewed": true
+  },
+  "100:plunge": {
+    "source_order": 1117,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses plunge as a noun.",
+    "evidence": [
+      "source_pdf:page:100",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Some traders said the plunge put the market more in sync with the state of the USA.",
+      "example_zh": "一些交易员说，此次大盘跳水令市场和美国经济现状更为协调。"
+    },
+    "changes": {
+      "example_en": "The market plunged after the announcement.",
+      "example_zh": "消息公布后，市场暴跌。"
+    },
+    "reviewed": true
+  },
+  "101:decode": {
+    "source_order": 1131,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The source uses an invalid low comma and ASCII apostrophe for stress; normalize both stress marks.",
+    "evidence": [
+      "source_pdf:page:101",
+      "The only low-comma stress character found in the full structural audit.",
+      "https://dictionary.cambridge.org/pronunciation/english/decode"
+    ],
+    "expected_before": {
+      "phonetic": "[‚diː'kəʊd]"
+    },
+    "changes": {
+      "phonetic": "[ˌdiːˈkəʊd]"
+    },
+    "reviewed": true
+  },
+  "101:anneal": {
+    "source_order": 1132,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current example treats anneal as a noun and is not idiomatic; the replacement demonstrates the defined strengthen sense.",
+    "evidence": [
+      "source_pdf:page:101",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "After graduation, I served in the army and meanwhile I went through a lot of anneal.",
+      "example_zh": "毕业后我去当兵，其间我在很多方面得到了锻炼。"
+    },
+    "changes": {
+      "example_en": "Years of hardship annealed her resolve.",
+      "example_zh": "多年的困苦磨炼了她的意志。"
+    },
+    "reviewed": true
+  },
+  "111:ascendant": {
+    "source_order": 1246,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is adjectival, but 'in the ascendant' in the current example is a fixed noun phrase.",
+    "evidence": [
+      "source_pdf:page:111",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Radical reformers are once more in the ascendant.",
+      "example_zh": "激进派的改革家们再一次占了山风。"
+    },
+    "changes": {
+      "example_en": "The reform movement is once again ascendant.",
+      "example_zh": "改革运动再次占据主导地位。"
+    },
+    "reviewed": true
+  },
+  "114:jibe": {
+    "source_order": 1273,
+    "kinds": [
+      "example"
+    ],
+    "reason": "Both listed senses are verbal, but the current example uses jibes as a plural noun.",
+    "evidence": [
+      "source_pdf:page:114",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "He made several cheap jibes at his opponent during the interview.",
+      "example_zh": "在采访中他好几次对他的对手粗俗地加以嘲讽。"
+    },
+    "changes": {
+      "example_en": "His account does not jibe with the evidence.",
+      "example_zh": "他的说法与证据不一致。"
+    },
+    "reviewed": true
+  },
+  "117:introspect": {
+    "source_order": 1312,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "Introspect is a verb and is used as a verb in the example; the current noun label and noun-style gloss are incorrect.",
+    "evidence": [
+      "source_pdf:page:117",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/introspect"
+    ],
+    "expected_before": {
+      "definition_en": "n. a reflective looking inward",
+      "definition_zh": "反省，内省"
+    },
+    "changes": {
+      "definition_en": "v. to examine one's own thoughts and feelings",
+      "definition_zh": "内省；反思"
+    },
+    "reviewed": true
+  },
+  "122:epidemic": {
+    "source_order": 1376,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is adjectival, but the current example uses epidemic as the head noun.",
+    "evidence": [
+      "source_pdf:page:122",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "A flu epidemic is sweeping through Moscow.",
+      "example_zh": "一场流感正席卷莫斯科。"
+    },
+    "changes": {
+      "example_en": "Influenza reached epidemic proportions in Moscow.",
+      "example_zh": "流感在莫斯科已达到大规模流行的程度。"
+    },
+    "reviewed": true
+  },
+  "123:contract": {
+    "source_order": 1386,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains noun and verb senses and the example is verbal; retain both labeled stress patterns.",
+    "evidence": [
+      "source_pdf:page:123",
+      "Heteronym audit against the example 'contracts'.",
+      "https://dictionary.cambridge.org/pronunciation/english/contract"
+    ],
+    "expected_before": {
+      "phonetic": "[ˈkɒntrækt]"
+    },
+    "changes": {
+      "phonetic": "[n. ˈkɒntrækt; v. kənˈtrækt]"
+    },
+    "reviewed": true
+  },
+  "124:exempt": {
+    "source_order": 1396,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current passive-like example uses exempt as a predicate adjective.",
+    "evidence": [
+      "source_pdf:page:124",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Soldiers were exempt from paying rates.",
+      "example_zh": "士兵免缴地方税。"
+    },
+    "changes": {
+      "example_en": "The law exempts soldiers from paying local taxes.",
+      "example_zh": "该法律免除士兵缴纳地方税的义务。"
+    },
+    "reviewed": true
+  },
+  "133:succor": {
+    "source_order": 1484,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses succor as a noun.",
+    "evidence": [
+      "source_pdf:page:133",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "These refugees are very grateful to the government's succor.",
+      "example_zh": "这些难民非常感激政府的救援。"
+    },
+    "changes": {
+      "example_en": "The government succored the refugees with food and shelter.",
+      "example_zh": "政府为难民提供食物和住所以救助他们。"
+    },
+    "reviewed": true
+  },
+  "134:minutia": {
+    "source_order": 1508,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The final syllables in the source are not a valid pronunciation of the singular noun.",
+    "evidence": [
+      "source_pdf:page:134",
+      "Full phonetic-distance audit followed by source-PDF visual review.",
+      "https://www.merriam-webster.com/dictionary/minutia"
+    ],
+    "expected_before": {
+      "phonetic": "[maɪ'njʊʃɪr]"
+    },
+    "changes": {
+      "phonetic": "[maɪˈnjuːʃiə]"
+    },
+    "reviewed": true
+  },
+  "135:elaborate": {
+    "source_order": 1522,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition and example are adjectival, but the current pronunciation is the verb form.",
+    "evidence": [
+      "source_pdf:page:135",
+      "Part-of-speech pronunciation audit against the adjective example.",
+      "https://dictionary.cambridge.org/pronunciation/english/elaborate"
+    ],
+    "expected_before": {
+      "phonetic": "[ɪ'læbəreɪt]"
+    },
+    "changes": {
+      "phonetic": "[ɪˈlæbərət]"
+    },
+    "reviewed": true
+  },
+  "137:nonplus": {
+    "source_order": 1544,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but 'at a nonplus' in the current example is a noun phrase.",
+    "evidence": [
+      "source_pdf:page:137",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "The professor is never at a nonplus, and never perplexed by a problem.",
+      "example_zh": "那位教授从未感到困惑，也没有被任何问题所难倒。"
+    },
+    "changes": {
+      "example_en": "The unexpected question nonplussed the professor.",
+      "example_zh": "这个意外的问题使教授不知所措。"
+    },
+    "reviewed": true
+  },
+  "138:antecedent": {
+    "source_order": 1550,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The entry defines a noun, but the current example uses antecedent adjectivally before legislation.",
+    "evidence": [
+      "source_pdf:page:138",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "It was permissible to take account of antecedent legislation.",
+      "example_zh": "先前的法律是允许被考虑进来的。"
+    },
+    "changes": {
+      "example_en": "This law has several historical antecedents.",
+      "example_zh": "这项法律有几个历史先例。"
+    },
+    "reviewed": true
+  },
+  "140:abuse": {
+    "source_order": 1574,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains verb and noun senses whose final consonants differ; label both pronunciations explicitly.",
+    "evidence": [
+      "source_pdf:page:140",
+      "Full mixed-part-of-speech pronunciation audit.",
+      "https://dictionary.cambridge.org/pronunciation/english/abuse"
+    ],
+    "expected_before": {
+      "phonetic": "[əˈbju:s]"
+    },
+    "changes": {
+      "phonetic": "[v. əˈbjuːz; n. əˈbjuːs]"
+    },
+    "reviewed": true
+  },
+  "142:rarefied": {
+    "source_order": 1596,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The source uses Greek epsilon, ASCII stress, and non-IPA vowel spelling; normalize to verified British IPA.",
+    "evidence": [
+      "source_pdf:page:142",
+      "One of two Greek-epsilon phonetics found in the full structural audit.",
+      "https://dictionary.cambridge.org/pronunciation/english/rarefied"
+    ],
+    "expected_before": {
+      "phonetic": "['rεərifaid]"
+    },
+    "changes": {
+      "phonetic": "[ˈreərɪfaɪd]"
+    },
+    "reviewed": true
+  },
+  "142:merchandise": {
+    "source_order": 1597,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses merchandise as a noun meaning goods.",
+    "evidence": [
+      "source_pdf:page:142",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Commercial bribery direct purpose is to facilitate transactions that sell goods or purchase merchandise.",
+      "example_zh": "商业贿赂的直接目的是促成交易，即推销商品或者购买商品。"
+    },
+    "changes": {
+      "example_en": "The company merchandises its products through social media.",
+      "example_zh": "该公司通过社交媒体推销产品。"
+    },
+    "reviewed": true
+  },
+  "143:fetter": {
+    "source_order": 1607,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current example contains the malformed sequence 'will not is fetter' instead of a passive verb.",
+    "evidence": [
+      "source_pdf:page:143",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "We reverence tradition but will not is fetter by it.",
+      "example_zh": "我们尊敬传统,但不愿被它束缚。"
+    },
+    "changes": {
+      "example_en": "We revere tradition but will not be fettered by it.",
+      "example_zh": "我们尊重传统，但不会受其束缚。"
+    },
+    "reviewed": true
+  },
+  "145:intimate": {
+    "source_order": 1626,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains adjective and verb senses while the example is verbal; retain both labeled pronunciations.",
+    "evidence": [
+      "source_pdf:page:145",
+      "Mixed-part-of-speech audit against the example 'intimated'.",
+      "https://dictionary.cambridge.org/pronunciation/english/intimate"
+    ],
+    "expected_before": {
+      "phonetic": "['ɪntɪmət]"
+    },
+    "changes": {
+      "phonetic": "[adj. ˈɪntɪmət; v. ˈɪntɪmeɪt]"
+    },
+    "reviewed": true
+  },
+  "155:counterfeit": {
+    "source_order": 1752,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses counterfeit as an adjective modifying notes.",
+    "evidence": [
+      "source_pdf:page:155",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "The man was arrested for having cheated people with counterfeit notes.",
+      "example_zh": "那个人曾用伪钞行骗而被捕过。"
+    },
+    "changes": {
+      "example_en": "The gang counterfeited banknotes and used them in local shops.",
+      "example_zh": "该团伙伪造钞票，并在当地商店使用。"
+    },
+    "reviewed": true
+  },
+  "156:prerogative": {
+    "source_order": 1765,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "The gloss denotes a right and the example uses prerogative as a noun, but the entry is labeled adj.",
+    "evidence": [
+      "source_pdf:page:156",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/prerogative"
+    ],
+    "expected_before": {
+      "definition_en": "adj. an exclusive or special right, power, or privilege",
+      "definition_zh": "特权"
+    },
+    "changes": {
+      "definition_en": "n. an exclusive or special right, power, or privilege",
+      "definition_zh": "特权；专有权"
+    },
+    "reviewed": true
+  },
+  "157:incumbent": {
+    "source_order": 1772,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The entry defines a noun, but the current example uses incumbent attributively before governor.",
+    "evidence": [
+      "source_pdf:page:157",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "He defeated the incumbent governor by a large plurality.",
+      "example_zh": "他以压倒多数票击败了现任州长。"
+    },
+    "changes": {
+      "example_en": "The challenger defeated the incumbent by a large margin.",
+      "example_zh": "挑战者以大幅优势击败了现任者。"
+    },
+    "reviewed": true
+  },
+  "158:disquiet": {
+    "source_order": 1784,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The singular subject 'bad news' requires disquiets rather than the uninflected form disquiet.",
+    "evidence": [
+      "source_pdf:page:158",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "I must say that bad news disquiet me a great deal.",
+      "example_zh": "我得说那坏消息使我非常不安。"
+    },
+    "changes": {
+      "example_en": "The bad news disquiets me a great deal.",
+      "example_zh": "这个坏消息使我非常不安。"
+    },
+    "reviewed": true
+  },
+  "160:minute": {
+    "source_order": 1808,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The adjective means 'very small', but the current pronunciation is the time noun/verb heteronym.",
+    "evidence": [
+      "source_pdf:page:160",
+      "Heteronym sense audit against definition and example.",
+      "https://dictionary.cambridge.org/pronunciation/english/minute"
+    ],
+    "expected_before": {
+      "phonetic": "['mɪnɪt]"
+    },
+    "changes": {
+      "phonetic": "[maɪˈnjuːt]"
+    },
+    "reviewed": true
+  },
+  "165:expatriate": {
+    "source_order": 1859,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition and example are verbal, but the current ending is the noun/adjective pronunciation.",
+    "evidence": [
+      "source_pdf:page:165",
+      "Part-of-speech audit against the example 'expatriated'.",
+      "https://dictionary.cambridge.org/pronunciation/english/expatriate"
+    ],
+    "expected_before": {
+      "phonetic": "[ˌɛks'petrɪət]"
+    },
+    "changes": {
+      "phonetic": "[ekˈspætrieɪt]"
+    },
+    "reviewed": true
+  },
+  "172:motley": {
+    "source_order": 1946,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The noun sense 'a mixture of incongruous elements' is valid, so preserve it and replace the adjective example.",
+    "evidence": [
+      "source_pdf:page:172",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "A motley group of people attended the meeting.",
+      "example_zh": "参会的人很杂。"
+    },
+    "changes": {
+      "example_en": "The collection was a motley of styles and eras.",
+      "example_zh": "这批藏品是各种风格和时代的混合体。"
+    },
+    "reviewed": true
+  },
+  "173:caterwaul": {
+    "source_order": 1949,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses caterwaul as a noun.",
+    "evidence": [
+      "source_pdf:page:173",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "We were woken by a high, snarling caterwaul, a sort of screaming wail.",
+      "example_zh": "我们被一声尖厉的叫声惊醒，那是一种尖声的嚎叫。"
+    },
+    "changes": {
+      "example_en": "The cats caterwauled outside all night.",
+      "example_zh": "猫整夜在外面尖声嚎叫。"
+    },
+    "reviewed": true
+  },
+  "173:rally": {
+    "source_order": 1950,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses rally as a noun meaning a public meeting.",
+    "evidence": [
+      "source_pdf:page:173",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "About three thousand people held a rally to mark international human rights day.",
+      "example_zh": "大约三千人举行集会以纪念国际人权日。"
+    },
+    "changes": {
+      "example_en": "The leader rallied the crowd around a common cause.",
+      "example_zh": "那位领导者把群众团结到共同事业周围。"
+    },
+    "reviewed": true
+  },
+  "175:universal": {
+    "source_order": 1981,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definitions are adjectival, but the current example uses universals as a plural noun.",
+    "evidence": [
+      "source_pdf:page:175",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "There are no economic universals.",
+      "example_zh": "没有普遍适用的经济学原理。"
+    },
+    "changes": {
+      "example_en": "No economic principle is universal.",
+      "example_zh": "没有任何经济学原理是普遍适用的。"
+    },
+    "reviewed": true
+  },
+  "179:delude": {
+    "source_order": 2025,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The source uses a curly quote as stress and inserts a spurious /j/ absent from the verified UK and US pronunciations.",
+    "evidence": [
+      "source_pdf:page:179",
+      "Structural-character audit plus dictionary verification.",
+      "https://dictionary.cambridge.org/pronunciation/english/delude"
+    ],
+    "expected_before": {
+      "phonetic": "[dɪ’ljuːd]"
+    },
+    "changes": {
+      "phonetic": "[dɪˈluːd]"
+    },
+    "reviewed": true
+  },
+  "179:banter": {
+    "source_order": 2029,
+    "kinds": [
+      "example"
+    ],
+    "reason": "释义是名词，例句 `bantered` 是动词。",
+    "evidence": [
+      "source_pdf:page:179",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "The soldiers bantered with him as though he was a kid brother.",
+      "example_zh": "士兵们把他当作弟弟一样和他开着玩笑。"
+    },
+    "changes": {
+      "example_en": "Their friendly banter eased the tension.",
+      "example_zh": "他们友好的玩笑缓和了紧张气氛。"
+    },
+    "reviewed": true
+  },
+  "182:boast": {
+    "source_order": 2058,
+    "kinds": [
+      "example"
+    ],
+    "reason": "释义是名词，例句 `boasted` 是动词。",
+    "evidence": [
+      "source_pdf:page:182",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Carol boasted about her costume.",
+      "example_zh": "卡萝尔炫耀着自己的穿着打扮。"
+    },
+    "changes": {
+      "example_en": "His boast proved to be empty.",
+      "example_zh": "他的夸口被证明是空话。"
+    },
+    "reviewed": true
+  },
+  "187:compound": {
+    "source_order": 2114,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition and example are verbal, but the current stress pattern is the noun/adjective form.",
+    "evidence": [
+      "source_pdf:page:187",
+      "Part-of-speech pronunciation audit against the verb example.",
+      "https://dictionary.cambridge.org/pronunciation/english/compound"
+    ],
+    "expected_before": {
+      "phonetic": "['kɒmpaʊnd]"
+    },
+    "changes": {
+      "phonetic": "[kəmˈpaʊnd]"
+    },
+    "reviewed": true
+  },
+  "188:brake": {
+    "source_order": 2127,
+    "kinds": [
+      "example"
+    ],
+    "reason": "释义是名词，例句 `braked` 是动词。",
+    "evidence": [
+      "source_pdf:page:188",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "She braked sharply to avoid another car.",
+      "example_zh": "她为了躲另一辆车而紧急刹车。"
+    },
+    "changes": {
+      "example_en": "The driver applied the brake suddenly.",
+      "example_zh": "司机突然踩下刹车。"
+    },
+    "reviewed": true
+  },
+  "188:archive": {
+    "source_order": 2130,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses archive as a noun meaning a collection.",
+    "evidence": [
+      "source_pdf:page:188",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "This vast archive has been indexed and made accessible to researchers.",
+      "example_zh": "这个存量巨大的档案室的所有文件都已编了索引，可供研究人员使用。"
+    },
+    "changes": {
+      "example_en": "The library archived the documents for future research.",
+      "example_zh": "图书馆将这些文件存档，以供日后研究。"
+    },
+    "reviewed": true
+  },
+  "194:animate": {
+    "source_order": 2197,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains adjective and verb senses while the example is adjectival; retain both labeled pronunciations.",
+    "evidence": [
+      "source_pdf:page:194",
+      "Mixed-part-of-speech audit against the example 'animate beings'.",
+      "https://dictionary.cambridge.org/pronunciation/english/animate"
+    ],
+    "expected_before": {
+      "phonetic": "[ˈænɪmeɪt]"
+    },
+    "changes": {
+      "phonetic": "[adj. ˈænɪmət; v. ˈænɪmeɪt]"
+    },
+    "reviewed": true
+  },
+  "194:affiliate": {
+    "source_order": 2203,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains noun and verb senses while the example is nominal; replace the ambiguous source transcription with both labeled variants.",
+    "evidence": [
+      "source_pdf:page:194",
+      "Mixed-part-of-speech audit against the example 'an affiliate'.",
+      "https://dictionary.cambridge.org/pronunciation/english/affiliate"
+    ],
+    "expected_before": {
+      "phonetic": "[ə'fɪlɪet]"
+    },
+    "changes": {
+      "phonetic": "[n. əˈfɪliət; v. əˈfɪlieɪt]"
+    },
+    "reviewed": true
+  },
+  "199:concur": {
+    "source_order": 2252,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "Both listed senses are verbal and the example uses a finite verb, but both senses are labeled adj.",
+    "evidence": [
+      "source_pdf:page:199",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/concur"
+    ],
+    "expected_before": {
+      "definition_en": "(1)adj. to express agreement (2)adj. to happen together",
+      "definition_zh": "同意同时发生"
+    },
+    "changes": {
+      "definition_en": "(1)v. to agree (2)v. to happen at the same time",
+      "definition_zh": "同意；同时发生"
+    },
+    "reviewed": true
+  },
+  "202:parley": {
+    "source_order": 2288,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "标为名词且例句也是名词，但释义 `to discuss...` 写成了动词义。",
+    "evidence": [
+      "source_pdf:page:202",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/parley"
+    ],
+    "expected_before": {
+      "definition_en": "n. to discuss terms with an enemy",
+      "definition_zh": "谈判"
+    },
+    "changes": {
+      "definition_en": "n. a discussion or conference, especially with an enemy",
+      "definition_zh": "会谈；谈判"
+    },
+    "reviewed": true
+  },
+  "202:augur": {
+    "source_order": 2294,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "标记和例句都是动词，但释义 `one held to foretell...` 是人名词义。",
+    "evidence": [
+      "source_pdf:page:202",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/augur"
+    ],
+    "expected_before": {
+      "definition_en": "v. one held to foretell events by omens",
+      "definition_zh": "预言，占卜"
+    },
+    "changes": {
+      "definition_en": "v. to predict or indicate a future outcome",
+      "definition_zh": "预示；预兆"
+    },
+    "reviewed": true
+  },
+  "202:discount": {
+    "source_order": 2296,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition and example are verbal, but the current stress pattern is the noun/adjective form.",
+    "evidence": [
+      "source_pdf:page:202",
+      "Part-of-speech pronunciation audit against the verb example.",
+      "https://dictionary.cambridge.org/pronunciation/english/discount"
+    ],
+    "expected_before": {
+      "phonetic": "['dɪskaʊnt]"
+    },
+    "changes": {
+      "phonetic": "[dɪˈskaʊnt]"
+    },
+    "reviewed": true
+  },
+  "203:profound": {
+    "source_order": 2300,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current example places profound after knowledge in an ungrammatical sequence and has a malformed clause structure.",
+    "evidence": [
+      "source_pdf:page:203",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Liu Jun is a famous parallel prose writer of Liang dynasty, is a knowledge profound scholar.",
+      "example_zh": "刘峻是梁代著名的骈文家，更是一位知识渊博的学者。"
+    },
+    "changes": {
+      "example_en": "Liu Jun was a scholar with profound knowledge and a noted writer of parallel prose in the Liang dynasty.",
+      "example_zh": "刘峻是梁代学识渊博的学者，也是著名的骈文作家。"
+    },
+    "reviewed": true
+  },
+  "206:telltale": {
+    "source_order": 2332,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The noun sense 'an outward sign' is valid, so preserve it and replace the adjective example.",
+    "evidence": [
+      "source_pdf:page:206",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Only occasionally did the telltale redness around his eyes betray the fatigue he was suffering.",
+      "example_zh": "只有从他发红的眼圈上偶尔能看出他非常疲惫。"
+    },
+    "changes": {
+      "example_en": "The redness around his eyes was an unmistakable telltale of fatigue.",
+      "example_zh": "他眼圈发红，显然是疲劳的迹象。"
+    },
+    "reviewed": true
+  },
+  "206:flabbergast": {
+    "source_order": 2344,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current example incorrectly places the uninflected verb after is.",
+    "evidence": [
+      "source_pdf:page:206",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "He is flabbergast when he hears that his friend has been accused of murder.",
+      "example_zh": "他听说朋友被控谋杀罪，大吃一惊。"
+    },
+    "changes": {
+      "example_en": "He was flabbergasted when he heard that his friend had been accused of murder.",
+      "example_zh": "听说朋友被控谋杀，他大吃一惊。"
+    },
+    "reviewed": true
+  },
+  "208:brute": {
+    "source_order": 2363,
+    "kinds": [
+      "example"
+    ],
+    "reason": "Brute has a valid adjective sense meaning cruel or savage; preserve that GRE sense and replace the noun example.",
+    "evidence": [
+      "source_pdf:page:208",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Custer was an idiot and a brute and he deserved his fate.",
+      "example_zh": "卡斯特是个愚蠢而粗暴的人，他应该有这样的下场。"
+    },
+    "changes": {
+      "example_en": "The regime used brute violence to suppress dissent.",
+      "example_zh": "该政权用残暴的暴力手段镇压异议。"
+    },
+    "reviewed": true
+  },
+  "210:decay": {
+    "source_order": 2381,
+    "kinds": [
+      "example"
+    ],
+    "reason": "释义是名词，例句 `decayed` 是动词。",
+    "evidence": [
+      "source_pdf:page:210",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "The bodies buried in the fine ash slowly decayed.",
+      "example_zh": "埋在灰烬里的尸体慢慢地腐烂了。"
+    },
+    "changes": {
+      "example_en": "Decay had weakened the wooden beams.",
+      "example_zh": "腐朽已经削弱了木梁。"
+    },
+    "reviewed": true
+  },
+  "210:repeal": {
+    "source_order": 2384,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses repeal as a noun.",
+    "evidence": [
+      "source_pdf:page:210",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Many voted for the repeal of that property law.",
+      "example_zh": "许多人投票赞成废止那项财产法。"
+    },
+    "changes": {
+      "example_en": "Parliament repealed the property law.",
+      "example_zh": "议会废除了那项财产法。"
+    },
+    "reviewed": true
+  },
+  "211:retreat": {
+    "source_order": 2400,
+    "kinds": [
+      "example"
+    ],
+    "reason": "释义是名词，例句 `to retreat` 是动词。",
+    "evidence": [
+      "source_pdf:page:211",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "The army was forced to retreat after suffering heavy losses.",
+      "example_zh": "部队因伤亡惨重被迫撤退。"
+    },
+    "changes": {
+      "example_en": "The army's retreat began at dawn.",
+      "example_zh": "军队于黎明时开始撤退。"
+    },
+    "reviewed": true
+  },
+  "215:extrapolate": {
+    "source_order": 2442,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "The gloss is infinitival and the example uses a verb, but the entry is labeled n.",
+    "evidence": [
+      "source_pdf:page:215",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/extrapolate"
+    ],
+    "expected_before": {
+      "definition_en": "n. to form an opinion or to make an estimate about something from known facts",
+      "definition_zh": "推断"
+    },
+    "changes": {
+      "definition_en": "v. to infer or estimate something from known facts or existing data",
+      "definition_zh": "推断；推知"
+    },
+    "reviewed": true
+  },
+  "215:abstract": {
+    "source_order": 2448,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains adjective, noun, and verb senses with two stress patterns; label both pronunciations explicitly.",
+    "evidence": [
+      "source_pdf:page:215",
+      "Full mixed-part-of-speech pronunciation audit.",
+      "https://dictionary.cambridge.org/pronunciation/english/abstract"
+    ],
+    "expected_before": {
+      "phonetic": "['æbstrækt]"
+    },
+    "changes": {
+      "phonetic": "[adj./n. ˈæbstrækt; v. əbˈstrækt]"
+    },
+    "reviewed": true
+  },
+  "217:vernacular": {
+    "source_order": 2470,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The entry defines a noun, but the current example uses vernacular attributively before language.",
+    "evidence": [
+      "source_pdf:page:217",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Most of these new sermons were recorded in literary Sanskrit rather than in vernacular language.",
+      "example_zh": "这些新的布道稿本大部分是用书面梵语而不是方言记载的。"
+    },
+    "changes": {
+      "example_en": "Most of these sermons were written in Sanskrit rather than the vernacular.",
+      "example_zh": "这些布道稿大多用梵语而不是当地通俗语言写成。"
+    },
+    "reviewed": true
+  },
+  "218:yen": {
+    "source_order": 2477,
+    "kinds": [
+      "example"
+    ],
+    "reason": "Yen has a valid verb sense meaning to desire intensely; preserve that GRE sense and replace the noun example.",
+    "evidence": [
+      "source_pdf:page:218",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "I've always had a yen to travel around the world.",
+      "example_zh": "我一直非常渴望周游世界。"
+    },
+    "changes": {
+      "example_en": "She yens for a chance to travel around the world.",
+      "example_zh": "她渴望有机会周游世界。"
+    },
+    "reviewed": true
+  },
+  "222:beleaguer": {
+    "source_order": 2526,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current example uses the base verb as an adjective and has multiple missing inflections.",
+    "evidence": [
+      "source_pdf:page:222",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Civilian trap in the beleaguer city has been airlifted to safety.",
+      "example_zh": "被围困在城里的老百姓已空运到安全地区。"
+    },
+    "changes": {
+      "example_en": "Civilians trapped in the beleaguered city were airlifted to safety.",
+      "example_zh": "被困在这座遭围困城市里的平民被空运到安全地带。"
+    },
+    "reviewed": true
+  },
+  "224:fanatic": {
+    "source_order": 2550,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is adjectival, but the current example uses fanatic as a person noun.",
+    "evidence": [
+      "source_pdf:page:224",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "I am not a religious fanatic but I am a Christian.",
+      "example_zh": "我不是宗教狂热分子，但我是基督徒。"
+    },
+    "changes": {
+      "example_en": "His fanatic devotion to the cause alarmed his friends.",
+      "example_zh": "他对这项事业的狂热投入令朋友们担忧。"
+    },
+    "reviewed": true
+  },
+  "227:upright": {
+    "source_order": 2587,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definitions are adjectival, but the current example uses upright adverbially to modify sat.",
+    "evidence": [
+      "source_pdf:page:227",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Helen sat upright in her chair.",
+      "example_zh": "海伦笔直地坐在椅子上。"
+    },
+    "changes": {
+      "example_en": "Helen sat in an upright position.",
+      "example_zh": "海伦以笔直的姿势坐在椅子上。"
+    },
+    "reviewed": true
+  },
+  "239:goad": {
+    "source_order": 2717,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses goad as a noun.",
+    "evidence": [
+      "source_pdf:page:239",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "His opposition acted as a goad to her determination to succeed.",
+      "example_zh": "他的反对反而刺激她坚定了取得成功的决心。"
+    },
+    "changes": {
+      "example_en": "His opposition goaded her into working even harder to succeed.",
+      "example_zh": "他的反对反而激励她更加努力地争取成功。"
+    },
+    "reviewed": true
+  },
+  "239:all-encompassing": {
+    "source_order": 2725,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The source omits the word boundary and vowel length and uses a curly quote as stress.",
+    "evidence": [
+      "source_pdf:page:239",
+      "Structural-character audit and compound-part pronunciation check.",
+      "https://dictionary.cambridge.org/dictionary/english/all-encompassing"
+    ],
+    "expected_before": {
+      "phonetic": "[ɔlɪn’kʌmpəsɪŋ]"
+    },
+    "changes": {
+      "phonetic": "[ˌɔːl ɪnˈkʌmpəsɪŋ]"
+    },
+    "reviewed": true
+  },
+  "241:cavil": {
+    "source_order": 2731,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current example splits the inflected verb as 'cavil ling' and is unsuitable as a clean vocabulary example.",
+    "evidence": [
+      "source_pdf:page:241",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Although his composition was flawless, the teacher was always cavil ling at his handwriting.",
+      "example_zh": "虽然他的作文写得完美无瑕，但老师对他的书法总是百般挑剔。"
+    },
+    "changes": {
+      "example_en": "Although the essay was flawless, the teacher kept caviling at the student's handwriting.",
+      "example_zh": "虽然文章无可挑剔，老师仍不断挑剔学生的书写。"
+    },
+    "reviewed": true
+  },
+  "243:reassure": {
+    "source_order": 2764,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "Reassure is used as a verb in the example, but the current entry labels it adj. and defines a property.",
+    "evidence": [
+      "source_pdf:page:243",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/reassure"
+    ],
+    "expected_before": {
+      "definition_en": "adj. making you feel less worried or frightened",
+      "definition_zh": "安心的，可靠的"
+    },
+    "changes": {
+      "definition_en": "v. to make someone feel less worried or frightened",
+      "definition_zh": "使安心；使放心"
+    },
+    "reviewed": true
+  },
+  "243:spark": {
+    "source_order": 2765,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The current transcription is for 'sparking', not the headword 'spark'.",
+    "evidence": [
+      "source_pdf:page:243",
+      "Morphological-ending audit found /ɪŋ/ on a non-ing headword.",
+      "https://dictionary.cambridge.org/pronunciation/english/spark"
+    ],
+    "expected_before": {
+      "phonetic": "['spa:kiŋ]"
+    },
+    "changes": {
+      "phonetic": "[spɑːk]"
+    },
+    "reviewed": true
+  },
+  "244:glancing": {
+    "source_order": 2775,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is adjectival, but the current example uses glancing as a gerund after by.",
+    "evidence": [
+      "source_pdf:page:244",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Certainly, no all-round knowledge can be acquired merely by glancing this way and that and relying on hearsay.",
+      "example_zh": "东张西望，道听途说，绝然得不到什么完全的知识。"
+    },
+    "changes": {
+      "example_en": "He made only a glancing reference to the problem.",
+      "example_zh": "他只是顺带提了一下这个问题。"
+    },
+    "reviewed": true
+  },
+  "245:humdrum": {
+    "source_order": 2786,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is adjectival, but 'the humdrum' in the current example is a substantivized noun.",
+    "evidence": [
+      "source_pdf:page:245",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "They all appeared to be lost in the humdrum and routine of their work.",
+      "example_zh": "他们好像在一个个单调的工作中迷失了。"
+    },
+    "changes": {
+      "example_en": "They were tired of the humdrum routine of their work.",
+      "example_zh": "他们厌倦了单调乏味的日常工作。"
+    },
+    "reviewed": true
+  },
+  "246:headlong": {
+    "source_order": 2798,
+    "kinds": [
+      "example"
+    ],
+    "reason": "Headlong has a valid adjective sense meaning rash or precipitate; preserve that GRE sense and replace the adverb example.",
+    "evidence": [
+      "source_pdf:page:246",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Do not leap headlong into decisions.",
+      "example_zh": "不要轻率地作决定。"
+    },
+    "changes": {
+      "example_en": "Their headlong rush into expansion ended badly.",
+      "example_zh": "他们轻率地急于扩张，最终结局不佳。"
+    },
+    "reviewed": true
+  },
+  "248:fluster": {
+    "source_order": 2825,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but 'in a fluster' in the current example is a noun phrase.",
+    "evidence": [
+      "source_pdf:page:248",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "She was put in a fluster by the unexpected guests.",
+      "example_zh": "不速之客的到来弄得她很慌张。"
+    },
+    "changes": {
+      "example_en": "The unexpected guests flustered her.",
+      "example_zh": "不速之客的到来使她慌了神。"
+    },
+    "reviewed": true
+  },
+  "252:deliberate": {
+    "source_order": 2873,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The definition contains adjective and verb senses while the example is verbal; retain both labeled pronunciations.",
+    "evidence": [
+      "source_pdf:page:252",
+      "Mixed-part-of-speech audit against the example 'deliberated'.",
+      "https://dictionary.cambridge.org/pronunciation/english/deliberate"
+    ],
+    "expected_before": {
+      "phonetic": "[dɪˈlɪbərət]"
+    },
+    "changes": {
+      "phonetic": "[adj. dɪˈlɪbərət; v. dɪˈlɪbəreɪt]"
+    },
+    "reviewed": true
+  },
+  "255:gut-level": {
+    "source_order": 2901,
+    "kinds": [
+      "definition",
+      "example"
+    ],
+    "reason": "The English definition contains only adj., and the current example is syntactically corrupted.",
+    "evidence": [
+      "source_pdf:page:255",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/gut-level"
+    ],
+    "expected_before": {
+      "definition_en": "adj.",
+      "definition_zh": "本能的",
+      "example_en": "It produces both an inability to understand what socialism [and] a gut level rejection and hostility to it.",
+      "example_zh": "这不但造成了人们对社会主义的不了解，同时造成人们对其本能的抵触和敌对。"
+    },
+    "changes": {
+      "definition_en": "adj. based on instinct or emotion rather than careful reasoning",
+      "definition_zh": "凭直觉的；本能层面的",
+      "example_en": "His rejection of the proposal was a gut-level reaction rather than a reasoned judgment.",
+      "example_zh": "他拒绝该提议是出于本能反应，而非理性判断。"
+    },
+    "reviewed": true
+  },
+  "257:inquisitive": {
+    "source_order": 2928,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current adjective example has an erroneous article and a singular possessive noun where a plural is required.",
+    "evidence": [
+      "source_pdf:page:257",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "She is a inquisitive about everyone's affair.",
+      "example_zh": "她对每个人的事都好奇。"
+    },
+    "changes": {
+      "example_en": "She is inquisitive about everyone's affairs.",
+      "example_zh": "她对每个人的事情都很好奇。"
+    },
+    "reviewed": true
+  },
+  "265:ethnic": {
+    "source_order": 3016,
+    "kinds": [
+      "part_of_speech"
+    ],
+    "reason": "标记和例句都是形容词，但释义 `a member...` 是名词义。",
+    "evidence": [
+      "source_pdf:page:265",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/ethnic"
+    ],
+    "expected_before": {
+      "definition_en": "adj. a member of a minority group who retains the customs, language, or social views of the group",
+      "definition_zh": "种族的"
+    },
+    "changes": {
+      "definition_en": "adj. relating to a group sharing cultural or national traditions",
+      "definition_zh": "族群的；民族文化的"
+    },
+    "reviewed": true
+  },
+  "268:pillory": {
+    "source_order": 3048,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current passive construction incorrectly uses the base form pillory after is.",
+    "evidence": [
+      "source_pdf:page:268",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "She is pillory in the press for her extravagant parties.",
+      "example_zh": "她的聚会十分铺张,新闻界对她大加揶揄."
+    },
+    "changes": {
+      "example_en": "She was pilloried in the press for her extravagant parties.",
+      "example_zh": "她因举办铺张的聚会而受到新闻界的严厉批评。"
+    },
+    "reviewed": true
+  },
+  "268:soft-pedal": {
+    "source_order": 3056,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The current example splits the hyphenated verb and uses the incorrect finite form plead.",
+    "evidence": [
+      "source_pdf:page:268",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "On the issue of industrial pollution, the environmental activist plead with the government not to soft - pedal.",
+      "example_zh": "自然环境保护活动分子请求政府不要淡化工业污染问题。"
+    },
+    "changes": {
+      "example_en": "The environmental activist pleaded with the government not to soft-pedal industrial pollution.",
+      "example_zh": "环保活动人士请求政府不要淡化工业污染问题。"
+    },
+    "reviewed": true
+  },
+  "272:astray": {
+    "source_order": 3099,
+    "kinds": [
+      "example"
+    ],
+    "reason": "标为副词，但例句把 `astray` 生硬地后置修饰 `mission`，句法/语义均不清楚。",
+    "evidence": [
+      "source_pdf:page:272",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "At first, Eisenhower claimed it was a weather research mission astray.",
+      "example_zh": "起先, 艾森豪威尔声称这是一个迷路的天气研究任务。"
+    },
+    "changes": {
+      "example_en": "The hikers went astray in the fog.",
+      "example_zh": "徒步者在雾中迷了路。"
+    },
     "reviewed": true
   },
   "277:puff up": {
+    "source_order": 3159,
+    "kinds": [
+      "content_completion",
+      "definition",
+      "example"
+    ],
+    "reason": "The definition is empty and the current example has incorrect word order and inflection.",
+    "evidence": [
+      "source_pdf:page:277",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/puff%20up",
+      "manual:source-field-completeness-review"
+    ],
+    "expected_before": {
+      "definition_en": "",
+      "definition_zh": "变得骄傲，膨胀",
+      "example_en": "That boy puff up himself in front of the girls.",
+      "example_zh": "那男孩在女孩面前吹捧自已。"
+    },
+    "changes": {
+      "definition_en": "phr. v. to make someone feel proud or conceited; to become swollen",
+      "definition_zh": "使骄傲自满；使膨胀",
+      "example_en": "He puffed himself up in front of the girls.",
+      "example_zh": "他在女孩们面前摆出一副自命不凡的样子。"
+    },
     "reviewed": true
   },
   "277:sound bite": {
+    "source_order": 3164,
+    "kinds": [
+      "content_completion",
+      "definition"
+    ],
+    "reason": "The definition is empty even though the current example clearly demonstrates the noun.",
+    "evidence": [
+      "source_pdf:page:277",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/sound%20bite",
+      "manual:source-field-completeness-review"
+    ],
+    "expected_before": {
+      "definition_en": "",
+      "definition_zh": "片段，摘引精句"
+    },
+    "changes": {
+      "definition_en": "n. a short, memorable statement, especially one repeated in the media",
+      "definition_zh": "（尤指媒体反复播放的）简短有力的话；精简言论"
+    },
     "reviewed": true
   },
   "279:hold sway": {
+    "source_order": 3182,
+    "kinds": [
+      "content_completion",
+      "definition"
+    ],
+    "reason": "The definition is empty even though the current example demonstrates the phrase.",
+    "evidence": [
+      "source_pdf:page:279",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/hold%20sway",
+      "manual:source-field-completeness-review"
+    ],
+    "expected_before": {
+      "definition_en": "",
+      "definition_zh": "占主导地位"
+    },
+    "changes": {
+      "definition_en": "phrase. to have great power or influence over someone or something",
+      "definition_zh": "占支配地位；有巨大影响力"
+    },
+    "reviewed": true
+  },
+  "281:throwback": {
+    "source_order": 3202,
+    "kinds": [
+      "example"
+    ],
+    "reason": "名词 `throwback` 前缺冠词：`as throwback`。",
+    "evidence": [
+      "source_pdf:page:281",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Until fairly recently, hitchhiking was not an uncommon practice in the United States, but today's motorists are likely to see the occasional hitchhiker as throwback, thinking “l didn’t know people still did that!”",
+      "example_zh": "直到相当最近，搭便车在美国并不罕见，但如今的司机们可能会将偶尔见到的搭便车者视为过时的现象，心想“我不知道人们还在做这个！”"
+    },
+    "changes": {
+      "example_en": "Until fairly recently, hitchhiking was not an uncommon practice in the United States, but today's motorists are likely to see the occasional hitchhiker as a throwback, thinking, 'I didn't know people still did that!'",
+      "example_zh": "直到不久前，搭便车在美国还很常见；但如今的司机很可能把偶尔遇到的搭便车者视为旧时代的人，并想：‘我还以为已经没人这么做了！’"
+    },
     "reviewed": true
   },
   "283:least bit": {
+    "source_order": 3231,
+    "kinds": [
+      "content_completion",
+      "definition",
+      "example"
+    ],
+    "reason": "The definition is empty, and the current affirmative example does not show the usual at-all meaning clearly.",
+    "evidence": [
+      "source_pdf:page:283",
+      "manual:independent-pos-definition-example-adjudication",
+      "https://www.merriam-webster.com/dictionary/least%20bit",
+      "manual:source-field-completeness-review"
+    ],
+    "expected_before": {
+      "definition_en": "",
+      "definition_zh": "一丁点",
+      "example_en": "He seems the least bit tractable.",
+      "example_zh": "他看上去有点听话。"
+    },
+    "changes": {
+      "definition_en": "phrase. even a very small amount; at all",
+      "definition_zh": "一点儿；丝毫",
+      "example_en": "He does not seem the least bit tractable.",
+      "example_zh": "他似乎一点儿也不温顺。"
+    },
+    "reviewed": true
+  },
+  "283:bulge": {
+    "source_order": 3234,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses bulge as a noun in a malformed compound.",
+    "evidence": [
+      "source_pdf:page:283",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "Only galaxies with a spherical bulge—like component appear to accommodate supermassive black holes.",
+      "example_zh": "只有拥有球形膨胀物质的星系才可能容纳超大质量的黑洞。"
+    },
+    "changes": {
+      "example_en": "The bag bulged with books.",
+      "example_zh": "袋子里装满了书，鼓了起来。"
+    },
+    "reviewed": true
+  },
+  "285:recompense": {
+    "source_order": 3248,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses recompense as a noun.",
+    "evidence": [
+      "source_pdf:page:285",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "He demands no financial recompense for his troubles.",
+      "example_zh": "他对遭受到的麻烦没有要求经济补偿。"
+    },
+    "changes": {
+      "example_en": "The company recompensed him for his losses.",
+      "example_zh": "公司补偿了他的损失。"
+    },
+    "reviewed": true
+  },
+  "288:redress": {
+    "source_order": 3291,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the current example uses redress as a noun meaning a remedy.",
+    "evidence": [
+      "source_pdf:page:288",
+      "manual:independent-pos-definition-example-adjudication"
+    ],
+    "expected_before": {
+      "example_en": "He is seeking redress for what he alleges was an unfair demotion.",
+      "example_zh": "他正在为他所声称不公正的降职寻求赔偿。"
+    },
+    "changes": {
+      "example_en": "The court sought to redress the injustice.",
+      "example_zh": "法院试图纠正这一不公。"
+    },
+    "reviewed": true
+  },
+  "55:blighted": {
+    "source_order": 598,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The headword and definition are adjectival, but the source example uses blighted as a finite verb; replace it with an unambiguous adjective example.",
+    "evidence": [
+      "source_pdf:page:55",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "The frost has blighted roses.",
+      "example_zh": "霜降使玫瑰枯萎了。"
+    },
+    "changes": {
+      "example_en": "The blighted roses never recovered from the frost.",
+      "example_zh": "这些枯萎的玫瑰始终未能从霜冻中恢复过来。"
+    },
+    "reviewed": true
+  },
+  "78:sublime": {
+    "source_order": 860,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is adjectival, but the source example uses the sublime as a noun; replace it with an unambiguous adjective example.",
+    "evidence": [
+      "source_pdf:page:78",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "She elevated every rare small success to the sublime.",
+      "example_zh": "她把每一次少有的微小成功都提升成了非凡的成就。"
+    },
+    "changes": {
+      "example_en": "Her sublime moral courage inspired the entire community.",
+      "example_zh": "她崇高的道德勇气鼓舞了整个社区。"
+    },
+    "reviewed": true
+  },
+  "87:extrovert": {
+    "source_order": 961,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition presents extrovert as a person noun, but the source example uses it attributively before personality; replace it with an unambiguous noun example.",
+    "evidence": [
+      "source_pdf:page:87",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "His footballing skills and extrovert personality won the hearts of the public.",
+      "example_zh": "他的足球技巧和外向的个性赢得了公众的心。"
+    },
+    "changes": {
+      "example_en": "As an extrovert, he enjoys meeting new people.",
+      "example_zh": "作为一个外向的人，他喜欢结识新朋友。"
+    },
+    "reviewed": true
+  },
+  "105:bias": {
+    "source_order": 1172,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is nominal, but the source example uses the derived adjective biased; replace it with an example of the noun bias.",
+    "evidence": [
+      "source_pdf:page:105",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "Many parents are biased against popular music.",
+      "example_zh": "许多父母对流行音乐有偏见。"
+    },
+    "changes": {
+      "example_en": "The report revealed a strong bias against younger applicants.",
+      "example_zh": "报告揭示了对年轻求职者的强烈偏见。"
+    },
+    "reviewed": true
+  },
+  "157:pensive": {
+    "source_order": 1774,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is adjectival, but the source example uses the derived adverb pensively; replace it with an example of the adjective pensive.",
+    "evidence": [
+      "source_pdf:page:157",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "Angela stared pensively out of the window.",
+      "example_zh": "安杰拉忧郁地望着窗外。"
+    },
+    "changes": {
+      "example_en": "She grew pensive as she watched the rain.",
+      "example_zh": "她望着雨，渐渐陷入沉思。"
+    },
+    "reviewed": true
+  },
+  "161:nihilism": {
+    "source_order": 1811,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is nominal, but the source example uses the derived adjective nihilistic; replace it with an example of the noun nihilism.",
+    "evidence": [
+      "source_pdf:page:161",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "Her latest play is a nihilistic vision of the world of the future.",
+      "example_zh": "她最近出的这个剧本对未来世界作了虚无主义的诠释。"
+    },
+    "changes": {
+      "example_en": "The novel explores the despair of modern nihilism.",
+      "example_zh": "这部小说探讨了现代虚无主义所带来的绝望。"
+    },
+    "reviewed": true
+  },
+  "181:fatigue": {
+    "source_order": 2049,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is nominal, but the source example uses the derived adjective fatigued; replace it with an example of the noun fatigue.",
+    "evidence": [
+      "source_pdf:page:181",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "Winter weather can leave you feeling fatigued and tired.",
+      "example_zh": "冬季会让人感觉疲乏无力。"
+    },
+    "changes": {
+      "example_en": "Severe fatigue forced him to stop working.",
+      "example_zh": "严重的疲劳迫使他停止工作。"
+    },
+    "reviewed": true
+  },
+  "190:binary": {
+    "source_order": 2155,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is adjectival, but the source example uses binary as a noun after in; replace it with an unambiguous adjective example.",
+    "evidence": [
+      "source_pdf:page:190",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "The machine does the calculations in binary.",
+      "example_zh": "这台机器采用二进制进行计算。"
+    },
+    "changes": {
+      "example_en": "The system uses a binary code.",
+      "example_zh": "该系统使用二进制代码。"
+    },
+    "reviewed": true
+  },
+  "192:grandstand": {
+    "source_order": 2175,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the source example uses grandstand as part of a noun phrase; replace it with an unambiguous verb example.",
+    "evidence": [
+      "source_pdf:page:192",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "The grandstand play caught attention of the crowd just as they were leaving.",
+      "example_zh": "就在观众正要离场的时候，那个吸引人的表演引起了他们的注意。"
+    },
+    "changes": {
+      "example_en": "The politician grandstanded for the cameras instead of answering the question.",
+      "example_zh": "这名政客没有回答问题，反而在镜头前哗众取宠。"
+    },
+    "reviewed": true
+  },
+  "200:preeminent": {
+    "source_order": 2265,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is adjectival, but the source example uses the derived noun preeminence; replace it with an example of the adjective preeminent.",
+    "evidence": [
+      "source_pdf:page:200",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "Europe was poised to reassert its traditional preeminence in Western art.",
+      "example_zh": "欧洲准备重新确立其在西方艺术上的传统卓越地位。"
+    },
+    "changes": {
+      "example_en": "She is the preeminent scholar in her field.",
+      "example_zh": "她是该领域最杰出的学者。"
+    },
+    "reviewed": true
+  },
+  "203:shear": {
+    "source_order": 2307,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the source example uses shears as a plural noun; replace it with an example of the verb shear.",
+    "evidence": [
+      "source_pdf:page:203",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "Trim the shrubs with shears.",
+      "example_zh": "用大剪刀修剪灌木丛。"
+    },
+    "changes": {
+      "example_en": "Workers shear the sheep every spring.",
+      "example_zh": "工人们每年春天给羊剪毛。"
+    },
+    "reviewed": true
+  },
+  "239:oscillate": {
+    "source_order": 2716,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the source example uses the derived noun oscillations; replace it with an example of the verb oscillate.",
+    "evidence": [
+      "source_pdf:page:239",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "There have always been slight oscillations in world temperature.",
+      "example_zh": "全球气温一直在轻微波动。"
+    },
+    "changes": {
+      "example_en": "He oscillated between optimism and despair.",
+      "example_zh": "他在乐观与绝望之间摇摆不定。"
+    },
+    "reviewed": true
+  },
+  "239:bustling": {
+    "source_order": 2728,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The headword and definition are adjectival, but the source example uses bustling as part of a progressive verb phrase; replace it with an unambiguous adjective example.",
+    "evidence": [
+      "source_pdf:page:239",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "She was bustling around in the kitchen.",
+      "example_zh": "她在厨房里四处奔忙着。"
+    },
+    "changes": {
+      "example_en": "The bustling market stayed open until midnight.",
+      "example_zh": "熙熙攘攘的市场一直营业到午夜。"
+    },
+    "reviewed": true
+  },
+  "256:pious": {
+    "source_order": 2915,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is adjectival, but the source example uses the derived adverb piously; replace it with an example of the adjective pious.",
+    "evidence": [
+      "source_pdf:page:256",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "Conti kneeled and crossed himself piously.",
+      "example_zh": "康蒂跪下来虔诚地用手在胸前画了个十字。"
+    },
+    "changes": {
+      "example_en": "The pious monk spent hours in prayer.",
+      "example_zh": "这位虔诚的僧侣花了数小时祈祷。"
+    },
+    "reviewed": true
+  },
+  "262:accent": {
+    "source_order": 2982,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the source example uses accent attributively in the noun phrase accent colors; replace it with an unambiguous verb example.",
+    "evidence": [
+      "source_pdf:page:262",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "These colors are used as accent colors in the rest of the website.",
+      "example_zh": "网站的其他部分将这个颜色用作强调色。"
+    },
+    "changes": {
+      "example_en": "Bright cushions accent the dark furniture.",
+      "example_zh": "鲜艳的靠垫衬托了深色家具。"
+    },
+    "reviewed": true
+  },
+  "268:comport": {
+    "source_order": 3050,
+    "kinds": [
+      "example"
+    ],
+    "reason": "The definition is verbal, but the source example uses the derived noun comportment; replace it with an example of the verb comport.",
+    "evidence": [
+      "source_pdf:page:268",
+      "manual:final-pos-example-boundary-reaudit"
+    ],
+    "expected_before": {
+      "example_en": "Another aspect of executive presence is comportment—your way of conducting yourself in interacting with others.",
+      "example_zh": "领导者气质的另一方面就是举止风度——你与他人交流时行为表现。"
+    },
+    "changes": {
+      "example_en": "She comported herself with dignity throughout the hearing.",
+      "example_zh": "在整个听证过程中，她的举止始终端庄得体。"
+    },
+    "reviewed": true
+  },
+  "268:short-lived": {
+    "source_order": 3051,
+    "kinds": [
+      "phonetic"
+    ],
+    "reason": "The source phonetic has malformed stress placement and an unclear unlabelled variant; normalize it to the verified British IPA.",
+    "evidence": [
+      "source_pdf:page:268",
+      "manual:full-phonetic-structure-reaudit",
+      "https://dictionary.cambridge.org/pronunciation/english/short-lived"
+    ],
+    "expected_before": {
+      "phonetic": "[ˈʃɔ:tˈlaɪvdˌ -ˈlɪvd]"
+    },
+    "changes": {
+      "phonetic": "[ˌʃɔːtˈlɪvd]"
+    },
     "reviewed": true
   }
 }

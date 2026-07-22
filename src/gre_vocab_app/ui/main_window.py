@@ -6,16 +6,20 @@ from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
+    QHBoxLayout,
+    QLabel,
     QMainWindow,
     QMessageBox,
+    QSizePolicy,
     QStackedWidget,
     QToolBar,
+    QWidget,
 )
 
-from .favorites_page import FavoritesPage
 from .home_page import HomePage
 from .settings_dialog import SettingsDialog
 from .study_page import StudyPage
+from .word_list_page import WordListPage
 
 
 _PREFERRED_MINIMUM_WIDTH = 820
@@ -31,6 +35,7 @@ _QT_INT_MAX = 2**31 - 1
 
 class MainWindow(QMainWindow):
     homeRequested = Signal()
+    wordListRequested = Signal()
     findRequested = Signal()
     closing = Signal(object)
 
@@ -46,41 +51,73 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         self.home_page = HomePage()
+        self.word_list_page = WordListPage()
         self.study_page = StudyPage()
-        self.favorites_page = FavoritesPage()
         self.stack.addWidget(self.home_page)
+        self.stack.addWidget(self.word_list_page)
         self.stack.addWidget(self.study_page)
-        self.stack.addWidget(self.favorites_page)
         self.setCentralWidget(self.stack)
 
-        toolbar = QToolBar("主工具栏")
-        toolbar.setMovable(False)
-        toolbar.setFloatable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
-        self.addToolBar(toolbar)
+        self.toolbar = QToolBar("主工具栏")
+        self.toolbar.setObjectName("mainToolbar")
+        self.toolbar.setMovable(False)
+        self.toolbar.setFloatable(False)
+        self.toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.addToolBar(self.toolbar)
+
+        brand = QWidget()
+        brand_layout = QHBoxLayout(brand)
+        brand_layout.setContentsMargins(0, 0, 20, 0)
+        brand_layout.setSpacing(8)
+        brand_mark = QLabel("GRE 3000")
+        brand_mark.setObjectName("brandMark")
+        brand_tag = QLabel("OFFLINE")
+        brand_tag.setObjectName("brandTag")
+        brand_layout.addWidget(brand_mark)
+        brand_layout.addWidget(brand_tag)
+        self.toolbar.addWidget(brand)
+
         self.home_action = QAction("首页", self)
+        self.word_list_action = QAction("词表", self)
         self.settings_action = QAction("设置", self)
-        toolbar.addAction(self.home_action)
-        toolbar.addSeparator()
-        toolbar.addAction(self.settings_action)
+        self.home_action.setCheckable(True)
+        self.word_list_action.setCheckable(True)
+        self.home_action.setChecked(True)
+        self.toolbar.addAction(self.home_action)
+        self.toolbar.addAction(self.word_list_action)
+        toolbar_spacer = QWidget()
+        toolbar_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.toolbar.addWidget(toolbar_spacer)
+        self.toolbar.addAction(self.settings_action)
         self.home_action.triggered.connect(self.homeRequested.emit)
+        self.word_list_action.triggered.connect(self.wordListRequested.emit)
+        self.home_page.wordListRequested.connect(self.wordListRequested.emit)
 
         self.find_shortcut = QShortcut(QKeySequence.StandardKey.Find, self)
-        self.find_shortcut.setContext(Qt.ApplicationShortcut)
+        # Window scope keeps Ctrl+F global inside this product window while
+        # avoiding ambiguity with other Qt windows in the same process.
+        self.find_shortcut.setContext(Qt.WindowShortcut)
         self.find_shortcut.activated.connect(self.findRequested.emit)
+        self.study_page.findRequested.connect(self.findRequested.emit)
 
         self.settings_dialog = SettingsDialog(self)
         self.settings_action.triggered.connect(self.show_settings)
-        self.statusBar().showMessage("离线模式")
+        self.statusBar().showMessage("离线运行 · 学习数据仅保存在本机")
 
     def show_home(self) -> None:
         self.stack.setCurrentWidget(self.home_page)
+        self.home_action.setChecked(True)
+        self.word_list_action.setChecked(False)
 
     def show_study(self) -> None:
         self.stack.setCurrentWidget(self.study_page)
+        self.home_action.setChecked(False)
+        self.word_list_action.setChecked(False)
 
-    def show_favorites(self) -> None:
-        self.stack.setCurrentWidget(self.favorites_page)
+    def show_word_list(self) -> None:
+        self.stack.setCurrentWidget(self.word_list_page)
+        self.home_action.setChecked(False)
+        self.word_list_action.setChecked(True)
 
     def show_settings(self) -> None:
         self.settings_dialog.show()

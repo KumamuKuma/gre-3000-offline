@@ -35,6 +35,8 @@ def test_reset_position_and_clear_all_keep_schema_reusable(tmp_path):
         repository.save_setting("browse_order", "random")
         repository.record_seen(1)
         repository.save_queue("random", [1, 2], position=1, seed=9)
+        repository.set_star_rating(1, 3)
+        repository.increment_list_completion("list1")
 
         repository.reset_position("random")
         assert repository.load_queue("random").position == 0
@@ -45,6 +47,11 @@ def test_reset_position_and_clear_all_keep_schema_reusable(tmp_path):
         assert repository.load_setting("browse_order") is None
         assert repository.load_queue("random") == QueueState((), 0, 0)
         assert repository.db.execute("select count(*) from word_progress").fetchone()[0] == 0
+        assert repository.star_rating(1) == 0
+        assert repository.list_completion_count("list1") == 0
+        assert repository.db.execute(
+            "select count(*) from word_annotations"
+        ).fetchone()[0] == 0
 
         repository.save_setting("study_mode", "reading")
         assert repository.load_setting("study_mode") == "reading"
@@ -90,7 +97,15 @@ def test_schema_version_is_set_and_initialization_is_idempotent(tmp_path):
                 "select name from sqlite_master where type='table'"
             )
         }
-        assert {"settings", "favorites", "word_progress", "session_queue"} <= tables
+        assert {
+            "settings",
+            "favorites",
+            "word_progress",
+            "session_queue",
+            "seen_events",
+            "word_annotations",
+            "list_progress",
+        } <= tables
 
 
 def test_unsupported_user_schema_is_not_mistaken_for_corruption(tmp_path):
@@ -203,7 +218,10 @@ def test_user_schema_migrates_v1_to_current_without_losing_data(tmp_path):
 
     with UserRepository(path) as repository:
         assert repository.load_setting("study_mode") == "recall"
-        assert repository.db.execute("pragma user_version").fetchone()[0] >= 2
+        assert (
+            repository.db.execute("pragma user_version").fetchone()[0]
+            == user_module.USER_SCHEMA_VERSION
+        )
         tables = {
             row[0]
             for row in repository.db.execute(
@@ -211,6 +229,76 @@ def test_user_schema_migrates_v1_to_current_without_losing_data(tmp_path):
             )
         }
         assert "seen_events" in tables
+        assert "word_annotations" in tables
+
+
+def test_user_schema_migrates_v2_to_current_without_losing_data(tmp_path):
+    path = tmp_path / "user.db"
+    with sqlite3.connect(path) as database:
+        database.executescript(user_module.USER_SCHEMA)
+        database.executescript(user_module.SEEN_EVENTS_SCHEMA)
+        database.execute("pragma user_version=2")
+        database.execute(
+            "insert into settings(key, value) values('study_mode', 'recall')"
+        )
+        database.execute(
+            "insert into favorites(word_id, created_at) values(7, 'favorite-time')"
+        )
+        database.execute(
+            "insert into word_progress(word_id, seen_count, last_seen_at) "
+            "values(7, 3, 'seen-time')"
+        )
+        database.execute(
+            "insert into session_queue(name, word_ids, position, seed) "
+            "values('source', '[7,9]', 1, 0)"
+        )
+        database.execute(
+            "insert into seen_events(event_id, word_id, created_at) "
+            "values('event-7', 7, 'event-time')"
+        )
+
+    with UserRepository(path) as repository:
+        assert (
+            repository.db.execute("pragma user_version").fetchone()[0]
+            == user_module.USER_SCHEMA_VERSION
+        )
+        assert repository.load_setting("study_mode") == "recall"
+        assert repository.favorite_ids() == (7,)
+        assert repository.load_queue("source") == QueueState((7, 9), 1, 0)
+        assert repository.db.execute(
+            "select seen_count, last_seen_at from word_progress where word_id=7"
+        ).fetchone() == (3, "seen-time")
+        assert repository.db.execute(
+            "select word_id, created_at from seen_events where event_id='event-7'"
+        ).fetchone() == (7, "event-time")
+        assert repository.star_rating(7) == 0
+        assert repository.list_completion_count("list1") == 0
+
+
+def test_user_schema_migrates_v3_ratings_and_drops_per_word_counts(tmp_path):
+    path = tmp_path / "user.db"
+    with sqlite3.connect(path) as database:
+        database.executescript(user_module.USER_SCHEMA)
+        database.executescript(user_module.SEEN_EVENTS_SCHEMA)
+        database.executescript(user_module.WORD_ANNOTATIONS_SCHEMA)
+        database.execute("pragma user_version=3")
+        database.execute(
+            "insert into word_annotations values(7, 5, 9, 'old-time')"
+        )
+        database.execute(
+            "insert into word_annotations values(8, 2, 4, 'old-time')"
+        )
+
+    with UserRepository(path) as repository:
+        assert repository.star_rating(7) == 3
+        assert repository.star_rating(8) == 2
+        assert tuple(
+            row[1]
+            for row in repository.db.execute(
+                "pragma table_info('word_annotations')"
+            )
+        ) == ("word_id", "star_rating", "updated_at")
+        assert repository.list_completion_count("list1") == 0
 
 
 def test_malformed_queue_is_reset_without_losing_other_user_data(tmp_path):
@@ -360,3 +448,120 @@ def test_close_refuses_to_drop_pending_writes_and_can_retry_after_unlock(tmp_pat
     assert repository.close() is True
     with UserRepository(path) as reopened:
         assert reopened.load_setting("study_mode") == "recall"
+
+
+def test_word_annotations_and_list_completion_validate_cycle_and_persist(tmp_path):
+    path = tmp_path / "user.db"
+    with UserRepository(path) as repository:
+        assert repository.star_rating(7) == 0
+        assert repository.star_counts([7, 8, 8]) == {
+            0: 2,
+            1: 0,
+            2: 0,
+            3: 0,
+        }
+
+        assert repository.set_star_rating(7, 2) is True
+        assert repository.cycle_star_rating(7) == 3
+        assert repository.cycle_star_rating(7) == 0
+        repository.set_star_rating(8, 3)
+        assert repository.increment_list_completion("list1") == 1
+        assert repository.increment_list_completion("list1") == 2
+        assert repository.adjust_list_completion("list1", -1) == 1
+        assert repository.set_list_completion_count("list1", 4) == 4
+
+        assert repository.star_counts([7, 8, 9, 9]) == {
+            0: 2,
+            1: 0,
+            2: 0,
+            3: 1,
+        }
+
+    with UserRepository(path) as repository:
+        assert repository.star_rating(7) == 0
+        assert repository.star_rating(8) == 3
+        assert repository.list_completion_count("list1") == 4
+        assert repository.list_completion_counts() == {"list1": 4}
+        assert repository.db.execute(
+            "select star_rating from word_annotations where word_id=8"
+        ).fetchone() == (3,)
+
+
+@pytest.mark.parametrize(
+    ("method", "arguments"),
+    [
+        ("star_rating", (0,)),
+        ("star_rating", (True,)),
+        ("set_star_rating", (1, -1)),
+        ("set_star_rating", (1, 4)),
+        ("set_star_rating", (1, True)),
+        ("star_counts", ([1, False],)),
+        ("list_completion_count", ("",)),
+        ("increment_list_completion", (None,)),
+        ("set_list_completion_count", ("list1", -1)),
+        ("set_list_completion_count", ("list1", True)),
+        ("adjust_list_completion", ("list1", 1.5)),
+    ],
+)
+def test_word_annotations_reject_invalid_values(tmp_path, method, arguments):
+    with UserRepository(tmp_path / "user.db") as repository:
+        with pytest.raises(ValueError):
+            getattr(repository, method)(*arguments)
+
+
+def test_word_annotation_database_constraints_are_enforced(tmp_path):
+    with UserRepository(tmp_path / "user.db") as repository:
+        with pytest.raises(sqlite3.IntegrityError):
+            repository.db.execute(
+                "insert into word_annotations values(1, 4, 'now')"
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            repository.db.execute(
+                "insert into list_progress values('list1', -1, 'now')"
+            )
+
+
+def test_user_schema_rejects_annotation_table_without_constraints(tmp_path):
+    path = tmp_path / "user.db"
+    with UserRepository(path):
+        pass
+    with sqlite3.connect(path) as database:
+        database.executescript(
+            """
+            alter table word_annotations rename to word_annotations_old;
+            create table word_annotations(
+              word_id integer primary key,
+              star_rating integer not null,
+              updated_at text not null
+            );
+            drop table word_annotations_old;
+            """
+        )
+
+    with pytest.raises(
+        user_module.UserSchemaError,
+        match="word_annotations|constraint|rating",
+    ):
+        UserRepository.open_recovering(path)
+    assert not list(tmp_path.glob("*.corrupt-*"))
+
+
+def test_pending_word_annotation_write_is_visible_and_retries(tmp_path):
+    path = tmp_path / "user.db"
+    repository = UserRepository(path)
+    lock = sqlite3.connect(path)
+    lock.execute("begin exclusive")
+    try:
+        assert repository.set_star_rating(7, 3) is False
+        assert repository.star_rating(7) == 3
+        assert repository.increment_list_completion("list1") == 1
+        assert repository.has_pending_writes
+    finally:
+        lock.rollback()
+        lock.close()
+
+    assert repository.flush_pending() is True
+    assert repository.close() is True
+    with UserRepository(path) as reopened:
+        assert reopened.star_rating(7) == 3
+        assert reopened.list_completion_count("list1") == 1

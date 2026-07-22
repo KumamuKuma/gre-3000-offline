@@ -1,5 +1,5 @@
-CONTENT_SCHEMA_VERSION = 1
-USER_SCHEMA_VERSION = 2
+CONTENT_SCHEMA_VERSION = 2
+USER_SCHEMA_VERSION = 4
 
 
 CONTENT_SCHEMA = """
@@ -25,4 +25,17 @@ create table words(
 );
 create index words_headword_nocase on words(headword collate nocase);
 create index words_source_order on words(source_order);
+create table equivalence_edges(
+  left_word_id integer not null references words(id),
+  right_word_id integer not null references words(id),
+  source_pages text not null,
+  primary key(left_word_id, right_word_id),
+  check(left_word_id < right_word_id)
+);
+create index equivalence_edges_right_word on equivalence_edges(right_word_id);
+create table machine7_membership(
+  word_id integer primary key references words(id),
+  source_page integer not null,
+  source_headword text not null
+);
 """

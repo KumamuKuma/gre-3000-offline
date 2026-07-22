@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import uuid
 from dataclasses import dataclass
@@ -43,6 +44,37 @@ create table if not exists seen_events(
 """
 
 
+WORD_ANNOTATIONS_SCHEMA = """
+create table if not exists word_annotations(
+  word_id integer primary key,
+  star_rating integer not null check(star_rating between 0 and 5),
+  manual_review_count integer not null check(manual_review_count >= 0),
+  updated_at text not null
+);
+"""
+
+
+LIST_PROGRESS_SCHEMA = """
+alter table word_annotations rename to word_annotations_v3;
+create table word_annotations(
+  word_id integer primary key,
+  star_rating integer not null check(star_rating between 0 and 3),
+  updated_at text not null
+);
+insert into word_annotations(word_id, star_rating, updated_at)
+select word_id,
+       case when star_rating > 3 then 3 else star_rating end,
+       updated_at
+from word_annotations_v3;
+drop table word_annotations_v3;
+create table list_progress(
+  source_section text primary key,
+  completed_count integer not null check(completed_count >= 0),
+  updated_at text not null
+);
+"""
+
+
 _EXPECTED_SCHEMA = {
     "settings": (
         ("key", "TEXT", 0, None, 1),
@@ -67,6 +99,16 @@ _EXPECTED_SCHEMA = {
         ("event_id", "TEXT", 0, None, 1),
         ("word_id", "INTEGER", 1, None, 0),
         ("created_at", "TEXT", 1, None, 0),
+    ),
+    "word_annotations": (
+        ("word_id", "INTEGER", 0, None, 1),
+        ("star_rating", "INTEGER", 1, None, 0),
+        ("updated_at", "TEXT", 1, None, 0),
+    ),
+    "list_progress": (
+        ("source_section", "TEXT", 0, None, 1),
+        ("completed_count", "INTEGER", 1, None, 0),
+        ("updated_at", "TEXT", 1, None, 0),
     ),
 }
 
@@ -135,6 +177,10 @@ class UserRepository:
                 self._migrate_0_to_1()
             elif version == 1:
                 self._migrate_1_to_2()
+            elif version == 2:
+                self._migrate_2_to_3()
+            elif version == 3:
+                self._migrate_3_to_4()
             else:  # pragma: no cover - guarded by the version bounds above
                 raise UserSchemaError(f"no migration from user schema {version}")
             version += 1
@@ -145,6 +191,12 @@ class UserRepository:
 
     def _migrate_1_to_2(self) -> None:
         self._run_migration(SEEN_EVENTS_SCHEMA, target_version=2)
+
+    def _migrate_2_to_3(self) -> None:
+        self._run_migration(WORD_ANNOTATIONS_SCHEMA, target_version=3)
+
+    def _migrate_3_to_4(self) -> None:
+        self._run_migration(LIST_PROGRESS_SCHEMA, target_version=4)
 
     def _run_migration(self, script: str, *, target_version: int) -> None:
         try:
@@ -174,6 +226,30 @@ class UserRepository:
                     f"user database table {table} has invalid shape: "
                     f"expected {expected}, got {actual}"
                 )
+        row = self.db.execute(
+            "select sql from sqlite_master where type='table' "
+            "and name='word_annotations'"
+        ).fetchone()
+        definition = "" if row is None or row[0] is None else str(row[0])
+        normalized = re.sub(r"\s+", "", definition.casefold())
+        required_constraints = (
+            "check(star_ratingbetween0and3)",
+        )
+        if any(fragment not in normalized for fragment in required_constraints):
+            raise UserSchemaError(
+                "user database table word_annotations is missing required "
+                "rating constraint"
+            )
+        row = self.db.execute(
+            "select sql from sqlite_master where type='table' "
+            "and name='list_progress'"
+        ).fetchone()
+        definition = "" if row is None or row[0] is None else str(row[0])
+        normalized = re.sub(r"\s+", "", definition.casefold())
+        if "check(completed_count>=0)" not in normalized:
+            raise UserSchemaError(
+                "user database table list_progress is missing its count constraint"
+            )
 
     @staticmethod
     def _decode_queue(
@@ -227,6 +303,38 @@ class UserRepository:
         self._seen_event_ids = {
             str(row[0]) for row in self.db.execute("select event_id from seen_events")
         }
+        self._annotations: dict[int, tuple[int, str]] = {}
+        for row in self.db.execute(
+            "select word_id, star_rating, updated_at from word_annotations"
+        ):
+            word_id, star_rating, updated_at = row
+            if (
+                type(word_id) is not int
+                or word_id <= 0
+                or type(star_rating) is not int
+                or not 0 <= star_rating <= 3
+                or not isinstance(updated_at, str)
+                or not updated_at.strip()
+            ):
+                raise UserSchemaError(
+                    "word_annotations contains an invalid annotation row"
+                )
+            self._annotations[word_id] = (star_rating, updated_at)
+        self._list_progress: dict[str, tuple[int, str]] = {}
+        for row in self.db.execute(
+            "select source_section, completed_count, updated_at from list_progress"
+        ):
+            source_section, completed_count, updated_at = row
+            if (
+                not isinstance(source_section, str)
+                or not source_section.strip()
+                or type(completed_count) is not int
+                or completed_count < 0
+                or not isinstance(updated_at, str)
+                or not updated_at.strip()
+            ):
+                raise UserSchemaError("list_progress contains an invalid row")
+            self._list_progress[source_section] = (completed_count, updated_at)
         self._queues: dict[str, QueueState] = {}
         malformed: list[int] = []
         for row in self.db.execute(
@@ -320,6 +428,24 @@ class UserRepository:
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
+    @staticmethod
+    def _annotation_word_id(word_id: object) -> int:
+        if type(word_id) is not int or word_id <= 0:
+            raise ValueError("word ID must be a positive integer")
+        return word_id
+
+    @staticmethod
+    def _star_value(star_rating: object) -> int:
+        if type(star_rating) is not int or not 0 <= star_rating <= 3:
+            raise ValueError("star rating must be an integer from 0 through 3")
+        return star_rating
+
+    @staticmethod
+    def _source_section_value(source_section: object) -> str:
+        if not isinstance(source_section, str) or not source_section.strip():
+            raise ValueError("source section cannot be blank")
+        return source_section.strip()
+
     def _apply_seen(self, event_id: str, word_id: int, created_at: str) -> None:
         cursor = self.db.execute(
             "insert or ignore into seen_events(event_id, word_id, created_at) "
@@ -365,10 +491,35 @@ class UserRepository:
             name, encoded, position, seed, event_id, word_id, created_at = values
             self._write_queue(name, encoded, position, seed)
             self._apply_seen(event_id, word_id, created_at)
+        elif kind == "annotation":
+            self.db.execute(
+                """
+                insert into word_annotations(word_id, star_rating, updated_at)
+                values(?, ?, ?)
+                on conflict(word_id) do update set
+                  star_rating=excluded.star_rating,
+                  updated_at=excluded.updated_at
+                """,
+                values,
+            )
+        elif kind == "list_completion":
+            self.db.execute(
+                """
+                insert into list_progress(
+                  source_section, completed_count, updated_at
+                ) values(?, ?, ?)
+                on conflict(source_section) do update set
+                  completed_count=excluded.completed_count,
+                  updated_at=excluded.updated_at
+                """,
+                values,
+            )
         elif kind == "reset":
             self.db.execute(
                 "update session_queue set position=0 where name=?", values
             )
+        elif kind == "reset_all":
+            self.db.execute("update session_queue set position=0")
         elif kind == "clear":
             for table in (
                 "settings",
@@ -376,6 +527,8 @@ class UserRepository:
                 "word_progress",
                 "session_queue",
                 "seen_events",
+                "word_annotations",
+                "list_progress",
             ):
                 self.db.execute(f"delete from {table}")
         else:  # pragma: no cover - mutations are created internally
@@ -471,6 +624,88 @@ class UserRepository:
             )
         )
 
+    def star_rating(self, word_id: int) -> int:
+        word_id = self._annotation_word_id(word_id)
+        return self._annotations.get(word_id, (0, ""))[0]
+
+    def _set_annotation(self, word_id: int, star_rating: int) -> bool:
+        word_id = self._annotation_word_id(word_id)
+        star_rating = self._star_value(star_rating)
+        current = self._annotations.get(word_id)
+        if current is not None and current[0] == star_rating:
+            return self.flush_pending()
+        if current is None and star_rating == 0:
+            return self.flush_pending()
+        updated_at = self._now()
+        self._annotations[word_id] = (star_rating, updated_at)
+        return self._enqueue(
+            _Mutation(
+                "annotation",
+                (word_id, star_rating, updated_at),
+            )
+        )
+
+    def set_star_rating(self, word_id: int, star_rating: int) -> bool:
+        word_id = self._annotation_word_id(word_id)
+        star_rating = self._star_value(star_rating)
+        return self._set_annotation(word_id, star_rating)
+
+    def cycle_star_rating(self, word_id: int) -> int:
+        word_id = self._annotation_word_id(word_id)
+        value = (self.star_rating(word_id) + 1) % 4
+        self.set_star_rating(word_id, value)
+        return value
+
+    def star_counts(self, word_ids: Sequence[int]) -> dict[int, int]:
+        counts = {rating: 0 for rating in range(4)}
+        unique_ids: set[int] = set()
+        for value in word_ids:
+            word_id = self._annotation_word_id(value)
+            if word_id in unique_ids:
+                continue
+            unique_ids.add(word_id)
+            counts[self.star_rating(word_id)] += 1
+        return counts
+
+    def list_completion_count(self, source_section: str) -> int:
+        key = self._source_section_value(source_section)
+        return self._list_progress.get(key, (0, ""))[0]
+
+    def list_completion_counts(self) -> dict[str, int]:
+        return {
+            key: value[0]
+            for key, value in self._list_progress.items()
+        }
+
+    def set_list_completion_count(
+        self, source_section: str, completed_count: int
+    ) -> int:
+        key = self._source_section_value(source_section)
+        if type(completed_count) is not int or completed_count < 0:
+            raise ValueError("completed count must be a non-negative integer")
+        current = self.list_completion_count(key)
+        if current == completed_count:
+            self.flush_pending()
+            return current
+        updated_at = self._now()
+        self._list_progress[key] = (completed_count, updated_at)
+        self._enqueue(
+            _Mutation("list_completion", (key, completed_count, updated_at))
+        )
+        return completed_count
+
+    def adjust_list_completion(
+        self, source_section: str, delta: int
+    ) -> int:
+        key = self._source_section_value(source_section)
+        if type(delta) is not int:
+            raise ValueError("completion adjustment must be an integer")
+        value = max(0, self.list_completion_count(key) + delta)
+        return self.set_list_completion_count(key, value)
+
+    def increment_list_completion(self, source_section: str) -> int:
+        return self.adjust_list_completion(source_section, 1)
+
     def record_seen(self, word_id: int) -> bool:
         return self._record_seen(int(word_id), uuid.uuid4().hex)
 
@@ -554,12 +789,21 @@ class UserRepository:
             self._queues[name] = QueueState(state.word_ids, 0, state.seed)
         return self._enqueue(_Mutation("reset", (name,)))
 
+    def reset_all_positions(self) -> bool:
+        self._queues = {
+            name: QueueState(state.word_ids, 0, state.seed)
+            for name, state in self._queues.items()
+        }
+        return self._enqueue(_Mutation("reset_all", ()))
+
     def clear_all(self) -> bool:
         self._settings.clear()
         self._favorites.clear()
         self._seen_counts.clear()
         self._seen_event_ids.clear()
         self._queues.clear()
+        self._annotations.clear()
+        self._list_progress.clear()
         self._pending = [_Mutation("clear", ())]
         return self.flush_pending()
 

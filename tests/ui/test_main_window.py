@@ -9,6 +9,44 @@ from PySide6.QtWidgets import QMessageBox
 from gre_vocab_app.ui.main_window import MainWindow
 
 
+def test_main_window_exposes_word_list_navigation_and_find_signal(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.show_word_list()
+    assert window.stack.currentWidget() is window.word_list_page
+    window.show_home()
+    assert window.stack.currentWidget() is window.home_page
+
+    with qtbot.waitSignal(window.wordListRequested):
+        window.word_list_action.trigger()
+    with qtbot.waitSignal(window.wordListRequested):
+        window.home_page.word_list_button.click()
+    with qtbot.waitSignal(window.findRequested):
+        window.find_shortcut.activated.emit()
+
+    assert window.word_list_action.text() == "词表"
+
+
+def test_home_search_results_fit_without_overlapping_actions_at_minimum_size(
+    qtbot, sample_word
+):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.resize(820, 620)
+    window.show()
+    page = window.home_page
+    page.search_edit.setText("a")
+    page.set_results([sample_word])
+    qtbot.waitUntil(page.results.isVisible)
+
+    start_bottom = page.start_button.mapTo(
+        page, page.start_button.rect().bottomLeft()
+    ).y()
+    assert start_bottom < page.results.geometry().top()
+    assert page.results.height() >= page.results.minimumSizeHint().height()
+
+
 def test_main_window_restores_intersecting_geometry_and_rejects_offscreen(qtbot):
     assert hasattr(MainWindow, "restore_geometry_state")
     window = MainWindow()

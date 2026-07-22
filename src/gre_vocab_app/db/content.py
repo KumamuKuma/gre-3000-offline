@@ -6,7 +6,8 @@ import unicodedata
 from pathlib import Path
 from typing import Self
 
-from gre_vocab_app.domain import WordEntry
+from gre_vocab_app.domain import RootFamily, SourceList, RelatedWord, WordEntry
+from gre_vocab_app.services.relations import WordRelationIndex
 
 from .schema import CONTENT_SCHEMA_VERSION
 
@@ -64,6 +65,17 @@ class ContentRepository:
         try:
             self._validate_contract()
             self._build_search_index()
+            self._build_list_index()
+            equivalence_pairs = (
+                (word_id, related_id)
+                for word_id, related_ids in self._equivalent_ids.items()
+                for related_id in related_ids
+                if word_id < related_id
+            )
+            self._relations = WordRelationIndex(
+                self._validated_entries,
+                excluded_lookalike_pairs=equivalence_pairs,
+            )
         except ContentDatabaseError:
             self.db.close()
             raise
@@ -88,6 +100,14 @@ class ContentRepository:
 
         self._require_columns("metadata", ("key", "value"))
         self._require_columns("words", _WORD_COLUMNS)
+        self._require_columns(
+            "equivalence_edges",
+            ("left_word_id", "right_word_id", "source_pages"),
+        )
+        self._require_columns(
+            "machine7_membership",
+            ("word_id", "source_page", "source_headword"),
+        )
 
         metadata = {
             str(row[0]): str(row[1])
@@ -141,6 +161,90 @@ class ContentRepository:
         self._entries_by_id = {
             entry.id: entry for entry in self._validated_entries
         }
+        self._load_reference_indexes(metadata)
+
+    def _load_reference_indexes(self, metadata: dict[str, str]) -> None:
+        foreign_key_errors = self.db.execute("pragma foreign_key_check").fetchall()
+        if foreign_key_errors:
+            raise ContentDatabaseError(
+                f"词库外键完整性检查失败：{[tuple(row) for row in foreign_key_errors]}"
+            )
+
+        try:
+            expected_edges = int(metadata["equivalence_edge_count"])
+            expected_machine7 = int(metadata["machine7_membership_count"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ContentDatabaseError(f"词库参考资料计数无效：{error}") from error
+        if expected_edges < 0 or expected_machine7 < 0:
+            raise ContentDatabaseError("词库参考资料计数不能为负数")
+
+        edge_rows = self.db.execute(
+            "select left_word_id, right_word_id, source_pages "
+            "from equivalence_edges order by left_word_id, right_word_id"
+        ).fetchall()
+        if len(edge_rows) != expected_edges:
+            raise ContentDatabaseError(
+                "词库 equivalence_edge_count 与实际记录数不一致"
+            )
+        adjacency: dict[int, list[int]] = {
+            word_id: [] for word_id in self._entries_by_id
+        }
+        for row in edge_rows:
+            left, right, raw_pages = row
+            if type(left) is not int or type(right) is not int:
+                raise ContentDatabaseError("等价词关系 id 必须是整数")
+            if not 0 < left < right:
+                raise ContentDatabaseError("等价词关系 id 必须为正数且有序")
+            if left not in self._entries_by_id or right not in self._entries_by_id:
+                raise ContentDatabaseError("等价词关系引用了不存在的词条")
+            if not isinstance(raw_pages, str):
+                raise ContentDatabaseError("等价词来源页必须是 JSON 文本")
+            try:
+                pages = json.loads(raw_pages)
+            except json.JSONDecodeError as error:
+                raise ContentDatabaseError(
+                    f"等价词来源页 JSON 无效：{error}"
+                ) from error
+            if (
+                not isinstance(pages, list)
+                or not pages
+                or any(type(page) is not int or page <= 0 for page in pages)
+                or pages != sorted(set(pages))
+            ):
+                raise ContentDatabaseError("等价词来源页必须是有序正整数数组")
+            adjacency[left].append(right)
+            adjacency[right].append(left)
+        self._equivalent_ids = {
+            word_id: tuple(
+                sorted(
+                    related_ids,
+                    key=lambda related_id: self._entries_by_id[
+                        related_id
+                    ].source_order,
+                )
+            )
+            for word_id, related_ids in adjacency.items()
+        }
+
+        machine_rows = self.db.execute(
+            "select word_id, source_page, source_headword "
+            "from machine7_membership order by word_id"
+        ).fetchall()
+        if len(machine_rows) != expected_machine7:
+            raise ContentDatabaseError(
+                "词库 machine7_membership_count 与实际记录数不一致"
+            )
+        machine7: dict[int, tuple[int, str]] = {}
+        for row in machine_rows:
+            word_id, page, source_headword = row
+            if type(word_id) is not int or word_id not in self._entries_by_id:
+                raise ContentDatabaseError("机经 7.0 标记引用了不存在的词条")
+            if type(page) is not int or page <= 0:
+                raise ContentDatabaseError("机经 7.0 来源页必须是正整数")
+            if not isinstance(source_headword, str) or not source_headword.strip():
+                raise ContentDatabaseError("机经 7.0 来源词头不能为空")
+            machine7[word_id] = (page, source_headword)
+        self._machine7 = machine7
 
     def _require_columns(self, table: str, expected: tuple[str, ...]) -> None:
         rows = self.db.execute(f'pragma table_info("{table}")').fetchall()
@@ -236,6 +340,33 @@ class ContentRepository:
             for entry in self._validated_entries
         )
 
+    @staticmethod
+    def _section_label(key: str) -> str:
+        if key.startswith("list") and key[4:].isdigit():
+            return f"List {int(key[4:])}"
+        if key.startswith("supplement-") and key[11:].isdigit():
+            return f"补充 List {int(key[11:])}"
+        return key
+
+    def _build_list_index(self) -> None:
+        grouped: dict[str, list[WordEntry]] = {}
+        for entry in self._validated_entries:
+            grouped.setdefault(entry.source_section, []).append(entry)
+        self._source_lists = tuple(
+            SourceList(
+                key=key,
+                label=self._section_label(key),
+                word_count=len(entries),
+                first_order=entries[0].source_order,
+                last_order=entries[-1].source_order,
+            )
+            for key, entries in grouped.items()
+        )
+        self._list_ids = {
+            key: tuple(entry.id for entry in entries)
+            for key, entries in grouped.items()
+        }
+
     def search(self, query: str, limit: int = 50) -> list[WordEntry]:
         value = query.strip()
         if not value or limit <= 0:
@@ -263,3 +394,50 @@ class ContentRepository:
 
     def list_by_ids(self, ids: tuple[int, ...]) -> list[WordEntry]:
         return [self.get(word_id) for word_id in ids]
+
+    def source_lists(self) -> tuple[SourceList, ...]:
+        return self._source_lists
+
+    def ids_for_section(self, key: str) -> tuple[int, ...]:
+        try:
+            return self._list_ids[str(key)]
+        except KeyError:
+            raise KeyError(key) from None
+
+    def source_list(self, key: str) -> SourceList:
+        for source_list in self._source_lists:
+            if source_list.key == key:
+                return source_list
+        raise KeyError(key)
+
+    def root_families(self, word_id: int) -> tuple[RootFamily, ...]:
+        self.get(word_id)
+        return self._relations.root_families(word_id)
+
+    def lookalikes(self, word_id: int) -> tuple[RelatedWord, ...]:
+        self.get(word_id)
+        return self._relations.lookalikes(word_id)
+
+    @staticmethod
+    def _related_word(entry: WordEntry) -> RelatedWord:
+        definition = entry.definition_zh or entry.definition_en
+        return RelatedWord(
+            word_id=entry.id,
+            headword=entry.headword,
+            definition=" ".join(definition.split()),
+        )
+
+    def equivalents(self, word_id: int) -> tuple[RelatedWord, ...]:
+        self.get(word_id)
+        return tuple(
+            self._related_word(self._entries_by_id[related_id])
+            for related_id in self._equivalent_ids.get(int(word_id), ())
+        )
+
+    def in_machine7(self, word_id: int) -> bool:
+        self.get(word_id)
+        return int(word_id) in self._machine7
+
+    def machine7_source(self, word_id: int) -> tuple[int, str] | None:
+        self.get(word_id)
+        return self._machine7.get(int(word_id))

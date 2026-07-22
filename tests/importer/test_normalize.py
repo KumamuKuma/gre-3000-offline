@@ -7,8 +7,29 @@ from gre_vocab_app.importer.normalize import (
     normalize_row,
     normalize_row_with_diagnostics,
     split_bilingual,
+    validation_flags,
 )
 from gre_vocab_app.importer.types import RawWordRow
+
+
+def test_validation_flags_treats_whitespace_only_definitions_as_incomplete():
+    draft = WordDraft(
+        source_order=1,
+        source_section="list1",
+        source_page=5,
+        headword="sample",
+        phonetic="[ˈsɑːmpəl]",
+        definition_en=" ",
+        definition_zh="\t",
+        synonyms="",
+        example_en="",
+        example_zh="",
+        raw_definition=" ",
+        raw_example="",
+        quality_flags=(),
+    )
+
+    assert "incomplete_definition" in validation_flags(draft)
 
 
 def test_split_bilingual_separates_one_mixed_language_line():
@@ -287,6 +308,8 @@ def test_chinese_block_latin_to_digit_or_punctuation_uses_source_boundary(
         ("not ipa", "invalid_phonetic"),
         ("[ameliorate]", "invalid_phonetic"),
         ("/ameliorate/", "invalid_phonetic"),
+        ("[ ]", "invalid_phonetic"),
+        ("[\t]", "invalid_phonetic"),
     ],
 )
 def test_phonetic_validation_rejects_empty_equal_and_unbracketed_values(
@@ -312,6 +335,26 @@ def test_phonetic_validation_rejects_empty_equal_and_unbracketed_values(
         assert "invalid_phonetic" not in flags
     else:
         assert expected_flag in flags
+
+
+def test_validation_flags_rejects_outer_whitespace_in_a_phonetic_override():
+    draft = WordDraft(
+        source_order=529,
+        source_section="list6",
+        source_page=50,
+        headword="ameliorate",
+        phonetic=" [əˈmiːljəreɪt] ",
+        definition_en="v. make better",
+        definition_zh="改善",
+        synonyms="",
+        example_en="It improved.",
+        example_zh="情况改善了。",
+        raw_definition="v. make better 改善",
+        raw_example="It improved. 情况改善了。",
+        quality_flags=(),
+    )
+
+    assert "invalid_phonetic" in validation_flags(draft)
 
 
 def test_short_transparent_bracketed_phonetic_remains_valid():

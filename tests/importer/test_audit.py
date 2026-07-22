@@ -84,6 +84,9 @@ def test_audit_contains_counts_categories_duplicates_and_escaped_html(tmp_path):
             {
                 "key": "5:<alpha>",
                 "source_order": 2,
+                "kinds": ["part_of_speech", "example"],
+                "reason": "The label and example disagree.",
+                "evidence": ["source_pdf:5", "manual:grammar-review"],
                 "original_issues": ["split_token"],
                 "changed_fields": ["definition_en"],
                 "before": {"definition_en": "bad"},
@@ -122,6 +125,10 @@ def test_audit_contains_counts_categories_duplicates_and_escaped_html(tmp_path):
     }
     assert payload["dewrap_counts"]["definition"]["normal_space"] == 4
     assert payload["override_details"][0]["before"] == {"definition_en": "bad"}
+    assert payload["override_kind_counts"] == {
+        "example": 1,
+        "part_of_speech": 1,
+    }
     assert payload["semantic_checks"][0]["pass"] is True
     assert payload["strict_checks"][0]["pass"] is True
     assert summary.unresolved_count == 1
@@ -132,6 +139,9 @@ def test_audit_contains_counts_categories_duplicates_and_escaped_html(tmp_path):
     assert "&lt;b&gt;bad&lt;/b&gt;" in html
     assert "<alpha>" not in html
     assert "<b>bad</b>" not in html
+    assert "part_of_speech" in html
+    assert "The label and example disagree." in html
+    assert "manual:grammar-review" in html
     for heading in (
         "Source profile",
         "Physical coverage",
@@ -627,8 +637,12 @@ def test_cli_rejects_tampered_candidate_audit_and_preserves_old_artifact_set(
     assert _publication_leftovers(tmp_path) == []
 
 
+@pytest.mark.parametrize(
+    "forged_field",
+    ["key", "kinds", "reason", "evidence", "override_kind_counts"],
+)
 def test_cli_rejects_same_length_forged_override_details_and_preserves_outputs(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, capsys, forged_field
 ):
     _stub_successful_extract(
         monkeypatch,
@@ -645,7 +659,12 @@ def test_cli_rejects_same_length_forged_override_details_and_preserves_outputs(
         json.dumps(
             {
                 "5:alpha": {
-                    "phonetic": "[a]",
+                    "source_order": 1,
+                    "kinds": ["phonetic"],
+                    "reason": "The source pronunciation is invalid.",
+                    "evidence": ["source_pdf:5", "dictionary:test"],
+                    "expected_before": {"phonetic": "[x]"},
+                    "changes": {"phonetic": "[a]"},
                     "reviewed": True,
                 }
             }
@@ -658,7 +677,14 @@ def test_cli_rejects_same_length_forged_override_details_and_preserves_outputs(
         summary = real_write_audit(entries, json_path, html_path, **kwargs)
 
         def forge(payload):
-            payload["override_details"][0]["key"] = "5:forged"
+            if forged_field == "override_kind_counts":
+                payload["override_kind_counts"] = {"phonetic": 2}
+            elif forged_field == "kinds":
+                payload["override_details"][0]["kinds"] = ["example"]
+            elif forged_field == "evidence":
+                payload["override_details"][0]["evidence"] = ["forged"]
+            else:
+                payload["override_details"][0][forged_field] = "forged"
 
         _rewrite_audit_and_sync_html(json_path, html_path, forge)
         return summary

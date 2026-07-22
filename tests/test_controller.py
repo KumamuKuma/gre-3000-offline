@@ -1,6 +1,7 @@
 import json
 import random
 import sqlite3
+from unittest.mock import Mock
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QGuiApplication
@@ -8,7 +9,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from gre_vocab_app.controller import ApplicationController
 from gre_vocab_app.db.user import QueueState, UserRepository
-from gre_vocab_app.domain import BrowseOrder, StudyMode, WordEntry
+from gre_vocab_app.domain import BrowseOrder, SourceList, StudyMode, WordEntry
 from gre_vocab_app.services.search import SearchService
 from gre_vocab_app.services.study import StudySession
 from gre_vocab_app.ui.main_window import MainWindow
@@ -44,6 +45,27 @@ class FakeContent:
     def ids_in_source_order(self):
         return tuple(self.words)
 
+    def ids_for_section(self, key):
+        if key != "list1" or not self.words:
+            raise KeyError(key)
+        return tuple(self.words)
+
+    def source_lists(self):
+        if not self.words:
+            return ()
+        return (SourceList("list1", "List 1", len(self.words), 1, len(self.words)),)
+
+    def source_list(self, key):
+        if key != "list1" or not self.words:
+            raise KeyError(key)
+        return self.source_lists()[0]
+
+    def root_families(self, _word_id):
+        return ()
+
+    def lookalikes(self, _word_id):
+        return ()
+
     def list_by_ids(self, ids):
         return [self.words[word_id] for word_id in ids]
 
@@ -60,6 +82,9 @@ class FakeUser:
         self.queues = {}
         self.favorites = set()
         self.seen = {}
+        self.stars = {}
+        self.review_counts = {}
+        self.completions = {}
 
     def load_setting(self, key):
         return self.settings.get(key)
@@ -92,6 +117,11 @@ class FakeUser:
             state = self.queues[name]
             self.queues[name] = QueueState(state.word_ids, 0, state.seed)
 
+    def reset_all_positions(self):
+        for name in tuple(self.queues):
+            self.reset_position(name)
+        return True
+
     def is_favorite(self, word_id):
         return word_id in self.favorites
 
@@ -103,17 +133,63 @@ class FakeUser:
     def favorite_ids(self):
         return tuple(sorted(self.favorites, reverse=True))
 
+    def star_rating(self, word_id):
+        return self.stars.get(word_id, 0)
+
+    def set_star_rating(self, word_id, value):
+        self.stars[word_id] = value
+        return True
+
+    def cycle_star_rating(self, word_id):
+        value = (self.star_rating(word_id) + 1) % 4
+        self.set_star_rating(word_id, value)
+        return value
+
+    def manual_review_count(self, word_id):
+        return self.review_counts.get(word_id, 0)
+
+    def set_manual_review_count(self, word_id, value):
+        self.review_counts[word_id] = value
+        return True
+
+    def adjust_manual_review_count(self, word_id, delta):
+        value = max(0, self.manual_review_count(word_id) + delta)
+        self.set_manual_review_count(word_id, value)
+        return value
+
+    def star_counts(self, word_ids):
+        counts = {rating: 0 for rating in range(4)}
+        for word_id in dict.fromkeys(word_ids):
+            counts[self.star_rating(word_id)] += 1
+        return counts
+
     def record_seen(self, word_id):
         self.seen[word_id] = self.seen.get(word_id, 0) + 1
 
     def seen_word_count(self):
         return len(self.seen)
 
+    def list_completion_count(self, key):
+        return self.completions.get(key, 0)
+
+    def list_completion_counts(self):
+        return dict(self.completions)
+
+    def increment_list_completion(self, key):
+        return self.adjust_list_completion(key, 1)
+
+    def adjust_list_completion(self, key, delta):
+        self.completions[key] = max(0, self.completions.get(key, 0) + delta)
+        return self.completions[key]
+
     def clear_all(self):
         self.settings.clear()
         self.queues.clear()
         self.favorites.clear()
         self.seen.clear()
+        self.stars.clear()
+        self.review_counts.clear()
+        self.completions.clear()
 
 
 class FakeSpeech(QObject):
@@ -178,12 +254,12 @@ def make_controller(qtbot, *, user=None, word_count=3, speech=None):
     return controller, window, content, user, speech
 
 
-def test_controller_connects_source_dual_mode_navigation_and_favorite(qtbot):
+def test_controller_connects_selected_list_modes_and_navigation(qtbot):
     _controller, window, _content, user, _speech = make_controller(qtbot)
     assert window.stack.currentWidget() is window.home_page
     assert window.home_page.total_value.text() == "3"
 
-    window.home_page.source_button.click()
+    window.home_page.start_button.click()
     assert window.stack.currentWidget() is window.study_page
     first_id = window.study_page.snapshot.word.id
 
@@ -193,11 +269,82 @@ def test_controller_connects_source_dual_mode_navigation_and_favorite(qtbot):
 
     window.study_page.next_button.click()
     assert window.study_page.snapshot.index == 1
-    assert window.home_page.seen_value.text() == "2"
+    assert not hasattr(window.home_page, "seen_value")
 
-    window.study_page.favorite_button.click()
-    assert window.study_page.snapshot.favorite is True
-    assert window.home_page.favorites_value.text() == "1"
+    assert window.study_page.snapshot.list_key == "list1"
+    assert not hasattr(window.study_page, "favorite_button")
+
+
+def test_controller_cycles_stars_studies_a_rating_in_source_order_and_quizzes(
+    qtbot,
+):
+    controller, window, _content, user, _speech = make_controller(
+        qtbot, word_count=6
+    )
+    window.home_page.start_button.click()
+    assert window.study_page.snapshot.word.id == 1
+
+    window.study_page.star_button.click()
+    window.study_page.star_button.click()
+    assert user.stars[1] == 2
+    assert window.study_page.star_button.text() == "★★☆"
+    user.set_star_rating(4, 2)
+
+    window.study_page.back_button.click()
+    controller._refresh_stats()
+    index = window.home_page.star_combo.findData(2)
+    window.home_page.star_combo.setCurrentIndex(index)
+    assert "2 词" in window.home_page.star_combo.currentText()
+    window.home_page.start_button.click()
+
+    assert window.study_page.snapshot.star_filter == 2
+    assert window.study_page.snapshot.total == 2
+    assert window.study_page.snapshot.word.id == 1
+    window.study_page.next_button.click()
+    assert window.study_page.snapshot.word.id == 4
+
+    window.study_page.quiz_button.click()
+    quiz = window.study_page.snapshot
+    assert quiz.mode is StudyMode.QUIZ
+    assert len(quiz.quiz_choices) == len(set(quiz.quiz_choices)) == 4
+    selected_word_id = quiz.word.id
+    window.study_page.word_detail.quiz_buttons[quiz.quiz_correct_index].click()
+    answered = window.study_page.snapshot
+    assert answered.word.id == selected_word_id
+    assert answered.quiz_selected_index == answered.quiz_correct_index
+    assert "回答正确" in window.study_page.word_detail.quiz_feedback_label.text()
+
+    window.study_page.back_button.click()
+    window.home_page.start_button.click()
+    assert window.study_page.snapshot.star_filter == 2
+
+
+def test_controller_word_list_updates_rating_and_returns_from_detail(
+    qtbot, monkeypatch
+):
+    _controller, window, _content, user, _speech = make_controller(
+        qtbot, word_count=6
+    )
+
+    window.word_list_action.trigger()
+    assert window.stack.currentWidget() is window.word_list_page
+    page = window.word_list_page
+    assert page.words_table.rowCount() == 6
+    page.words_table.setCurrentCell(0, 0)
+    full_rebuild = Mock(wraps=page.set_words)
+    monkeypatch.setattr(page, "set_words", full_rebuild)
+
+    page.star_button.click()
+    page.star_button.click()
+    assert full_rebuild.call_count == 0
+    assert user.stars[1] == 2
+    assert page.words_table.item(0, 5).text() == "2 星"
+
+    page.open_button.click()
+    assert window.stack.currentWidget() is window.study_page
+    assert window.study_page.snapshot.star_rating == 2
+    window.study_page.back_button.click()
+    assert window.stack.currentWidget() is window.word_list_page
 
 
 def test_controller_search_detail_speech_settings_and_errors(qtbot):
@@ -221,27 +368,44 @@ def test_controller_search_detail_speech_settings_and_errors(qtbot):
     assert window.statusBar().currentMessage() == "朗读暂不可用"
 
 
-def test_controller_favorites_reset_and_clear(qtbot, monkeypatch):
+def test_controller_auto_speaks_only_after_moving_to_next_word(qtbot):
+    _controller, window, _content, user, speech = make_controller(qtbot)
+    window.settings_dialog.auto_speak_checkbox.setChecked(True)
+    assert user.settings["auto_speak"] == "1"
+    window.home_page.start_button.click()
+    assert speech.spoken == []
+    window.study_page.next_button.click()
+    assert speech.spoken == ["word2"]
+    window.study_page.previous_button.click()
+    assert speech.spoken == ["word2"]
+
+
+def test_controller_records_list_completion_resets_and_clears(qtbot):
     _controller, window, _content, user, _speech = make_controller(qtbot)
-    user.set_favorite(1, True)
-    user.set_favorite(2, True)
-    window.home_page.favorites_button.click()
-    assert window.stack.currentWidget() is window.favorites_page
-    assert window.favorites_page.words_list.count() == 2
+    window.home_page.increase_rounds_button.click()
+    assert user.completions == {"list1": 1}
+    assert window.home_page.rounds_value_label.text() == "1"
+    window.home_page.decrease_rounds_button.click()
+    assert user.completions == {"list1": 0}
+    window.home_page.start_button.click()
+    window.study_page.next_button.click()
+    window.study_page.next_button.click()
+    assert window.study_page.next_button.text() == "完成本轮"
+    window.study_page.next_button.click()
+    assert user.completions == {"list1": 1}
+    assert window.home_page.rounds_value.text() == "1"
 
-    window.favorites_page.words_list.setCurrentRow(0)
-    word_id = window.favorites_page.words_list.currentItem().data(0x0100).id
-    window.favorites_page.remove_button.click()
-    assert word_id not in user.favorites
-
-    window.home_page.source_button.click()
+    window.home_page.start_button.click()
     window.study_page.next_button.click()
     window.settings_dialog.reset_button.click()
-    assert user.queues["source"].position == 0
+    assert window.study_page.snapshot.index == 0
+    assert user.queues["source:list:list1:all"].position == 0
 
+    window.study_page.star_button.click()
     window.settings_dialog.clearAllRequested.emit()
-    assert user.favorites == set()
+    assert user.completions == {}
     assert user.seen == {}
+    assert user.stars == {}
     assert user.settings == {}
     assert window.stack.currentWidget() is window.home_page
 
@@ -342,7 +506,7 @@ def test_controller_surfaces_failed_navigation_and_next_mutation_retries(
         _controller, window, _content, _user, _speech = make_controller(
             qtbot, user=user
         )
-        window.home_page.source_button.click()
+        window.home_page.start_button.click()
         user.db.execute(
             """
             create trigger fail_seen before insert on word_progress
@@ -364,7 +528,7 @@ def test_controller_surfaces_failed_navigation_and_next_mutation_retries(
         assert not user.has_pending_writes
 
     with UserRepository(path) as reopened:
-        assert reopened.load_queue("source").position == 1
+        assert reopened.load_queue("source:list:list1:all").position == 1
         assert reopened.seen_word_count() == 2
         assert reopened.load_setting("study_mode") == "recall"
 
@@ -378,7 +542,7 @@ def test_controller_propagates_initial_and_async_speech_unavailability(qtbot):
         qtbot, speech=speech
     )
     assert "朗读功能已禁用" in window.statusBar().currentMessage()
-    window.home_page.source_button.click()
+    window.home_page.start_button.click()
     assert not window.study_page.word_detail.speech_button.isEnabled()
     assert not window.study_page.speech_shortcut.isEnabled()
 

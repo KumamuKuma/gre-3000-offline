@@ -123,12 +123,28 @@ foreach ($requiredFile in @(
 if ([string]::IsNullOrWhiteSpace($env:GRE_SOURCE_PDF)) {
     $env:GRE_SOURCE_PDF = "D:\桌面\LGU\GRE\张巍GRE镇考3000词-乱序（2026年）.pdf"
 }
+if ([string]::IsNullOrWhiteSpace($env:GRE_EQUIVALENCE_PDF)) {
+    $env:GRE_EQUIVALENCE_PDF = "D:\桌面\LGU\GRE\真经GRE等价词汇总.pdf"
+}
+if ([string]::IsNullOrWhiteSpace($env:GRE_MACHINE7_PDF)) {
+    $env:GRE_MACHINE7_PDF = "D:\桌面\LGU\GRE\GRE镇考机经词7.0-乱序（2026年版）.pdf"
+}
 if (-not (Test-Path -LiteralPath $env:GRE_SOURCE_PDF -PathType Leaf)) {
     throw "GRE source PDF not found: $($env:GRE_SOURCE_PDF)"
 }
+if (-not (Test-Path -LiteralPath $env:GRE_EQUIVALENCE_PDF -PathType Leaf)) {
+    throw "GRE equivalence PDF not found: $($env:GRE_EQUIVALENCE_PDF)"
+}
+if (-not (Test-Path -LiteralPath $env:GRE_MACHINE7_PDF -PathType Leaf)) {
+    throw "GRE machine 7.0 PDF not found: $($env:GRE_MACHINE7_PDF)"
+}
 
-$ReleaseTemp = Join-Path $RepoRoot "work\release-temp"
+$ReleaseTempRoot = Join-Path $RepoRoot "work\release-temp"
+$ReleaseTemp = Join-Path `
+    $ReleaseTempRoot `
+    ([Guid]::NewGuid().ToString("N"))
 $NuitkaCache = Join-Path $RepoRoot "work\nuitka-cache"
+New-Item -ItemType Directory -Force -Path $ReleaseTempRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $ReleaseTemp | Out-Null
 New-Item -ItemType Directory -Force -Path $NuitkaCache | Out-Null
 New-Item -ItemType Directory -Force -Path $OutputsDirectory | Out-Null
@@ -153,6 +169,8 @@ try {
     Invoke-External -Label "strict vocabulary import" -FilePath $Python -ArgumentList @(
         "-m", "gre_vocab_app.importer.build",
         "--pdf", $env:GRE_SOURCE_PDF,
+        "--equivalence-pdf", $env:GRE_EQUIVALENCE_PDF,
+        "--machine7-pdf", $env:GRE_MACHINE7_PDF,
         "--output", $Database,
         "--audit-json", $AuditJson,
         "--audit-html", $StagedAuditHtml,
@@ -165,7 +183,9 @@ try {
         $Database,
         $AuditJson,
         "--expected-records", "3292",
-        "--expected-reviewed", "5"
+        "--expected-reviewed", "203",
+        "--expected-equivalence-edges", "547",
+        "--expected-machine7-words", "1410"
     )
 
     Invoke-External -Label "SVG to multi-size ICO generation" -FilePath $Python -ArgumentList @(
@@ -280,6 +300,16 @@ finally {
     }
     if (Test-Path -LiteralPath $StagedInstructions) {
         Remove-Item -LiteralPath $StagedInstructions -Force
+    }
+    if (Test-Path -LiteralPath $ReleaseTemp) {
+        try {
+            Remove-WorkspaceDirectory `
+                -Path $ReleaseTemp `
+                -AllowedRoot $ReleaseTempRoot
+        }
+        catch {
+            Write-Warning "Unable to clean this run's release temp: $($_.Exception.Message)"
+        }
     }
     Pop-Location
 }

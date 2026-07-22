@@ -1,7 +1,5 @@
-import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QSignalSpy
-from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton
 
 from gre_vocab_app.domain import BrowseOrder, SessionSnapshot, StudyMode
 from gre_vocab_app.ui.study_page import StudyPage
@@ -11,11 +9,15 @@ def snapshot(sample_word, **changes):
     values = dict(
         word=sample_word,
         index=0,
-        total=10,
+        total=105,
         mode=StudyMode.RECALL,
         order=BrowseOrder.SOURCE,
         answer_visible=False,
-        favorite=False,
+        star_rating=0,
+        star_filter=None,
+        list_key="list1",
+        list_label="List 1",
+        can_complete_round=False,
         at_start=True,
         at_end=False,
     )
@@ -23,189 +25,138 @@ def snapshot(sample_word, **changes):
     return SessionSnapshot(**values)
 
 
-def test_study_mode_switch_does_not_emit_navigation(qtbot):
-    page = StudyPage()
-    qtbot.addWidget(page)
-    next_spy = QSignalSpy(page.nextRequested)
-
-    with qtbot.waitSignal(page.modeRequested) as mode_signal:
-        page.recall_button.click()
-
-    assert mode_signal.args == [StudyMode.RECALL]
-    assert next_spy.count() == 0
-
-
-def test_study_render_reveal_boundaries_and_keyboard_shortcuts(qtbot, sample_word):
+def test_study_render_modes_navigation_and_position_context(qtbot, sample_word):
     page = StudyPage()
     qtbot.addWidget(page)
     page.show()
-    page.render(snapshot(sample_word))
-
-    assert page.position_label.text() == "1 / 10"
-    assert not page.previous_button.isEnabled()
+    page.render(snapshot(sample_word, index=8, at_start=False))
+    assert page.position_label.text() == "List 1 · 9 / 105"
+    assert page.recall_button.isChecked()
+    assert not page.word_detail.is_revealed()
+    assert page.previous_button.isEnabled()
     assert page.next_button.isEnabled()
-    assert page.word_detail.meaning_panel.isHidden()
 
     with qtbot.waitSignal(page.answerToggleRequested):
-        qtbot.keyClick(page, Qt.Key_Space)
-    with qtbot.waitSignal(page.nextRequested):
-        qtbot.keyClick(page, Qt.Key_Right)
-    with qtbot.waitSignal(page.previousRequested):
-        qtbot.keyClick(page, Qt.Key_Left)
-    with qtbot.waitSignal(page.speechRequested) as speech:
-        qtbot.keyClick(page, Qt.Key_P)
-    assert speech.args == [sample_word.headword]
-    with qtbot.waitSignal(page.favoriteRequested) as favorite:
-        qtbot.keyClick(page, Qt.Key_S)
-    assert favorite.args == [True]
+        page.word_detail.reveal_button.click()
+    with qtbot.waitSignal(page.modeRequested) as mode:
+        page.brief_button.click()
+    assert mode.args == [StudyMode.BRIEF]
 
 
-def test_space_is_ignored_in_reading_mode_and_editable_focus(qtbot, sample_word):
+def test_clicking_active_quiz_mode_does_not_emit_or_reset_answer(qtbot, sample_word):
     page = StudyPage()
     qtbot.addWidget(page)
-    page.show()
-    spy = QSignalSpy(page.answerToggleRequested)
-    page.render(snapshot(sample_word, mode=StudyMode.READING))
-    qtbot.keyClick(page, Qt.Key_Space)
-    assert spy.count() == 0
+    answered = snapshot(
+        sample_word,
+        mode=StudyMode.QUIZ,
+        quiz_choices=("甲", "乙", "丙", "丁"),
+        quiz_correct_index=2,
+        quiz_selected_index=0,
+    )
+    page.render(answered)
+    mode = QSignalSpy(page.modeRequested)
+    page.quiz_button.click()
+    assert mode.count() == 0
+    assert page.word_detail._quiz_selected_index == 0
 
-    page.render(snapshot(sample_word, mode=StudyMode.RECALL))
-    edit = QLineEdit(page)
-    edit.show()
-    edit.setFocus()
-    qtbot.keyClick(edit, Qt.Key_Space)
-    assert spy.count() == 0
+
+def test_star_rating_is_zero_through_three_and_no_favorite_control(qtbot, sample_word):
+    page = StudyPage()
+    qtbot.addWidget(page)
+    page.render(snapshot(sample_word, star_rating=3))
+    assert page.star_button.text() == "★★★"
+    with qtbot.waitSignal(page.starRatingRequested) as star:
+        page.star_button.click()
+    assert star.args == [0]
+    assert "3 星后回到 0 星" in page.star_button.toolTip()
+    assert not hasattr(page, "favorite_button")
+    assert not hasattr(page, "favoriteRequested")
 
 
-def test_random_snapshot_exposes_reshuffle_and_end_boundary(qtbot, sample_word):
+def test_end_of_full_list_becomes_explicit_finish_action(qtbot, sample_word):
+    page = StudyPage()
+    qtbot.addWidget(page)
+    page.render(
+        snapshot(
+            sample_word,
+            index=104,
+            at_start=False,
+            at_end=True,
+            can_complete_round=True,
+        )
+    )
+    assert page.next_button.text() == "完成本轮"
+    assert page.next_button.isEnabled()
+    with qtbot.waitSignal(page.finishRequested):
+        page.next_button.click()
+
+    page.render(
+        snapshot(
+            sample_word,
+            total=1,
+            at_end=True,
+            star_filter=2,
+            can_complete_round=False,
+        )
+    )
+    assert page.next_button.text() == "下一词"
+    assert not page.next_button.isEnabled()
+
+
+def test_quiz_and_related_word_signals_are_forwarded(qtbot, sample_word):
     page = StudyPage()
     qtbot.addWidget(page)
     page.show()
     page.render(
         snapshot(
             sample_word,
-            index=9,
-            order=BrowseOrder.RANDOM,
-            at_start=False,
-            at_end=True,
+            mode=StudyMode.QUIZ,
+            quiz_choices=("甲", "乙", "丙", "丁"),
+            quiz_correct_index=1,
         )
     )
-    assert page.reshuffle_button.isVisible()
-    assert not page.next_button.isEnabled()
-    with qtbot.waitSignal(page.reshuffleRequested):
-        page.reshuffle_button.click()
+    with qtbot.waitSignal(page.quizChoiceRequested) as answer:
+        page.word_detail.quiz_buttons[0].click()
+    assert answer.args == [0]
+
+    with qtbot.waitSignal(page.relatedWordRequested) as related:
+        page.word_detail.relatedWordRequested.emit(17)
+    assert related.args == [17]
 
 
-def test_recall_reveal_control_supports_mouse_and_focused_space(qtbot, sample_word):
+def test_keyboard_shortcuts_navigate_reveal_and_speak(qtbot, sample_word):
     page = StudyPage()
     qtbot.addWidget(page)
     page.show()
-    page.render(snapshot(sample_word, mode=StudyMode.RECALL, answer_visible=False))
-
-    assert page.word_detail.reveal_button.isVisible()
-    assert page.word_detail.reveal_button.text() == "点击显示释义"
-    assert page.word_detail.reveal_button.focusPolicy() & Qt.StrongFocus
-    with qtbot.waitSignal(page.answerToggleRequested):
-        qtbot.mouseClick(page.word_detail.reveal_button, Qt.LeftButton)
-    with qtbot.waitSignal(page.answerToggleRequested):
-        page.word_detail.reveal_button.setFocus()
-        qtbot.keyClick(page.word_detail.reveal_button, Qt.Key_Space)
-
-
-def test_reading_space_keeps_normal_focused_button_behavior(qtbot, sample_word):
-    page = StudyPage()
-    qtbot.addWidget(page)
-    page.show()
-    page.render(snapshot(sample_word, mode=StudyMode.READING))
-    ordinary = QPushButton("ordinary", page)
-    ordinary.show()
-    ordinary.setFocus()
-    clicks = QSignalSpy(ordinary.clicked)
-    answer = QSignalSpy(page.answerToggleRequested)
-
-    qtbot.keyClick(ordinary, Qt.Key_Space)
-
-    assert clicks.count() == 1
-    assert answer.count() == 0
+    page.render(snapshot(sample_word, at_start=False))
+    page.setFocus()
+    previous = QSignalSpy(page.previousRequested)
+    next_word = QSignalSpy(page.nextRequested)
+    reveal = QSignalSpy(page.answerToggleRequested)
+    speech = QSignalSpy(page.speechRequested)
+    qtbot.keyClick(page, Qt.Key_Left)
+    qtbot.keyClick(page, Qt.Key_Right)
+    qtbot.keyClick(page, Qt.Key_Space)
+    qtbot.keyClick(page, Qt.Key_P)
+    assert previous.count() == 1
+    assert next_word.count() == 1
+    assert reveal.count() == 1
+    assert speech.at(0) == [sample_word.headword]
 
 
-@pytest.mark.parametrize(
-    "button_name",
-    ("recall_button", "favorite_button", "next_button"),
-)
-def test_recall_space_on_an_ordinary_button_only_reveals_answer(
-    qtbot, sample_word, button_name
+def test_editable_focus_keeps_native_space_and_unavailable_speech_is_disabled(
+    qtbot, sample_word
 ):
     page = StudyPage()
     qtbot.addWidget(page)
     page.show()
-    page.render(snapshot(sample_word, mode=StudyMode.RECALL))
-    button = getattr(page, button_name)
-    button.setFocus()
-    qtbot.waitUntil(lambda: button.hasFocus())
-    clicks = QSignalSpy(button.clicked)
-    answers = QSignalSpy(page.answerToggleRequested)
-
-    qtbot.keyClick(button, Qt.Key_Space)
-
-    assert answers.count() == 1
-    assert clicks.count() == 0
-
-
-def test_keyboard_selectable_text_receives_study_shortcut_keys(qtbot, sample_word):
-    class KeyRecordingLabel(QLabel):
-        def __init__(self, parent):
-            super().__init__("selectable", parent)
-            self.received_keys = []
-
-        def keyPressEvent(self, event):
-            self.received_keys.append(event.key())
-            super().keyPressEvent(event)
-
-    page = StudyPage()
-    qtbot.addWidget(page)
-    page.show()
-    page.render(snapshot(sample_word, mode=StudyMode.RECALL, at_start=False))
-    label = KeyRecordingLabel(page)
-    label.setTextInteractionFlags(
-        Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
-    )
-    label.setFocusPolicy(Qt.StrongFocus)
-    label.show()
-    label.setFocus()
-    qtbot.waitUntil(lambda: label.hasFocus())
-    signal_spies = (
-        QSignalSpy(page.previousRequested),
-        QSignalSpy(page.nextRequested),
-        QSignalSpy(page.speechRequested),
-        QSignalSpy(page.favoriteRequested),
-        QSignalSpy(page.answerToggleRequested),
-    )
-
-    for key in (Qt.Key_Left, Qt.Key_Right, Qt.Key_P, Qt.Key_S, Qt.Key_Space):
-        counts_before = tuple(spy.count() for spy in signal_spies)
-        label.received_keys.clear()
-
-        qtbot.keyClick(label, key)
-
-        assert label.received_keys == [key]
-        assert tuple(spy.count() for spy in signal_spies) == counts_before
-
-
-def test_unavailable_speech_disables_button_and_p_shortcut(qtbot, sample_word):
-    page = StudyPage()
-    qtbot.addWidget(page)
-    page.show()
-    assert hasattr(page, "set_speech_available")
-    page.set_speech_available(False)
     page.render(snapshot(sample_word))
-    speech = QSignalSpy(page.speechRequested)
-
+    page.set_speech_available(False)
     assert not page.word_detail.speech_button.isEnabled()
     assert not page.speech_shortcut.isEnabled()
-    qtbot.keyClick(page, Qt.Key_P)
-    assert speech.count() == 0
 
-    page.set_speech_available(True)
-    assert page.word_detail.speech_button.isEnabled()
-    assert page.speech_shortcut.isEnabled()
+    page.word_detail.headword_label.setFocusPolicy(Qt.StrongFocus)
+    page.word_detail.headword_label.setFocus()
+    qtbot.waitUntil(page.word_detail.headword_label.hasFocus)
+    with qtbot.assertNotEmitted(page.answerToggleRequested):
+        qtbot.keyClick(page.word_detail.headword_label, Qt.Key_Space)

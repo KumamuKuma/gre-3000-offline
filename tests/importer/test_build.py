@@ -17,6 +17,7 @@ from gre_vocab_app.importer.build import (
     build_database,
     load_overrides,
     semantic_checks,
+    semantic_checks_after_overrides,
     strict_checks_from_facts,
 )
 from gre_vocab_app.importer.normalize import WordDraft
@@ -62,8 +63,10 @@ def test_override_marks_reviewed_flags_and_database_keeps_source_order(tmp_path)
             "select headword from words order by source_order"
         ).fetchall() == [("alpha",), ("beta",)]
         assert dict(db.execute("select key, value from metadata")) == {
+            "equivalence_edge_count": "0",
+            "machine7_membership_count": "0",
             "record_count": "2",
-            "schema_version": "1",
+            "schema_version": "2",
         }
         assert json.loads(
             db.execute(
@@ -145,6 +148,224 @@ def test_override_requires_every_key_to_match_exactly_one_original_row():
 def test_reviewed_override_requires_a_real_original_issue():
     with pytest.raises(ValueError, match="no original issue"):
         apply_overrides([draft("beta", 2)], {"5:beta": {"reviewed": True}})
+
+
+def curated_override(*, changes, expected_before=None, **values):
+    return {
+        "source_order": 2,
+        "kinds": ["part_of_speech"],
+        "reason": "The source label disagrees with the definition and example.",
+        "evidence": ["source_pdf:5", "manual:grammar-review"],
+        "expected_before": (
+            {"definition_en": "adj. sample"}
+            if expected_before is None
+            else expected_before
+        ),
+        "changes": changes,
+        "reviewed": True,
+        **values,
+    }
+
+
+def test_curated_override_can_repair_a_clean_record_with_traceable_evidence():
+    fixed, details = apply_overrides_with_audit(
+        [draft("beta", 2)],
+        {
+            "5:beta": curated_override(
+                changes={"definition_en": "v. to sample"}
+            )
+        },
+    )
+
+    assert fixed[0].definition_en == "v. to sample"
+    assert fixed[0].quality_flags == ("reviewed:curated_part_of_speech",)
+    assert details[0]["kinds"] == ["part_of_speech"]
+    assert details[0]["reason"].startswith("The source label")
+    assert details[0]["evidence"] == [
+        "source_pdf:5",
+        "manual:grammar-review",
+    ]
+    assert details[0]["expected_before"] == {
+        "definition_en": "adj. sample"
+    }
+
+
+@pytest.mark.parametrize(
+    "mutation,message",
+    [
+        (lambda item: item.pop("source_order"), "must declare source_order"),
+        (lambda item: item.update(source_order=3), "source_order mismatch"),
+        (lambda item: item.pop("kinds"), "must declare correction kinds"),
+        (lambda item: item.update(kinds=[]), "must declare correction kinds"),
+        (lambda item: item.update(kinds=["invented"]), "unknown correction kind"),
+        (lambda item: item.update(reason=" "), "must include a reason"),
+        (lambda item: item.update(evidence=[]), "must include evidence"),
+        (lambda item: item.pop("expected_before"), "must include expected_before"),
+        (
+            lambda item: item.update(expected_before={"definition_en": "stale"}),
+            "expected_before mismatch",
+        ),
+        (
+            lambda item: item.update(expected_before={"definition_zh": "stale"}),
+            "must cover exactly the changed fields",
+        ),
+        (
+            lambda item: item.update(
+                changes={"phonetic": "[b]"},
+                expected_before={"phonetic": "[x]"},
+            ),
+            "unauthorized changed field",
+        ),
+        (
+            lambda item: item.update(
+                changes={"definition_en": "adj. sample"}
+            ),
+            "changes no content",
+        ),
+    ],
+)
+def test_curated_override_rejects_untraceable_stale_or_unauthorized_changes(
+    mutation, message
+):
+    item = curated_override(changes={"definition_en": "v. to sample"})
+    mutation(item)
+
+    with pytest.raises(ValueError, match=message):
+        apply_overrides([draft("beta", 2)], {"5:beta": item})
+
+
+def test_curated_override_combines_kinds_and_revalidates_changed_content():
+    item = curated_override(
+        kinds=["part_of_speech", "phonetic"],
+        expected_before={
+            "definition_en": "adj. sample",
+            "phonetic": "[x]",
+        },
+        changes={
+            "definition_en": "v. to sample",
+            "phonetic": "not ipa",
+        },
+    )
+
+    with pytest.raises(ValueError, match="invalid after override"):
+        apply_overrides([draft("beta", 2)], {"5:beta": item})
+
+
+def test_curated_override_rejects_a_declared_kind_without_a_changed_field():
+    item = curated_override(
+        kinds=["part_of_speech", "phonetic"],
+        changes={"definition_en": "v. to sample"},
+    )
+
+    with pytest.raises(ValueError, match="correction kinds without changes: phonetic"):
+        apply_overrides([draft("beta", 2)], {"5:beta": item})
+
+
+def test_content_completion_only_authorizes_filling_an_empty_field():
+    item = curated_override(
+        kinds=["content_completion"],
+        changes={"definition_en": "v. to sample"},
+    )
+
+    with pytest.raises(ValueError, match="unauthorized changed field"):
+        apply_overrides([draft("beta", 2)], {"5:beta": item})
+
+
+@pytest.mark.parametrize("value", ["", " ", "\t"])
+def test_curated_override_rejects_blank_changed_content(value):
+    item = curated_override(changes={"definition_en": value})
+
+    with pytest.raises(ValueError, match="blank changed content"):
+        apply_overrides([draft("beta", 2)], {"5:beta": item})
+
+
+def test_curated_override_requires_english_and_chinese_examples_as_a_pair():
+    item = curated_override(
+        kinds=["example"],
+        expected_before={"example_en": ""},
+        changes={"example_en": "A sample sentence."},
+    )
+
+    with pytest.raises(ValueError, match="examples paired"):
+        apply_overrides([draft("beta", 2)], {"5:beta": item})
+
+
+def test_legacy_override_cannot_fill_required_content_with_whitespace():
+    original = replace(
+        draft("beta", 2),
+        definition_zh="",
+        quality_flags=("incomplete_definition",),
+    )
+
+    with pytest.raises(ValueError, match="invalid after override"):
+        apply_overrides(
+            [original],
+            {"5:beta": {"definition_zh": " ", "reviewed": True}},
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation,message",
+    [
+        (lambda item: item.update(source_order=True), "must be an integer"),
+        (lambda item: item.update(reviewed=1), "must set reviewed to true"),
+        (lambda item: item.update(kinds="part_of_speech"), "correction kinds"),
+        (lambda item: item.update(kinds=["part_of_speech"] * 2), "duplicate correction kinds"),
+        (lambda item: item.update(evidence="source_pdf:5"), "include evidence"),
+        (
+            lambda item: item.update(evidence=["source_pdf:5"] * 2),
+            "duplicate evidence",
+        ),
+        (lambda item: item.update(expected_before=[]), "include expected_before"),
+        (lambda item: item.update(changes=[]), "include changes"),
+    ],
+)
+def test_curated_override_rejects_ambiguous_metadata_types(mutation, message):
+    item = curated_override(changes={"definition_en": "v. to sample"})
+    mutation(item)
+
+    with pytest.raises(ValueError, match=message):
+        apply_overrides([draft("beta", 2)], {"5:beta": item})
+
+
+def test_curated_override_does_not_silently_review_an_unrelated_source_issue():
+    fixed = apply_overrides(
+        [draft("beta", 2, ("split_token",))],
+        {
+            "5:beta": curated_override(
+                changes={"definition_en": "v. to sample"}
+            )
+        },
+    )
+
+    assert fixed[0].quality_flags == (
+        "split_token",
+        "reviewed:curated_part_of_speech",
+    )
+
+
+def test_curated_override_does_not_silently_review_missing_phonetic():
+    original = replace(
+        draft("beta", 2),
+        phonetic="",
+        quality_flags=("missing_phonetic",),
+    )
+    fixed, details = apply_overrides_with_audit(
+        [original],
+        {
+            "5:beta": curated_override(
+                changes={"definition_en": "v. to sample"}
+            )
+        },
+    )
+
+    assert fixed[0].quality_flags == (
+        "missing_phonetic",
+        "reviewed:curated_part_of_speech",
+    )
+    assert details[0]["resolved_original_issues"] == []
+    assert details[0]["remaining_original_issues"] == ["missing_phonetic"]
+    assert details[0]["reviewed"] is False
 
 
 def test_override_rejects_invalid_post_override_content():
@@ -231,6 +452,78 @@ def test_hard_wrap_scan_uses_boundary_context_not_an_unrelated_spaced_substring(
     assert next(item for item in result if item["name"] == "hard_wrap_residue")[
         "pass"
     ] is True
+
+
+def test_wrap_scan_uses_source_boundary_after_a_reviewed_field_replacement():
+    source_entry = replace(
+        draft("assent", 114),
+        example_en="The director gave her assent to the proposals.",
+        example_zh="主任同意了这些提案。",
+    )
+    reviewed_entry = replace(
+        draft("assent", 114),
+        example_en="The board assented to the revised proposal.",
+        example_zh="董事会同意了修订后的提案。",
+    )
+    diagnostics = ExtractionDiagnostics(
+        dewrap_counts={},
+        dewrap_events=(
+            RecordDewrapEvent(
+                source_order=114,
+                field="example",
+                kind="hard_join",
+                left="The director gave her as",
+                right="sent to the proposals.",
+            ),
+        ),
+    )
+
+    result = semantic_checks_after_overrides(
+        [source_entry],
+        [reviewed_entry],
+        diagnostics,
+    )
+
+    assert next(item for item in result if item["name"] == "hard_wrap_residue")[
+        "pass"
+    ] is True
+
+
+def test_wrap_scan_does_not_hide_a_bad_source_boundary_after_replacement():
+    source_entry = replace(
+        draft("assent", 114),
+        example_en="The director gave her as sent to the proposals.",
+        example_zh="主任同意了这些提案。",
+    )
+    reviewed_entry = replace(
+        draft("assent", 114),
+        example_en="The board assented to the revised proposal.",
+        example_zh="董事会同意了修订后的提案。",
+    )
+    diagnostics = ExtractionDiagnostics(
+        dewrap_counts={},
+        dewrap_events=(
+            RecordDewrapEvent(
+                source_order=114,
+                field="example",
+                kind="hard_join",
+                left="The director gave her as",
+                right="sent to the proposals.",
+            ),
+        ),
+    )
+
+    result = semantic_checks_after_overrides(
+        [source_entry],
+        [reviewed_entry],
+        diagnostics,
+    )
+
+    hard_wrap = next(
+        item for item in result if item["name"] == "hard_wrap_residue"
+    )
+    assert hard_wrap["pass"] is False
+    assert hard_wrap["source_orders"] == [114]
 
 
 def test_wrap_scan_checks_latin_names_that_belong_to_the_chinese_example():
@@ -378,9 +671,12 @@ def approved_facts():
         },
         "page_range": {"first_source_page": 5, "last_source_page": 288},
         "section_counts": APPROVED_SOURCE_PROFILE["section_counts"],
-        "override_use": {"declared": 5, "applied": 5},
+        "override_use": {
+            "declared": APPROVED_SOURCE_PROFILE["override_count"],
+            "applied": APPROVED_SOURCE_PROFILE["override_count"],
+        },
         "unresolved_count": 0,
-        "reviewed_count": 5,
+        "reviewed_count": APPROVED_SOURCE_PROFILE["reviewed_count"],
         "dewrap_counts": {
             "definition": {
                 "normal_space": 3993,
@@ -399,6 +695,7 @@ def approved_facts():
             },
         },
         "semantic_checks": [{"name": "language_contamination", "pass": True}],
+        "reference_sources": APPROVED_SOURCE_PROFILE["reference_sources"],
     }
 
 

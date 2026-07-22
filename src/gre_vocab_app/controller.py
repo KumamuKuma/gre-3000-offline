@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from gre_vocab_app.domain import BrowseOrder, SessionSnapshot, StudyMode, WordEntry
 from gre_vocab_app.ui.main_window import MainWindow
+from gre_vocab_app.ui.word_list_page import WordListRow
 
 
 LOGGER = logging.getLogger(__name__)
@@ -32,43 +33,50 @@ class ApplicationController:
         self.speech = speech_service
         self._detail_snapshot: SessionSnapshot | None = None
         self._detail_origin = "home"
+        self._all_words: list[WordEntry] = []
+        self._source_lists = ()
+        self._auto_speak_enabled = False
         self._connect()
 
     def _connect(self) -> None:
         home = self.window.home_page
         study_page = self.window.study_page
-        favorites = self.window.favorites_page
         settings = self.window.settings_dialog
 
         home.searchRequested.connect(self._search_home)
-        home.continueRequested.connect(self._continue_study)
-        home.sourceRequested.connect(lambda: self._open_study(BrowseOrder.SOURCE))
-        home.randomRequested.connect(lambda: self._open_study(BrowseOrder.RANDOM))
-        home.favoriteRequested.connect(self._open_favorites)
+        home.listStudyRequested.connect(self._open_list_study)
+        home.listSelectionChanged.connect(self._select_list)
+        home.listCompletionAdjustmentRequested.connect(
+            self._adjust_list_completion
+        )
         home.wordSelected.connect(lambda word: self._open_detail(word, "home"))
 
         study_page.backRequested.connect(self._back_from_study)
         study_page.previousRequested.connect(self._previous)
         study_page.nextRequested.connect(self._next)
+        study_page.finishRequested.connect(self._finish_round)
         study_page.modeRequested.connect(self._set_mode)
         study_page.answerToggleRequested.connect(self._toggle_answer)
         study_page.speechRequested.connect(self._speak)
-        study_page.favoriteRequested.connect(self._set_favorite)
-        study_page.reshuffleRequested.connect(self._reshuffle)
+        study_page.starRatingRequested.connect(self._set_star_rating)
+        study_page.quizChoiceRequested.connect(self._answer_quiz)
+        study_page.relatedWordRequested.connect(self._open_related_word)
 
-        favorites.searchRequested.connect(self._filter_favorites)
-        favorites.wordSelected.connect(
-            lambda word: self._open_detail(word, "favorites")
+        word_list = self.window.word_list_page
+        word_list.wordSelected.connect(
+            lambda word: self._open_detail(word, "word_list")
         )
-        favorites.favoriteRemoved.connect(self._remove_favorite)
+        word_list.starRatingRequested.connect(self._set_word_list_star)
 
         self.window.homeRequested.connect(self._show_home)
+        self.window.wordListRequested.connect(self._open_word_list)
         self.window.findRequested.connect(self._find_home)
         self.window.closing.connect(self._handle_close)
         self.window.enable_close_guard()
         settings.voiceSelected.connect(self._select_voice)
         settings.rateChanged.connect(self._set_rate)
         settings.defaultModeChanged.connect(self._set_default_mode)
+        settings.autoSpeakChanged.connect(self._set_auto_speak)
         settings.resetPositionRequested.connect(self._reset_positions)
         settings.clearAllRequested.connect(self._clear_all)
 
@@ -85,9 +93,25 @@ class ApplicationController:
         self.window.restore_geometry_state(
             self.user.load_setting("window_geometry")
         )
+        self._all_words = self.content.list_by_ids(
+            tuple(self.content.ids_in_source_order())
+        )
+        self._source_lists = tuple(self.content.source_lists())
         self._configure_settings()
+        self.window.home_page.set_source_lists(
+            self._source_lists,
+            self.user.list_completion_counts(),
+            selected_key=self.user.load_setting("study_list"),
+        )
+        saved_filter = self.user.load_setting("study_filter") or "all"
+        if saved_filter.startswith("star:"):
+            try:
+                rating = int(saved_filter.removeprefix("star:"))
+            except ValueError:
+                rating = -1
+            if 0 <= rating <= 3:
+                self.window.home_page.set_selected_star_filter(rating)
         self._refresh_stats()
-        self._refresh_favorites()
         self.window.show_home()
 
     def _configure_settings(self) -> None:
@@ -122,6 +146,13 @@ class ApplicationController:
             mode = StudyMode.READING
         self.window.settings_dialog.set_default_mode(mode)
 
+        self._auto_speak_enabled = (
+            self.user.load_setting("auto_speak") == "1"
+        )
+        self.window.settings_dialog.set_auto_speak(
+            self._auto_speak_enabled
+        )
+
         take_notice = getattr(self.speech, "take_availability_notice", None)
         if callable(take_notice):
             notice = take_notice()
@@ -129,33 +160,70 @@ class ApplicationController:
                 self._show_status(notice)
 
     def _refresh_stats(self) -> None:
+        completion_counts = self.user.list_completion_counts()
         self.window.home_page.set_stats(
             total=self.content.count(),
-            seen=self.user.seen_word_count(),
-            favorites=len(self.user.favorite_ids()),
+            completed_rounds=sum(completion_counts.values()),
         )
+        self.window.home_page.set_list_completion_counts(completion_counts)
+        self._refresh_selected_list_counts()
 
-    def _favorite_words(self) -> list[WordEntry]:
-        ids = tuple(self.user.favorite_ids())
-        return self.content.list_by_ids(ids) if ids else []
+    def _refresh_selected_list_counts(self, key: str | None = None) -> None:
+        selected = key or self.window.home_page.selected_list_key()
+        if selected is None:
+            self.window.home_page.set_star_counts({})
+            return
+        try:
+            word_ids = tuple(self.content.ids_for_section(selected))
+        except KeyError:
+            self.window.home_page.set_star_counts({})
+            return
+        self.window.home_page.set_star_counts(self.user.star_counts(word_ids))
 
-    def _refresh_favorites(self, query: str = "") -> None:
-        words = self._favorite_words()
-        value = query.strip().casefold()
-        if value:
-            words = [
-                word
-                for word in words
-                if value in word.headword.casefold()
-                or value in word.definition_en.casefold()
-                or value in word.definition_zh.casefold()
-            ]
-        self.window.favorites_page.set_words(words)
+    def _select_list(self, key: str) -> None:
+        self.user.save_setting("study_list", str(key))
+        self._refresh_selected_list_counts(str(key))
+        self._report_persistence_issue()
+
+    def _adjust_list_completion(self, key: str, delta: int) -> None:
+        try:
+            completed = self.user.adjust_list_completion(str(key), int(delta))
+            source_list = self.content.source_list(str(key))
+        except (KeyError, TypeError, ValueError) as error:
+            LOGGER.exception("Unable to adjust List completion count")
+            self._show_status(f"无法修改已背次数：{error}")
+            return
+        self._refresh_stats()
+        self._show_status(f"{source_list.label} 已背次数：{completed}。")
+        self._report_persistence_issue()
+
+    def _word_list_rows(self) -> list[WordListRow]:
+        machine7_lookup = getattr(self.content, "in_machine7", None)
+        return [
+            WordListRow(
+                word=word,
+                rating=self.user.star_rating(word.id),
+                in_machine7=(
+                    bool(machine7_lookup(word.id))
+                    if callable(machine7_lookup)
+                    else False
+                ),
+            )
+            for word in self._all_words
+        ]
+
+    def _refresh_word_list(self) -> None:
+        self.window.word_list_page.set_words(self._word_list_rows())
 
     def _show_home(self) -> None:
         self._detail_snapshot = None
         self._refresh_stats()
         self.window.show_home()
+
+    def _open_word_list(self) -> None:
+        self._detail_snapshot = None
+        self._refresh_word_list()
+        self.window.show_word_list()
 
     def _find_home(self) -> None:
         self._show_home()
@@ -164,20 +232,29 @@ class ApplicationController:
     def _search_home(self, query: str) -> None:
         self.window.home_page.set_results(self.search.search(query))
 
-    def _continue_study(self) -> None:
-        value = self.user.load_setting("browse_order")
-        try:
-            order = BrowseOrder(value) if value else BrowseOrder.SOURCE
-        except ValueError:
-            order = BrowseOrder.SOURCE
-        self._open_study(order)
+    def _open_list_study(
+        self, source_section: str, star_rating: object
+    ) -> None:
+        rating = None if star_rating is None else int(star_rating)
+        self._open_study(str(source_section), rating)
 
-    def _open_study(self, order: BrowseOrder) -> None:
+    def _open_study(
+        self, source_section: str, star_rating: int | None = None
+    ) -> None:
         try:
-            snapshot = self.study.start(order)
+            snapshot = self.study.start(
+                BrowseOrder.SOURCE,
+                source_section=source_section,
+                star_rating=star_rating,
+            )
         except (KeyError, ValueError, RuntimeError) as error:
             LOGGER.exception("Unable to start study session")
-            self._show_status(f"无法开始学习：{error}")
+            if star_rating is not None and "no words match" in str(error):
+                self._show_status(
+                    f"所选 List 中没有 {star_rating} 星单词。"
+                )
+            else:
+                self._show_status(f"无法开始学习：{error}")
             return
         self._detail_snapshot = None
         self.window.study_page.render(snapshot)
@@ -192,25 +269,40 @@ class ApplicationController:
         except ValueError:
             mode = StudyMode.READING
         self._detail_origin = origin
-        self._detail_snapshot = SessionSnapshot(
-            word=word,
-            index=0,
-            total=1,
-            mode=mode,
-            order=BrowseOrder.SOURCE,
-            answer_visible=False,
-            favorite=self.user.is_favorite(word.id),
-            at_start=True,
-            at_end=True,
-        )
+        try:
+            self._detail_snapshot = self.study.detail_snapshot(word, mode)
+        except (KeyError, ValueError, RuntimeError) as error:
+            LOGGER.exception("Unable to open vocabulary detail")
+            self._show_status(f"无法打开单词详情：{error}")
+            return
         self.window.study_page.render(self._detail_snapshot)
         self.window.show_study()
 
+    def _open_related_word(self, word_id: int) -> None:
+        origin = self._detail_origin if self._detail_snapshot is not None else "study"
+        try:
+            word = self.content.get(int(word_id))
+        except (KeyError, TypeError, ValueError) as error:
+            LOGGER.exception("Unable to open related vocabulary entry")
+            self._show_status(f"无法打开相关词：{error}")
+            return
+        self._open_detail(word, origin)
+
     def _back_from_study(self) -> None:
-        if self._detail_snapshot is not None and self._detail_origin == "favorites":
+        if (
+            self._detail_snapshot is not None
+            and self._detail_origin == "word_list"
+        ):
             self._detail_snapshot = None
-            self._refresh_favorites(self.window.favorites_page.search_edit.text())
-            self.window.show_favorites()
+            self._refresh_word_list()
+            self.window.show_word_list()
+        elif (
+            self._detail_snapshot is not None
+            and self._detail_origin == "study"
+        ):
+            self._detail_snapshot = None
+            self.window.study_page.render(self.study.current())
+            self.window.show_study()
         else:
             self._show_home()
 
@@ -235,16 +327,46 @@ class ApplicationController:
         self.window.study_page.render(snapshot)
         if before.at_end:
             self._show_status("已经到最后一个词。")
+        elif self._auto_speak_enabled and snapshot.word.id != before.word.id:
+            self._speak(snapshot.word.headword)
         self._refresh_stats()
+        self._report_persistence_issue()
+
+    def _finish_round(self) -> None:
+        try:
+            snapshot = self.study.current()
+            completed = self.study.complete_round()
+        except (KeyError, ValueError, RuntimeError) as error:
+            LOGGER.exception("Unable to finish List round")
+            self._show_status(f"无法完成本轮：{error}")
+            return
+        label = snapshot.list_label or snapshot.list_key or "所选 List"
+        self._show_home()
+        self._show_status(f"{label} 已完整学习 {completed} 次。")
         self._report_persistence_issue()
 
     def _set_mode(self, mode: StudyMode) -> None:
         if self._detail_snapshot is not None:
+            if self._detail_snapshot.mode is mode:
+                return
+            try:
+                self._detail_snapshot = self.study.detail_snapshot(
+                    self._detail_snapshot.word,
+                    mode,
+                )
+            except (KeyError, ValueError, RuntimeError) as error:
+                LOGGER.exception("Unable to switch vocabulary detail mode")
+                self._show_status(f"无法切换学习模式：{error}")
+                return
             self.user.save_setting("study_mode", mode.value)
-            self._detail_snapshot = replace(self._detail_snapshot, mode=mode)
             self.window.study_page.render(self._detail_snapshot)
         else:
-            self.window.study_page.render(self.study.set_mode(mode))
+            try:
+                self.window.study_page.render(self.study.set_mode(mode))
+            except (KeyError, ValueError, RuntimeError) as error:
+                LOGGER.exception("Unable to switch study mode")
+                self._show_status(f"无法切换学习模式：{error}")
+                return
         self.window.settings_dialog.set_default_mode(mode)
         self._report_persistence_issue()
 
@@ -259,23 +381,49 @@ class ApplicationController:
         else:
             self.window.study_page.render(self.study.toggle_answer())
 
-    def _set_favorite(self, favorite: bool) -> None:
+    def _set_star_rating(self, star_rating: int) -> None:
         if self._detail_snapshot is not None:
-            self.user.set_favorite(self._detail_snapshot.word.id, favorite)
+            self.user.set_star_rating(
+                self._detail_snapshot.word.id,
+                int(star_rating),
+            )
             self._detail_snapshot = replace(
-                self._detail_snapshot, favorite=favorite
+                self._detail_snapshot,
+                star_rating=int(star_rating),
             )
             self.window.study_page.render(self._detail_snapshot)
         else:
-            self.window.study_page.render(self.study.set_favorite(favorite))
+            self.window.study_page.render(
+                self.study.set_star_rating(int(star_rating))
+            )
         self._refresh_stats()
-        self._refresh_favorites(self.window.favorites_page.search_edit.text())
+        if self.window.stack.currentWidget() is self.window.word_list_page:
+            self._refresh_word_list()
         self._report_persistence_issue()
 
-    def _remove_favorite(self, word_id: int) -> None:
-        self.user.set_favorite(word_id, False)
+    def _answer_quiz(self, choice_index: int) -> None:
+        try:
+            if self._detail_snapshot is not None:
+                self._detail_snapshot = self.study.answer_detail_quiz(
+                    self._detail_snapshot,
+                    int(choice_index),
+                )
+                snapshot = self._detail_snapshot
+            else:
+                snapshot = self.study.answer_quiz(int(choice_index))
+        except (TypeError, ValueError, RuntimeError) as error:
+            LOGGER.exception("Unable to record quiz answer")
+            self._show_status(f"无法记录答案：{error}")
+            return
+        self.window.study_page.render(snapshot)
+
+    def _set_word_list_star(self, word_id: int, star_rating: int) -> None:
+        word_id = int(word_id)
+        star_rating = int(star_rating)
+        self.user.set_star_rating(word_id, star_rating)
+        if not self.window.word_list_page.update_rating(word_id, star_rating):
+            self._refresh_word_list()
         self._refresh_stats()
-        self._refresh_favorites(self.window.favorites_page.search_edit.text())
         self._report_persistence_issue()
 
     def _speak(self, headword: str) -> None:
@@ -284,22 +432,6 @@ class ApplicationController:
                 bool(self.speech.available)
             )
             self._show_status("当前没有可用的语音，朗读功能已禁用。")
-
-    def _reshuffle(self) -> None:
-        if self._detail_snapshot is not None:
-            return
-        self.window.study_page.render(self.study.reshuffle())
-        self._refresh_stats()
-        self._show_status("随机顺序已重新洗牌。")
-        self._report_persistence_issue()
-
-    def _open_favorites(self) -> None:
-        self._detail_snapshot = None
-        self._refresh_favorites(self.window.favorites_page.search_edit.text())
-        self.window.show_favorites()
-
-    def _filter_favorites(self, query: str) -> None:
-        self._refresh_favorites(query)
 
     def _select_voice(self, name: str) -> None:
         if self.speech.select_voice(name):
@@ -317,24 +449,39 @@ class ApplicationController:
         self.user.save_setting("study_mode", StudyMode(mode).value)
         self._report_persistence_issue()
 
+    def _set_auto_speak(self, enabled: bool) -> None:
+        self._auto_speak_enabled = bool(enabled)
+        self.user.save_setting(
+            "auto_speak", "1" if self._auto_speak_enabled else "0"
+        )
+        if self._auto_speak_enabled and not bool(self.speech.available):
+            self._show_status("自动朗读已开启，但当前没有可用的语音引擎。")
+        self._report_persistence_issue()
+
     def _reset_positions(self) -> None:
-        self._show_status("学习位置已重置。")
-        self.user.reset_position(BrowseOrder.SOURCE.value)
-        self.user.reset_position(BrowseOrder.RANDOM.value)
+        active = None
         if (
             self._detail_snapshot is None
             and self.window.stack.currentWidget() is self.window.study_page
         ):
-            self._open_study(self.study.current().order)
+            active = self.study.current()
+        self.user.reset_all_positions()
+        self._show_status("学习位置已重置。")
+        if active is not None and active.list_key is not None:
+            self._open_study(active.list_key, active.star_filter)
         self._report_persistence_issue()
 
     def _clear_all(self) -> None:
-        self._show_status("本地收藏、进度、队列和设置已清空。")
+        self._show_status("本地星级、List 完成次数、进度和设置已清空。")
         self.user.clear_all()
         self._detail_snapshot = None
         self._configure_settings()
+        self.window.home_page.set_source_lists(
+            self._source_lists,
+            self.user.list_completion_counts(),
+        )
         self._refresh_stats()
-        self._refresh_favorites()
+        self._refresh_word_list()
         self.window.show_home()
         self._report_persistence_issue()
 

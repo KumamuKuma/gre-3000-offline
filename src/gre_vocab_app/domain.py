@@ -4,12 +4,13 @@ from enum import StrEnum
 
 class StudyMode(StrEnum):
     READING = "reading"
+    BRIEF = "brief"
     RECALL = "recall"
+    QUIZ = "quiz"
 
 
 class BrowseOrder(StrEnum):
     SOURCE = "source"
-    RANDOM = "random"
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +32,28 @@ class WordEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class SourceList:
+    key: str
+    label: str
+    word_count: int
+    first_order: int
+    last_order: int
+
+
+@dataclass(frozen=True, slots=True)
+class RelatedWord:
+    word_id: int
+    headword: str
+    definition: str
+
+
+@dataclass(frozen=True, slots=True)
+class RootFamily:
+    root: str
+    words: tuple[RelatedWord, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class SessionSnapshot:
     word: WordEntry
     index: int
@@ -38,6 +61,17 @@ class SessionSnapshot:
     mode: StudyMode
     order: BrowseOrder
     answer_visible: bool
-    favorite: bool
     at_start: bool
     at_end: bool
+    star_rating: int = 0
+    star_filter: int | None = None
+    list_key: str | None = None
+    list_label: str = ""
+    can_complete_round: bool = False
+    root_families: tuple[RootFamily, ...] = ()
+    lookalikes: tuple[RelatedWord, ...] = ()
+    equivalents: tuple[RelatedWord, ...] = ()
+    in_machine7: bool = False
+    quiz_choices: tuple[str, ...] = ()
+    quiz_correct_index: int | None = None
+    quiz_selected_index: int | None = None

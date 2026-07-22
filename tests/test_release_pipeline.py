@@ -63,5 +63,28 @@ def test_release_script_enforces_the_exact_three_file_output_allowlist():
 def test_release_script_verifies_the_current_strict_reviewed_count():
     script = (ROOT / "scripts" / "build_release.ps1").read_text(encoding="utf-8-sig")
 
-    assert '"--expected-reviewed", "5"' in script
-    assert '"--expected-reviewed", "4"' not in script
+    assert '"--expected-reviewed", "203"' in script
+    assert '"--expected-reviewed", "145"' not in script
+    assert '"--expected-equivalence-edges", "547"' in script
+    assert '"--expected-machine7-words", "1410"' in script
+
+
+def test_release_script_imports_both_reviewed_reference_pdfs():
+    script = (ROOT / "scripts" / "build_release.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+
+    assert "$env:GRE_EQUIVALENCE_PDF" in script
+    assert "$env:GRE_MACHINE7_PDF" in script
+    assert '"--equivalence-pdf", $env:GRE_EQUIVALENCE_PDF' in script
+    assert '"--machine7-pdf", $env:GRE_MACHINE7_PDF' in script
+
+
+def test_release_script_uses_an_isolated_temp_directory_for_each_run():
+    script = (ROOT / "scripts" / "build_release.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+
+    assert '$ReleaseTempRoot = Join-Path $RepoRoot "work\\release-temp"' in script
+    assert '[Guid]::NewGuid().ToString("N")' in script
+    assert "-AllowedRoot $ReleaseTempRoot" in script

@@ -140,6 +140,7 @@ button { color: inherit; }
 .cloud-status span, .cloud-status small { display: block; }
 .cloud-status span { font-size: 12px; font-weight: 750; }
 .cloud-status small { margin-top: 4px; color: #598177; font-size: 9px; }
+.sync-error-detail { color: #9f3126; font-size: 11px; }
 .token-box { margin-top: 11px; padding: 11px; display: flex; gap: 8px; align-items: center; border: 1px solid #e5c2ae; border-radius: 12px; background: #fff8f3; }
 .token-box code { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; font-size: 10px; }
 .token-box button { flex: 0 0 auto; padding: 7px 9px; border: 0; border-radius: 8px; background: var(--ink); color: white; font-size: 10px; }

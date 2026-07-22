@@ -60,10 +60,12 @@ type Progress = {
 type CloudState = {
   status: "disconnected" | "checking" | "ready" | "error";
   updatedAt?: string | null;
+  message?: string;
 };
 
 const STORAGE_KEY = "gre-vocab-progress-v1";
 const SYNC_CODE_STORAGE_KEY = "gre-vocab-sync-code-v1";
+const SYNC_TIMEOUT_MS = 12_000;
 const MODES: { key: StudyMode; label: string; hint: string }[] = [
   { key: "reading", label: "阅读", hint: "完整释义" },
   { key: "brief", label: "简义", hint: "快速过词" },
@@ -159,10 +161,14 @@ function speak(word: string) {
 
 async function readCodeProgress(code: string) {
   const { spaceId, authToken } = await deriveSyncCredentials(code);
-  const response = await fetch(`/api/code-progress?space=${encodeURIComponent(spaceId)}`, {
-    cache: "no-store",
-    headers: { authorization: `Bearer ${authToken}` },
-  });
+  const response = await fetchWithTimeout(
+    `/api/code-progress?space=${encodeURIComponent(spaceId)}`,
+    {
+      cache: "no-store",
+      headers: { authorization: `Bearer ${authToken}` },
+    },
+    "读取云端进度超时，请检查网络后重试。",
+  );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json() as Promise<{ progress: Parameters<typeof decryptProgress>[1] | null; updated_at: string | null }>;
 }
@@ -172,16 +178,37 @@ async function writeCodeProgress(code: string, progress: Progress) {
     deriveSyncCredentials(code),
     encryptProgress(code, progress),
   ]);
-  const response = await fetch(`/api/code-progress?space=${encodeURIComponent(spaceId)}`, {
-    method: "PUT",
-    headers: {
-      authorization: `Bearer ${authToken}`,
-      "content-type": "application/json",
+  const response = await fetchWithTimeout(
+    `/api/code-progress?space=${encodeURIComponent(spaceId)}`,
+    {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${authToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(encrypted),
     },
-    body: JSON.stringify(encrypted),
-  });
+    "上传云端进度超时，本机进度已保留。",
+  );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return response.json() as Promise<{ updated_at: string }>;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMessage: string) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), SYNC_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw new Error(timeoutMessage);
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 export default function Home() {
@@ -197,6 +224,7 @@ export default function Home() {
   const [cloud, setCloud] = useState<CloudState>({ status: "disconnected" });
   const [syncCode, setSyncCode] = useState("");
   const [syncCodeInput, setSyncCodeInput] = useState("");
+  const [syncRetry, setSyncRetry] = useState(0);
   const importRef = useRef<HTMLInputElement>(null);
   const loadedSyncCode = useRef("");
 
@@ -219,6 +247,16 @@ export default function Home() {
           setProgress(base);
           setNotice("本机旧进度无法读取，已使用新的本地进度。");
         }
+        const storedSyncCode = localStorage.getItem(SYNC_CODE_STORAGE_KEY);
+        if (storedSyncCode) {
+          try {
+            const normalized = validateSyncCode(storedSyncCode);
+            setSyncCode(normalized);
+            setSyncCodeInput(normalized);
+          } catch {
+            localStorage.removeItem(SYNC_CODE_STORAGE_KEY);
+          }
+        }
         setHydrated(true);
       })
       .catch((error) => setNotice(`词库加载失败：${error.message}`));
@@ -231,26 +269,17 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated || !data) return;
-    if (!syncCode) {
-      const stored = localStorage.getItem(SYNC_CODE_STORAGE_KEY);
-      if (stored) {
-        try {
-          const normalized = validateSyncCode(stored);
-          setSyncCode(normalized);
-          setSyncCodeInput(normalized);
-        } catch {
-          localStorage.removeItem(SYNC_CODE_STORAGE_KEY);
-        }
-      }
-      return;
-    }
+    if (!syncCode) return;
     if (loadedSyncCode.current === syncCode) return;
     loadedSyncCode.current = syncCode;
+    let cancelled = false;
     setCloud({ status: "checking" });
     readCodeProgress(syncCode)
       .then(async (result) => {
+        if (cancelled) return;
         if (result.progress) {
           const decoded = await decryptProgress(syncCode, result.progress);
+          if (cancelled) return;
           const imported = normalizeProgress(decoded, data);
           setProgress((local) => {
             const localTime = Date.parse(local?.exported_at ?? "1970-01-01");
@@ -262,8 +291,16 @@ export default function Home() {
         }
         setCloud({ status: "ready", updatedAt: result.updated_at });
       })
-      .catch(() => setCloud({ status: "error" }));
-  }, [hydrated, data, syncCode, cloud.status]);
+      .catch((error) => {
+        if (cancelled) return;
+        const message = errorMessage(error, "暂时无法读取云端进度。");
+        setCloud({ status: "error", message });
+        setNotice(`云同步读取失败：${message}`);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, data, syncCode, syncRetry]);
 
   useEffect(() => {
     if (!hydrated || !progress || !syncCode || cloud.status !== "ready") return;
@@ -272,9 +309,11 @@ export default function Home() {
         .then((result) =>
           setCloud((current) => ({ ...current, updatedAt: result.updated_at })),
         )
-        .catch(() =>
-          setCloud((current) => ({ ...current, status: "error" })),
-        );
+        .catch((error) => {
+          const message = errorMessage(error, "暂时无法上传云端进度。");
+          setCloud((current) => ({ ...current, status: "error", message }));
+          setNotice(`云同步上传失败：${message}`);
+        });
     }, 1200);
     return () => window.clearTimeout(timer);
   }, [hydrated, progress, syncCode, cloud.status]);
@@ -439,6 +478,7 @@ export default function Home() {
       setSyncCode(normalized);
       setSyncCodeInput(normalized);
       setCloud({ status: "checking" });
+      setSyncRetry((current) => current + 1);
       setNotice("同步码已连接，正在读取云端进度。");
     } catch (error) {
       setNotice(`无法连接：${error instanceof Error ? error.message : "同步码无效"}`);
@@ -650,7 +690,8 @@ export default function Home() {
             </>}
             {cloud.status === "error" && <>
               <p>暂时无法读取云端加密进度，本地学习不受影响。请检查网络或重新输入同步码。</p>
-              <button className="secondary" onClick={() => { loadedSyncCode.current = ""; setCloud({ status: "checking" }); }}>重新连接</button>
+              {cloud.message && <p className="sync-error-detail">{cloud.message}</p>}
+              <button className="secondary" onClick={() => { loadedSyncCode.current = ""; setCloud({ status: "checking" }); setSyncRetry((current) => current + 1); }}>重新连接</button>
               <button className="signout" onClick={disconnectSyncCode}>改用其他同步码</button>
             </>}
           </div>

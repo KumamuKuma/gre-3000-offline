@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 
-DEFAULT_CLOUD_ENDPOINT = ""
+DEFAULT_CLOUD_ENDPOINT = "https://gre-3000-offline.cbg206.chatgpt.site"
 
 
 class CloudSyncError(RuntimeError):

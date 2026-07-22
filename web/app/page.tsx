@@ -1,6 +1,13 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createSyncCode,
+  decryptProgress,
+  deriveSyncCredentials,
+  encryptProgress,
+  validateSyncCode,
+} from "./sync-code";
 
 type StudyMode = "reading" | "brief" | "recall" | "quiz";
 type Screen = "home" | "study" | "words" | "settings";
@@ -51,12 +58,12 @@ type Progress = {
 };
 
 type CloudState = {
-  status: "checking" | "signed-out" | "ready" | "error";
-  label?: string;
+  status: "disconnected" | "checking" | "ready" | "error";
   updatedAt?: string | null;
 };
 
 const STORAGE_KEY = "gre-vocab-progress-v1";
+const SYNC_CODE_STORAGE_KEY = "gre-vocab-sync-code-v1";
 const MODES: { key: StudyMode; label: string; hint: string }[] = [
   { key: "reading", label: "阅读", hint: "完整释义" },
   { key: "brief", label: "简义", hint: "快速过词" },
@@ -150,6 +157,33 @@ function speak(word: string) {
   window.speechSynthesis.speak(utterance);
 }
 
+async function readCodeProgress(code: string) {
+  const { spaceId, authToken } = await deriveSyncCredentials(code);
+  const response = await fetch(`/api/code-progress?space=${encodeURIComponent(spaceId)}`, {
+    cache: "no-store",
+    headers: { authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json() as Promise<{ progress: Parameters<typeof decryptProgress>[1] | null; updated_at: string | null }>;
+}
+
+async function writeCodeProgress(code: string, progress: Progress) {
+  const [{ spaceId, authToken }, encrypted] = await Promise.all([
+    deriveSyncCredentials(code),
+    encryptProgress(code, progress),
+  ]);
+  const response = await fetch(`/api/code-progress?space=${encodeURIComponent(spaceId)}`, {
+    method: "PUT",
+    headers: {
+      authorization: `Bearer ${authToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(encrypted),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json() as Promise<{ updated_at: string }>;
+}
+
 export default function Home() {
   const [data, setData] = useState<ContentPayload | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -160,10 +194,11 @@ export default function Home() {
   const [quizSelected, setQuizSelected] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
-  const [cloud, setCloud] = useState<CloudState>({ status: "checking" });
-  const [deviceToken, setDeviceToken] = useState("");
+  const [cloud, setCloud] = useState<CloudState>({ status: "disconnected" });
+  const [syncCode, setSyncCode] = useState("");
+  const [syncCodeInput, setSyncCodeInput] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
-  const cloudLoaded = useRef(false);
+  const loadedSyncCode = useRef("");
 
   useEffect(() => {
     fetch("/data/words.json")
@@ -195,21 +230,28 @@ export default function Home() {
   }, [hydrated, progress]);
 
   useEffect(() => {
-    if (!hydrated || !data || cloudLoaded.current) return;
-    cloudLoaded.current = true;
-    fetch("/api/progress", { cache: "no-store" })
-      .then(async (response) => {
-        if (response.status === 401) {
-          setCloud({ status: "signed-out" });
-          return null;
+    if (!hydrated || !data) return;
+    if (!syncCode) {
+      const stored = localStorage.getItem(SYNC_CODE_STORAGE_KEY);
+      if (stored) {
+        try {
+          const normalized = validateSyncCode(stored);
+          setSyncCode(normalized);
+          setSyncCodeInput(normalized);
+        } catch {
+          localStorage.removeItem(SYNC_CODE_STORAGE_KEY);
         }
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-      })
-      .then((result) => {
-        if (!result) return;
+      }
+      return;
+    }
+    if (loadedSyncCode.current === syncCode) return;
+    loadedSyncCode.current = syncCode;
+    setCloud({ status: "checking" });
+    readCodeProgress(syncCode)
+      .then(async (result) => {
         if (result.progress) {
-          const imported = normalizeProgress(result.progress, data);
+          const decoded = await decryptProgress(syncCode, result.progress);
+          const imported = normalizeProgress(decoded, data);
           setProgress((local) => {
             const localTime = Date.parse(local?.exported_at ?? "1970-01-01");
             const cloudTime = Date.parse(result.updated_at ?? "1970-01-01");
@@ -218,26 +260,15 @@ export default function Home() {
               : local;
           });
         }
-        setCloud({
-          status: "ready",
-          label: result.user.display_name,
-          updatedAt: result.updated_at,
-        });
+        setCloud({ status: "ready", updatedAt: result.updated_at });
       })
       .catch(() => setCloud({ status: "error" }));
-  }, [hydrated, data]);
+  }, [hydrated, data, syncCode, cloud.status]);
 
   useEffect(() => {
-    if (!hydrated || !progress || cloud.status !== "ready") return;
+    if (!hydrated || !progress || !syncCode || cloud.status !== "ready") return;
     const timer = window.setTimeout(() => {
-      fetch("/api/progress", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(progress),
-      })
-        .then((response) =>
-          response.ok ? response.json() : Promise.reject(new Error()),
-        )
+      writeCodeProgress(syncCode, progress)
         .then((result) =>
           setCloud((current) => ({ ...current, updatedAt: result.updated_at })),
         )
@@ -246,7 +277,7 @@ export default function Home() {
         );
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [hydrated, progress, cloud.status]);
+  }, [hydrated, progress, syncCode, cloud.status]);
 
   const wordMap = useMemo(() => new Map(data?.words.map((word) => [word.id, word]) ?? []), [data]);
   const selectedList = progress?.settings.study_list ?? data?.lists[0]?.key ?? "list1";
@@ -317,15 +348,9 @@ export default function Home() {
     setScreen("study");
   }
 
-  function move(delta: number) {
+  function jumpToQueueIndex(targetIndex: number) {
     if (!activeWord || !studyQueue.length) return;
-    let index = activeQueueIndex;
-    if (index < 0) {
-      index = studyQueue.findIndex((word) => word.order > activeWord.order);
-      if (index < 0) index = studyQueue.length - 1;
-    } else {
-      index = Math.max(0, Math.min(studyQueue.length - 1, index + delta));
-    }
+    const index = Math.max(0, Math.min(studyQueue.length - 1, targetIndex));
     const next = studyQueue[index];
     setActiveWordId(next.id);
     setAnswerVisible(mode === "reading" || mode === "brief");
@@ -337,7 +362,19 @@ export default function Home() {
         [selectedList]: { ...current.lists[selectedList], current_word_id: next.id },
       },
     }));
-    if (delta > 0 && progress?.settings.auto_speak === "1") speak(next.word);
+    if (next.id !== activeWord.id && progress?.settings.auto_speak === "1") speak(next.word);
+  }
+
+  function move(delta: number) {
+    if (!activeWord || !studyQueue.length) return;
+    let index = activeQueueIndex;
+    if (index < 0) {
+      index = studyQueue.findIndex((word) => word.order > activeWord.order);
+      if (index < 0) index = studyQueue.length - 1;
+    } else {
+      index += delta;
+    }
+    jumpToQueueIndex(index);
   }
 
   function cycleStar(word: WordEntry) {
@@ -394,18 +431,34 @@ export default function Home() {
       });
   }
 
-  function createDeviceToken() {
-    fetch("/api/device-token", { method: "POST" })
-      .then((response) =>
-        response.ok
-          ? response.json()
-          : Promise.reject(new Error("请先登录")),
-      )
-      .then((result) => {
-        setDeviceToken(result.token);
-        setNotice("Windows 设备令牌已生成。请复制保存，它只显示这一次。");
-      })
-      .catch((error) => setNotice(`无法生成令牌：${error.message}`));
+  function activateSyncCode(rawCode: string) {
+    try {
+      const normalized = validateSyncCode(rawCode);
+      localStorage.setItem(SYNC_CODE_STORAGE_KEY, normalized);
+      loadedSyncCode.current = "";
+      setSyncCode(normalized);
+      setSyncCodeInput(normalized);
+      setCloud({ status: "checking" });
+      setNotice("同步码已连接，正在读取云端进度。");
+    } catch (error) {
+      setNotice(`无法连接：${error instanceof Error ? error.message : "同步码无效"}`);
+    }
+  }
+
+  function makeSyncCode() {
+    const code = createSyncCode();
+    activateSyncCode(code);
+    navigator.clipboard?.writeText(code).catch(() => undefined);
+    setNotice("新同步码已创建并复制。请保存好，并粘贴到 Windows 版中。");
+  }
+
+  function disconnectSyncCode() {
+    localStorage.removeItem(SYNC_CODE_STORAGE_KEY);
+    loadedSyncCode.current = "";
+    setSyncCode("");
+    setSyncCodeInput("");
+    setCloud({ status: "disconnected" });
+    setNotice("已断开云同步，本机进度仍完整保留。");
   }
 
   if (!data || !progress) {
@@ -531,6 +584,10 @@ export default function Home() {
             )}
           </article>
 
+          <div className="study-jumps">
+            <button onClick={() => jumpToQueueIndex(0)} disabled={activeQueueIndex === 0}>⇤ 到 List 开头</button>
+            <button onClick={() => jumpToQueueIndex(studyQueue.length - 1)} disabled={activeQueueIndex >= studyQueue.length - 1}>到 List 结尾 ⇥</button>
+          </div>
           <div className="study-actions">
             <button onClick={() => move(-1)} disabled={activeQueueIndex === 0}>← 上一词</button>
             {activeQueueIndex >= studyQueue.length - 1 ? <button className="finish" onClick={completeRound}>完成本轮</button> : <button className="next" onClick={() => move(1)}>下一词 →</button>}
@@ -571,29 +628,33 @@ export default function Home() {
             <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={importFile} />
           </div>
           <div className="settings-card transfer-card cloud-card">
-            <span className="transfer-badge">CLOUD</span>
-            <h2>自动云同步</h2>
-            {cloud.status === "checking" && <p>正在检查登录状态…</p>}
-            {cloud.status === "signed-out" && <>
-              <p>使用 ChatGPT 登录后，网页会自动保存星级、List 次数和当前位置。</p>
-              <a className="primary" href="/signin-with-chatgpt?return_to=%2F">使用 ChatGPT 登录</a>
+            <span className="transfer-badge">NO ACCOUNT</span>
+            <h2>免账号同步码</h2>
+            {cloud.status === "checking" && <p>正在安全连接并读取加密进度…</p>}
+            {cloud.status === "disconnected" && <>
+              <p>无需登录。新建一组同步码，或粘贴其他设备上的同步码，就能自动同步学习进度。</p>
+              <button className="primary" onClick={makeSyncCode}>创建新同步码</button>
+              <div className="sync-code-connect">
+                <input aria-label="已有同步码" value={syncCodeInput} onChange={(event) => setSyncCodeInput(event.target.value)} placeholder="粘贴 GRE1- 开头的同步码" />
+                <button className="secondary" onClick={() => activateSyncCode(syncCodeInput)}>连接已有同步码</button>
+              </div>
             </>}
             {cloud.status === "ready" && <>
-              <p><strong>{cloud.label}</strong> 已登录。此设备的更改会自动同步到云端。</p>
+              <p>此设备的更改会自动加密后同步。把下面这组码粘贴到 Windows 或另一台 iPhone 即可连接。</p>
               <div className="cloud-status">
-                <span>● 已开启自动同步</span>
+                <span>● 免账号自动同步已开启</span>
                 <small>{cloud.updatedAt ? `最近同步 ${new Date(cloud.updatedAt).toLocaleString("zh-CN")}` : "等待首次同步"}</small>
               </div>
-              <button className="secondary" onClick={createDeviceToken}>生成 Windows 设备令牌</button>
-              {deviceToken && <div className="token-box"><code>{deviceToken}</code><button onClick={() => navigator.clipboard.writeText(deviceToken)}>复制</button></div>}
-              <a className="signout" href="/signout-with-chatgpt?return_to=%2F">退出云同步账号</a>
+              <div className="token-box"><code>{syncCode}</code><button onClick={() => { navigator.clipboard?.writeText(syncCode); setNotice("同步码已复制。"); }}>复制</button></div>
+              <button className="signout" onClick={disconnectSyncCode}>断开这组同步码</button>
             </>}
             {cloud.status === "error" && <>
-              <p>暂时无法连接云端，本地学习不受影响。</p>
-              <button className="secondary" onClick={() => location.reload()}>重新连接</button>
+              <p>暂时无法读取云端加密进度，本地学习不受影响。请检查网络或重新输入同步码。</p>
+              <button className="secondary" onClick={() => { loadedSyncCode.current = ""; setCloud({ status: "checking" }); }}>重新连接</button>
+              <button className="signout" onClick={disconnectSyncCode}>改用其他同步码</button>
             </>}
           </div>
-          <div className="privacy-note"><strong>隐私说明</strong><p>未登录时进度仅保存在浏览器本地；登录后只同步星级、List 次数、位置和学习设置。清除 Safari 网站数据前仍建议导出备份。</p></div>
+          <div className="privacy-note"><strong>隐私说明</strong><p>同步内容会在本机使用 AES-256-GCM 加密后再上传，服务器不保存明文，也不需要 GPT 或其他账号。同步码就是解密钥匙：请勿公开，遗失后无法找回。清除 Safari 网站数据前仍建议导出备份。</p></div>
         </section>
       )}
 

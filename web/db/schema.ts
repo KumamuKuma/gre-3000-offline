@@ -16,3 +16,11 @@ export const deviceTokens = sqliteTable(
   },
   (table) => [index("device_tokens_owner_idx").on(table.ownerEmail)],
 );
+
+export const syncSpaces = sqliteTable("sync_spaces", {
+  spaceId: text("space_id").primaryKey(),
+  authHash: text("auth_hash").notNull(),
+  ciphertext: text("ciphertext").notNull(),
+  nonce: text("nonce").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

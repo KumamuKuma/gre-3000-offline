@@ -219,6 +219,17 @@ def test_boundaries_do_not_wrap_or_record_duplicate_navigation(session, user_rep
     assert len(user_repo.seen) == 5
 
 
+def test_jump_to_first_and_last_keeps_source_order_and_saves_position(session, user_repo):
+    start(session)
+    last = session.last()
+    assert last.word.id == 5 and last.at_end and last.index == 4
+    assert user_repo.load_queue("source:list:list1:all").position == 4
+
+    first = session.first()
+    assert first.word.id == 1 and first.at_start and first.index == 0
+    assert user_repo.load_queue("source:list:list1:all").position == 0
+
+
 def test_star_filter_is_list_scoped_source_order_and_restores_position(user_repo):
     user_repo.ratings.update({1: 3, 3: 3, 5: 3, 6: 3})
     content = FakeContent(10)

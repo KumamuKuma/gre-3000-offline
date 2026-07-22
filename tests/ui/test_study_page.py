@@ -35,12 +35,29 @@ def test_study_render_modes_navigation_and_position_context(qtbot, sample_word):
     assert not page.word_detail.is_revealed()
     assert page.previous_button.isEnabled()
     assert page.next_button.isEnabled()
+    assert page.first_button.isEnabled()
+    assert page.last_button.isEnabled()
 
     with qtbot.waitSignal(page.answerToggleRequested):
         page.word_detail.reveal_button.click()
     with qtbot.waitSignal(page.modeRequested) as mode:
         page.brief_button.click()
     assert mode.args == [StudyMode.BRIEF]
+
+
+def test_list_boundary_buttons_emit_and_disable_at_edges(qtbot, sample_word):
+    page = StudyPage()
+    qtbot.addWidget(page)
+    page.render(snapshot(sample_word, index=8, at_start=False, at_end=False))
+    with qtbot.waitSignal(page.firstRequested):
+        page.first_button.click()
+    with qtbot.waitSignal(page.lastRequested):
+        page.last_button.click()
+
+    page.render(snapshot(sample_word, at_start=True, at_end=False))
+    assert not page.first_button.isEnabled()
+    page.render(snapshot(sample_word, index=104, at_start=False, at_end=True))
+    assert not page.last_button.isEnabled()
 
 
 def test_clicking_active_quiz_mode_does_not_emit_or_reset_answer(qtbot, sample_word):

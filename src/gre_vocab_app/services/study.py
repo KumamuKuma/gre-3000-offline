@@ -400,6 +400,19 @@ class StudySession:
             return self.current()
         return self._move(self._position - 1)
 
+    def first(self) -> SessionSnapshot:
+        self._require_started()
+        if self._position == 0:
+            return self.current()
+        return self._move(0)
+
+    def last(self) -> SessionSnapshot:
+        self._require_started()
+        final_position = len(self._ids) - 1
+        if self._position == final_position:
+            return self.current()
+        return self._move(final_position)
+
     def set_mode(self, mode: StudyMode | str) -> SessionSnapshot:
         self._require_started()
         parsed_mode = self._coerce_mode(mode)

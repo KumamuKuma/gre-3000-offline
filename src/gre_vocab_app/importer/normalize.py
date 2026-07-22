@@ -11,6 +11,7 @@ HORIZONTAL_SPACE = re.compile(r"[^\S\r\n]+")
 PHONETIC = re.compile(r"(?:\[[^\[\]\r\n]+\]|/[^/\r\n]+/)")
 ORTHOGRAPHIC_PHONETIC = re.compile(r"[A-Za-z]+(?:[ '-][A-Za-z]+)*")
 ORTHOGRAPHIC_PLACEHOLDER_MIN_LENGTH = 8
+SENSE_MARKER = re.compile(r"\(\d+\)|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]")
 
 VALIDATION_FLAGS = frozenset(
     {
@@ -270,6 +271,75 @@ def _split_definition(
                 english += " " + rendered
         previous_english = (piece_index, piece)
     return _clean_inline(english), _clean_inline("".join(chinese_parts))
+
+
+def _numbered_chinese_from_raw(text: str) -> str:
+    lines = [line for line in text.splitlines() if line.strip()]
+    pieces = _resolve_neutral_pieces(
+        [
+            piece
+            for line_index, line in enumerate(lines)
+            for piece in _script_segments(line, line_index)
+            if piece.text
+        ]
+    )
+    parts: list[str] = []
+    active_sense: str | None = None
+    rendered_sense: str | None = None
+    for piece in pieces:
+        rendered = piece.text.strip()
+        if not rendered:
+            continue
+        if piece.script != "zh":
+            markers = SENSE_MARKER.findall(rendered)
+            if markers:
+                active_sense = markers[-1]
+            continue
+        if active_sense is not None and active_sense != rendered_sense:
+            if parts:
+                parts.append("\n")
+            parts.append(f"{active_sense} ")
+            rendered_sense = active_sense
+        parts.append(rendered)
+    return _clean_inline("".join(parts))
+
+
+def format_numbered_senses(
+    entry: WordDraft, *, use_raw_translation: bool = True
+) -> WordDraft:
+    """Put each explicitly numbered English/Chinese sense on its own line."""
+
+    markers = SENSE_MARKER.findall(entry.definition_en)
+    if len(markers) < 2:
+        return entry
+    definition_en = re.sub(
+        r"\s+(?=(?:\((?:[2-9]|\d{2,})\)|[②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]))",
+        "\n",
+        entry.definition_en,
+    )
+    definition_zh = entry.definition_zh
+    if SENSE_MARKER.search(definition_zh):
+        definition_zh = re.sub(
+            r"\s*(?=(?:\((?:[2-9]|\d{2,})\)|[②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]))",
+            "\n",
+            definition_zh,
+        )
+    elif use_raw_translation:
+        candidate = _numbered_chinese_from_raw(entry.raw_definition)
+        if SENSE_MARKER.findall(candidate) == markers:
+            definition_zh = candidate
+    else:
+        segments = [part.strip() for part in re.split(r"[；;]", definition_zh)]
+        if len(segments) == len(markers) and all(segments):
+            definition_zh = "\n".join(
+                f"{marker} {segment}"
+                for marker, segment in zip(markers, segments, strict=True)
+            )
+    return replace(
+        entry,
+        definition_en=definition_en,
+        definition_zh=definition_zh,
+    )
 
 
 def _line_script(line: str) -> str | None:

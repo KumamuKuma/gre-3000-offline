@@ -17,6 +17,7 @@ from gre_vocab_app.progress_transfer import (
 from gre_vocab_app.services.cloud_sync import (
     DEFAULT_CLOUD_ENDPOINT,
     CloudSyncError,
+    create_sync_code,
     download_progress,
     upload_progress,
 )
@@ -67,6 +68,8 @@ class ApplicationController:
         study_page.backRequested.connect(self._back_from_study)
         study_page.previousRequested.connect(self._previous)
         study_page.nextRequested.connect(self._next)
+        study_page.firstRequested.connect(self._first)
+        study_page.lastRequested.connect(self._last)
         study_page.finishRequested.connect(self._finish_round)
         study_page.modeRequested.connect(self._set_mode)
         study_page.answerToggleRequested.connect(self._toggle_answer)
@@ -93,6 +96,7 @@ class ApplicationController:
         settings.exportProgressRequested.connect(self._export_progress)
         settings.importProgressRequested.connect(self._import_progress)
         settings.cloudTokenChanged.connect(self._set_cloud_token)
+        settings.cloudCreateCodeRequested.connect(self._create_cloud_code)
         settings.cloudUploadRequested.connect(self._upload_cloud_progress)
         settings.cloudDownloadRequested.connect(self._download_cloud_progress)
         settings.resetPositionRequested.connect(self._reset_positions)
@@ -353,6 +357,28 @@ class ApplicationController:
         self._refresh_stats()
         self._report_persistence_issue()
 
+    def _first(self) -> None:
+        if self._detail_snapshot is not None:
+            return
+        before = self.study.current()
+        snapshot = self.study.first()
+        self.window.study_page.render(snapshot)
+        if snapshot.word.id != before.word.id and self._auto_speak_enabled:
+            self._speak(snapshot.word.headword)
+        self._refresh_stats()
+        self._report_persistence_issue()
+
+    def _last(self) -> None:
+        if self._detail_snapshot is not None:
+            return
+        before = self.study.current()
+        snapshot = self.study.last()
+        self.window.study_page.render(snapshot)
+        if snapshot.word.id != before.word.id and self._auto_speak_enabled:
+            self._speak(snapshot.word.headword)
+        self._refresh_stats()
+        self._report_persistence_issue()
+
     def _finish_round(self) -> None:
         try:
             snapshot = self.study.current()
@@ -559,6 +585,14 @@ class ApplicationController:
 
     def _cloud_token(self) -> str:
         return (self.user.load_setting("cloud_token") or "").strip()
+
+    def _create_cloud_code(self) -> None:
+        code = create_sync_code()
+        self.user.save_setting("cloud_token", code)
+        self.window.settings_dialog.set_cloud_token(code)
+        self.window.settings_dialog.reveal_cloud_token()
+        self._show_status("新同步码已生成并选中，请复制保存，再上传本机进度。")
+        self._report_persistence_issue()
 
     def _upload_cloud_progress(self) -> None:
         try:

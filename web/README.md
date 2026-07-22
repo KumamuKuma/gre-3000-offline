@@ -6,8 +6,8 @@
 - 原书 List 顺序、等价词、词根词和近形异义词；
 - Service Worker 离线缓存；
 - JSON 进度文件与 Windows 桌面版双向导入/导出；
-- ChatGPT 登录后的 D1 自动云同步；
-- 一次性 Windows 设备令牌。
+- 无需账号的同步码自动云同步；
+- AES-256-GCM 设备端加密，D1 仅保存密文。
 
 ```powershell
 npm install

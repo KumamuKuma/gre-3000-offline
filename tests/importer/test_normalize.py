@@ -4,6 +4,7 @@ import pytest
 
 from gre_vocab_app.importer.normalize import (
     WordDraft,
+    format_numbered_senses,
     normalize_row,
     normalize_row_with_diagnostics,
     split_bilingual,
@@ -170,6 +171,13 @@ def test_definition_aggregates_each_visual_line_by_script():
         "characters are symbols"
     )
     assert draft.definition_zh == "\u8c61\u5f81\u5bd3\u8a00"
+
+    formatted = format_numbered_senses(draft)
+    assert formatted.definition_en == (
+        "(1)n. a symbolic representation\n(2)n. a story in which the "
+        "characters are symbols"
+    )
+    assert formatted.definition_zh == "(1) \u8c61\u5f81\n(2) \u5bd3\u8a00"
 
 
 def test_numbered_english_sense_after_chinese_on_same_visual_line_stays_english():

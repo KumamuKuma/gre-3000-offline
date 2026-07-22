@@ -35,6 +35,7 @@ from .normalize import (
     CJK,
     VALIDATION_FLAGS,
     WordDraft,
+    format_numbered_senses,
     normalize_row_with_diagnostics,
     validation_flags,
 )
@@ -1329,6 +1330,15 @@ def _run(args: argparse.Namespace) -> int:
     entries, override_details = apply_overrides_with_audit(
         source_entries, overrides
     )
+    entries = [
+        format_numbered_senses(
+            reviewed,
+            use_raw_translation=(
+                reviewed.definition_zh == source.definition_zh
+            ),
+        )
+        for source, reviewed in zip(source_entries, entries, strict=True)
+    ]
     semantic = semantic_checks_after_overrides(
         source_entries,
         entries,

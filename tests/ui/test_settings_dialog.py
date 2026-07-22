@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QApplication, QLineEdit, QMessageBox
 
 from gre_vocab_app.domain import StudyMode
 from gre_vocab_app.ui.settings_dialog import SettingsDialog
@@ -43,13 +43,22 @@ def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
     with qtbot.waitSignal(dialog.importProgressRequested):
         dialog.import_button.click()
     with qtbot.waitSignal(dialog.cloudTokenChanged) as token:
-        dialog.cloud_token_input.setText("gre_test")
+        dialog.cloud_token_input.setText("GRE1-test")
         dialog.cloud_token_input.editingFinished.emit()
-    assert token.args == ["gre_test"]
+    assert token.args == ["GRE1-test"]
+    dialog.cloud_token_input.clear()
+    with qtbot.waitSignal(dialog.cloudCreateCodeRequested):
+        dialog.cloud_create_button.click()
     with qtbot.waitSignal(dialog.cloudUploadRequested):
         dialog.cloud_upload_button.click()
     with qtbot.waitSignal(dialog.cloudDownloadRequested):
         dialog.cloud_download_button.click()
+    dialog.set_cloud_token("GRE1-secret")
+    dialog.reveal_cloud_token()
+    assert dialog.cloud_token_input.text() == "GRE1-secret"
+    assert dialog.cloud_token_input.echoMode() == QLineEdit.Normal
+    dialog.cloud_copy_button.click()
+    assert QApplication.clipboard().text() == "GRE1-secret"
     dialog.set_auto_speak(False)
     assert not dialog.auto_speak_checkbox.isChecked()
 

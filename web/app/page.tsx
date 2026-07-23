@@ -89,6 +89,8 @@ function defaultProgress(data: ContentPayload): Progress {
       study_filter: "all",
       study_mode: "reading",
       auto_speak: "0",
+      quiz_wrong_star_up: "0",
+      quiz_correct_star_down: "0",
     },
   };
 }
@@ -142,6 +144,8 @@ function normalizeProgress(value: unknown, data: ContentPayload): Progress {
       study_filter: filter,
       study_mode: mode,
       auto_speak: settings.auto_speak === "1" ? "1" : "0",
+      quiz_wrong_star_up: settings.quiz_wrong_star_up === "1" ? "1" : "0",
+      quiz_correct_star_down: settings.quiz_correct_star_down === "1" ? "1" : "0",
     },
   };
 }
@@ -227,6 +231,7 @@ export default function Home() {
   const [syncRetry, setSyncRetry] = useState(0);
   const importRef = useRef<HTMLInputElement>(null);
   const loadedSyncCode = useRef("");
+  const firstCloudUploadNoticeShown = useRef(false);
 
   useEffect(() => {
     fetch("/data/words.json")
@@ -272,11 +277,13 @@ export default function Home() {
     if (!syncCode) return;
     if (loadedSyncCode.current === syncCode) return;
     loadedSyncCode.current = syncCode;
+    firstCloudUploadNoticeShown.current = false;
     let cancelled = false;
     setCloud({ status: "checking" });
     readCodeProgress(syncCode)
       .then(async (result) => {
         if (cancelled) return;
+        const hasCloudProgress = Boolean(result.progress);
         if (result.progress) {
           const decoded = await decryptProgress(syncCode, result.progress);
           if (cancelled) return;
@@ -290,6 +297,12 @@ export default function Home() {
           });
         }
         setCloud({ status: "ready", updatedAt: result.updated_at });
+        if (hasCloudProgress) {
+          firstCloudUploadNoticeShown.current = true;
+          setNotice("云端进度读取完成，已开启自动同步。");
+        } else {
+          setNotice("同步码已连接，云端暂无旧进度，正在保存本机进度。");
+        }
       })
       .catch((error) => {
         if (cancelled) return;
@@ -306,9 +319,13 @@ export default function Home() {
     if (!hydrated || !progress || !syncCode || cloud.status !== "ready") return;
     const timer = window.setTimeout(() => {
       writeCodeProgress(syncCode, progress)
-        .then((result) =>
-          setCloud((current) => ({ ...current, updatedAt: result.updated_at })),
-        )
+        .then((result) => {
+          setCloud((current) => ({ ...current, updatedAt: result.updated_at }));
+          if (!firstCloudUploadNoticeShown.current) {
+            firstCloudUploadNoticeShown.current = true;
+            setNotice("云同步已开启，进度已保存。");
+          }
+        })
         .catch((error) => {
           const message = errorMessage(error, "暂时无法上传云端进度。");
           setCloud((current) => ({ ...current, status: "error", message }));
@@ -426,6 +443,29 @@ export default function Home() {
     });
   }
 
+  function answerQuiz(choiceIndex: number) {
+    if (!activeWord || quizSelected !== null) return;
+    const isCorrect = choiceIndex === quiz.correct;
+    setQuizSelected(choiceIndex);
+    const shouldAdjust = isCorrect
+      ? progress.settings.quiz_correct_star_down === "1"
+      : progress.settings.quiz_wrong_star_up === "1";
+    if (!shouldAdjust) return;
+    const previous = progress.stars[String(activeWord.id)] ?? 0;
+    const next = isCorrect ? Math.max(0, previous - 1) : Math.min(3, previous + 1);
+    updateProgress((current) => {
+      const stars = { ...current.stars };
+      if (next) stars[String(activeWord.id)] = next;
+      else delete stars[String(activeWord.id)];
+      return { ...current, stars };
+    });
+    if (next === previous) {
+      setNotice(isCorrect ? "回答正确，当前已是最低 0 星。" : "回答错误，当前已是最高 3 星。");
+    } else {
+      setNotice(isCorrect ? `回答正确，已自动减为 ${next} 星。` : `回答错误，已自动加为 ${next} 星。`);
+    }
+  }
+
   function completeRound() {
     updateProgress((current) => ({
       ...current,
@@ -475,6 +515,7 @@ export default function Home() {
       const normalized = validateSyncCode(rawCode);
       localStorage.setItem(SYNC_CODE_STORAGE_KEY, normalized);
       loadedSyncCode.current = "";
+      firstCloudUploadNoticeShown.current = false;
       setSyncCode(normalized);
       setSyncCodeInput(normalized);
       setCloud({ status: "checking" });
@@ -495,6 +536,7 @@ export default function Home() {
   function disconnectSyncCode() {
     localStorage.removeItem(SYNC_CODE_STORAGE_KEY);
     loadedSyncCode.current = "";
+    firstCloudUploadNoticeShown.current = false;
     setSyncCode("");
     setSyncCodeInput("");
     setCloud({ status: "disconnected" });
@@ -597,13 +639,20 @@ export default function Home() {
             {mode === "recall" && !answerVisible && <button className="reveal" onClick={() => setAnswerVisible(true)}>想一想，然后点击揭晓</button>}
 
             {mode === "quiz" && (
-              <div className="quiz-grid">
-                {quiz.choices.map((choice, index) => {
-                  const answered = quizSelected !== null;
-                  const className = answered && index === quiz.correct ? "quiz-option correct" : answered && index === quizSelected ? "quiz-option wrong" : "quiz-option";
-                  return <button className={className} key={choice} onClick={() => quizSelected === null && setQuizSelected(index)}><span>{String.fromCharCode(65 + index)}</span>{choice}</button>;
-                })}
-              </div>
+              <>
+                <div className="quiz-star-controls" aria-label="四选一自动调星">
+                  <span>自动调星</span>
+                  <label><input type="checkbox" checked={progress.settings.quiz_wrong_star_up === "1"} onChange={(event) => setSetting("quiz_wrong_star_up", event.target.checked ? "1" : "0")} />答错 +1 星</label>
+                  <label><input type="checkbox" checked={progress.settings.quiz_correct_star_down === "1"} onChange={(event) => setSetting("quiz_correct_star_down", event.target.checked ? "1" : "0")} />答对 −1 星</label>
+                </div>
+                <div className="quiz-grid">
+                  {quiz.choices.map((choice, index) => {
+                    const answered = quizSelected !== null;
+                    const className = answered && index === quiz.correct ? "quiz-option correct" : answered && index === quizSelected ? "quiz-option wrong" : "quiz-option";
+                    return <button className={className} key={choice} onClick={() => answerQuiz(index)}><span>{String.fromCharCode(65 + index)}</span>{choice}</button>;
+                  })}
+                </div>
+              </>
             )}
 
             {showAnswer && (
@@ -658,6 +707,8 @@ export default function Home() {
           <div className="page-title"><p className="eyebrow">YOUR DATA</p><h1>设置与同步</h1><span>进度默认只保存在当前设备</span></div>
           <div className="settings-card">
             <label className="toggle-row"><span><strong>切换到下一词时自动朗读</strong><small>使用 iPhone 系统英文语音</small></span><input type="checkbox" checked={progress.settings.auto_speak === "1"} onChange={(event) => setSetting("auto_speak", event.target.checked ? "1" : "0")} /></label>
+            <label className="toggle-row"><span><strong>答错时自动加 1 星</strong><small>仅在四选一模式首次作答时生效</small></span><input type="checkbox" checked={progress.settings.quiz_wrong_star_up === "1"} onChange={(event) => setSetting("quiz_wrong_star_up", event.target.checked ? "1" : "0")} /></label>
+            <label className="toggle-row"><span><strong>答对时自动减 1 星</strong><small>星级最低为 0 星，不会继续减少</small></span><input type="checkbox" checked={progress.settings.quiz_correct_star_down === "1"} onChange={(event) => setSetting("quiz_correct_star_down", event.target.checked ? "1" : "0")} /></label>
           </div>
           <div className="settings-card transfer-card">
             <span className="transfer-badge">SYNC</span>

@@ -319,6 +319,44 @@ def test_controller_cycles_stars_studies_a_rating_in_source_order_and_quizzes(
     assert window.study_page.snapshot.star_filter == 2
 
 
+def test_controller_quiz_auto_star_adjustments_are_independent_and_persisted(
+    qtbot,
+):
+    _controller, window, _content, user, _speech = make_controller(
+        qtbot, word_count=6
+    )
+    window.home_page.start_button.click()
+    window.study_page.quiz_button.click()
+    window.study_page.quiz_wrong_star_up_checkbox.setChecked(True)
+    assert user.settings["quiz_wrong_star_up"] == "1"
+    assert user.settings.get("quiz_correct_star_down") is None
+
+    first_quiz = window.study_page.snapshot
+    wrong_index = next(
+        index
+        for index in range(len(first_quiz.quiz_choices))
+        if index != first_quiz.quiz_correct_index
+    )
+    window.study_page.word_detail.quiz_buttons[wrong_index].click()
+    assert user.stars[first_quiz.word.id] == 1
+    assert window.study_page.snapshot.star_rating == 1
+
+    window.study_page.next_button.click()
+    second_quiz = window.study_page.snapshot
+    user.set_star_rating(second_quiz.word.id, 2)
+    window.study_page.render(_controller.study.current())
+    window.study_page.quiz_correct_star_down_checkbox.setChecked(True)
+    assert user.settings["quiz_correct_star_down"] == "1"
+    window.study_page.word_detail.quiz_buttons[
+        second_quiz.quiz_correct_index
+    ].click()
+    assert user.stars[second_quiz.word.id] == 1
+    assert window.study_page.snapshot.star_rating == 1
+
+    window.study_page.quiz_wrong_star_up_checkbox.setChecked(False)
+    assert user.settings["quiz_wrong_star_up"] == "0"
+
+
 def test_controller_word_list_updates_rating_and_returns_from_detail(
     qtbot, monkeypatch
 ):

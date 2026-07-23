@@ -7,7 +7,14 @@ from typing import Any, Mapping
 
 PROGRESS_SCHEMA = "gre-vocab-progress"
 PROGRESS_VERSION = 1
-_SYNC_SETTING_KEYS = ("study_list", "study_filter", "study_mode", "auto_speak")
+_SYNC_SETTING_KEYS = (
+    "study_list",
+    "study_filter",
+    "study_mode",
+    "auto_speak",
+    "quiz_wrong_star_up",
+    "quiz_correct_star_down",
+)
 
 
 class ProgressFormatError(ValueError):
@@ -116,8 +123,14 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
         "quiz",
     }:
         raise ProgressFormatError("默认学习模式无效。")
-    if "auto_speak" in settings and settings["auto_speak"] not in {"0", "1"}:
-        raise ProgressFormatError("自动朗读设置无效。")
+    boolean_settings = {
+        "auto_speak": "自动朗读",
+        "quiz_wrong_star_up": "答错自动加星",
+        "quiz_correct_star_down": "答对自动减星",
+    }
+    for key, label in boolean_settings.items():
+        if key in settings and settings[key] not in {"0", "1"}:
+            raise ProgressFormatError(f"{label}设置无效。")
     if "study_list" in settings and settings["study_list"] not in source_lists:
         raise ProgressFormatError("默认 List 无效。")
     if "study_filter" in settings and settings["study_filter"] not in {

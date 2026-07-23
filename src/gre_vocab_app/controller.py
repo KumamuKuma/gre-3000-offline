@@ -50,6 +50,8 @@ class ApplicationController:
         self._all_words: list[WordEntry] = []
         self._source_lists = ()
         self._auto_speak_enabled = False
+        self._quiz_wrong_star_up_enabled = False
+        self._quiz_correct_star_down_enabled = False
         self._connect()
 
     def _connect(self) -> None:
@@ -76,6 +78,12 @@ class ApplicationController:
         study_page.speechRequested.connect(self._speak)
         study_page.starRatingRequested.connect(self._set_star_rating)
         study_page.quizChoiceRequested.connect(self._answer_quiz)
+        study_page.quizWrongStarUpChanged.connect(
+            self._set_quiz_wrong_star_up
+        )
+        study_page.quizCorrectStarDownChanged.connect(
+            self._set_quiz_correct_star_down
+        )
         study_page.relatedWordRequested.connect(self._open_related_word)
 
         word_list = self.window.word_list_page
@@ -93,6 +101,12 @@ class ApplicationController:
         settings.rateChanged.connect(self._set_rate)
         settings.defaultModeChanged.connect(self._set_default_mode)
         settings.autoSpeakChanged.connect(self._set_auto_speak)
+        settings.quizWrongStarUpChanged.connect(
+            self._set_quiz_wrong_star_up
+        )
+        settings.quizCorrectStarDownChanged.connect(
+            self._set_quiz_correct_star_down
+        )
         settings.exportProgressRequested.connect(self._export_progress)
         settings.importProgressRequested.connect(self._import_progress)
         settings.cloudTokenChanged.connect(self._set_cloud_token)
@@ -174,6 +188,13 @@ class ApplicationController:
         self.window.settings_dialog.set_auto_speak(
             self._auto_speak_enabled
         )
+        self._quiz_wrong_star_up_enabled = (
+            self.user.load_setting("quiz_wrong_star_up") == "1"
+        )
+        self._quiz_correct_star_down_enabled = (
+            self.user.load_setting("quiz_correct_star_down") == "1"
+        )
+        self._sync_quiz_star_adjustment_controls()
         self.window.settings_dialog.set_cloud_token(
             self.user.load_setting("cloud_token")
         )
@@ -450,6 +471,14 @@ class ApplicationController:
 
     def _answer_quiz(self, choice_index: int) -> None:
         try:
+            before = (
+                self._detail_snapshot
+                if self._detail_snapshot is not None
+                else self.study.current()
+            )
+            if before.quiz_selected_index is not None:
+                return
+            is_correct = int(choice_index) == before.quiz_correct_index
             if self._detail_snapshot is not None:
                 self._detail_snapshot = self.study.answer_detail_quiz(
                     self._detail_snapshot,
@@ -462,7 +491,37 @@ class ApplicationController:
             LOGGER.exception("Unable to record quiz answer")
             self._show_status(f"无法记录答案：{error}")
             return
+
+        next_rating = before.star_rating
+        adjustment = ""
+        if is_correct and self._quiz_correct_star_down_enabled:
+            next_rating = max(0, before.star_rating - 1)
+            adjustment = "答对"
+        elif not is_correct and self._quiz_wrong_star_up_enabled:
+            next_rating = min(3, before.star_rating + 1)
+            adjustment = "答错"
+        if adjustment:
+            if self._detail_snapshot is not None:
+                if next_rating != before.star_rating:
+                    self.user.set_star_rating(before.word.id, next_rating)
+                self._detail_snapshot = replace(
+                    self._detail_snapshot,
+                    star_rating=next_rating,
+                )
+                snapshot = self._detail_snapshot
+            elif next_rating != before.star_rating:
+                snapshot = self.study.set_star_rating(next_rating)
+            direction = "加" if adjustment == "答错" else "减"
+            if next_rating == before.star_rating:
+                boundary = "已是最高 3 星" if adjustment == "答错" else "已是最低 0 星"
+                self._show_status(f"{adjustment}，{boundary}。")
+            else:
+                self._show_status(
+                    f"{adjustment}，已自动{direction}为 {next_rating} 星。"
+                )
         self.window.study_page.render(snapshot)
+        self._refresh_stats()
+        self._report_persistence_issue()
 
     def _set_word_list_star(self, word_id: int, star_rating: int) -> None:
         word_id = int(word_id)
@@ -503,6 +562,32 @@ class ApplicationController:
         )
         if self._auto_speak_enabled and not bool(self.speech.available):
             self._show_status("自动朗读已开启，但当前没有可用的语音引擎。")
+        self._report_persistence_issue()
+
+    def _sync_quiz_star_adjustment_controls(self) -> None:
+        values = {
+            "add_on_wrong": self._quiz_wrong_star_up_enabled,
+            "remove_on_correct": self._quiz_correct_star_down_enabled,
+        }
+        self.window.study_page.set_quiz_star_adjustments(**values)
+        self.window.settings_dialog.set_quiz_star_adjustments(**values)
+
+    def _set_quiz_wrong_star_up(self, enabled: bool) -> None:
+        self._quiz_wrong_star_up_enabled = bool(enabled)
+        self.user.save_setting(
+            "quiz_wrong_star_up",
+            "1" if self._quiz_wrong_star_up_enabled else "0",
+        )
+        self._sync_quiz_star_adjustment_controls()
+        self._report_persistence_issue()
+
+    def _set_quiz_correct_star_down(self, enabled: bool) -> None:
+        self._quiz_correct_star_down_enabled = bool(enabled)
+        self.user.save_setting(
+            "quiz_correct_star_down",
+            "1" if self._quiz_correct_star_down_enabled else "0",
+        )
+        self._sync_quiz_star_adjustment_controls()
         self._report_persistence_issue()
 
     def _reset_positions(self) -> None:

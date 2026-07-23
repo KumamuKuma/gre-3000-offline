@@ -27,6 +27,8 @@ class SettingsDialog(QDialog):
     rateChanged = Signal(float)
     defaultModeChanged = Signal(object)
     autoSpeakChanged = Signal(bool)
+    quizWrongStarUpChanged = Signal(bool)
+    quizCorrectStarDownChanged = Signal(bool)
     exportProgressRequested = Signal()
     importProgressRequested = Signal()
     cloudTokenChanged = Signal(str)
@@ -61,10 +63,18 @@ class SettingsDialog(QDialog):
         rate_row.addWidget(self.rate_slider, 1)
         rate_row.addWidget(self.rate_value)
         self.auto_speak_checkbox = QCheckBox("切换到下一词时自动朗读一次")
+        self.quiz_wrong_star_up_checkbox = QCheckBox(
+            "四选一答错时自动加 1 星"
+        )
+        self.quiz_correct_star_down_checkbox = QCheckBox(
+            "四选一答对时自动减 1 星"
+        )
         form.addRow("默认模式", self.mode_combo)
         form.addRow("英文语音", self.voice_combo)
         form.addRow("朗读速度", rate_row)
         form.addRow("自动朗读", self.auto_speak_checkbox)
+        form.addRow("自动调星", self.quiz_wrong_star_up_checkbox)
+        form.addRow("", self.quiz_correct_star_down_checkbox)
         root.addWidget(study_group)
 
         data_group = QGroupBox("本地数据")
@@ -123,6 +133,12 @@ class SettingsDialog(QDialog):
         self.rate_slider.valueChanged.connect(self._rate_changed)
         self.mode_combo.currentIndexChanged.connect(self._mode_changed)
         self.auto_speak_checkbox.toggled.connect(self.autoSpeakChanged.emit)
+        self.quiz_wrong_star_up_checkbox.toggled.connect(
+            self.quizWrongStarUpChanged.emit
+        )
+        self.quiz_correct_star_down_checkbox.toggled.connect(
+            self.quizCorrectStarDownChanged.emit
+        )
         self.export_button.clicked.connect(self.exportProgressRequested.emit)
         self.import_button.clicked.connect(self.importProgressRequested.emit)
         self.cloud_token_input.editingFinished.connect(
@@ -172,6 +188,21 @@ class SettingsDialog(QDialog):
     def set_auto_speak(self, enabled: bool) -> None:
         with QSignalBlocker(self.auto_speak_checkbox):
             self.auto_speak_checkbox.setChecked(bool(enabled))
+
+    def set_quiz_star_adjustments(
+        self,
+        *,
+        add_on_wrong: bool,
+        remove_on_correct: bool,
+    ) -> None:
+        with (
+            QSignalBlocker(self.quiz_wrong_star_up_checkbox),
+            QSignalBlocker(self.quiz_correct_star_down_checkbox),
+        ):
+            self.quiz_wrong_star_up_checkbox.setChecked(bool(add_on_wrong))
+            self.quiz_correct_star_down_checkbox.setChecked(
+                bool(remove_on_correct)
+            )
 
     def set_cloud_token(self, token: str | None) -> None:
         with QSignalBlocker(self.cloud_token_input):

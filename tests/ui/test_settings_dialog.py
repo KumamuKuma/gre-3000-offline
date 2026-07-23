@@ -38,6 +38,13 @@ def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
         dialog.auto_speak_checkbox.setChecked(True)
     assert auto_speak.args == [True]
 
+    with qtbot.waitSignal(dialog.quizWrongStarUpChanged) as wrong_adjustment:
+        dialog.quiz_wrong_star_up_checkbox.setChecked(True)
+    assert wrong_adjustment.args == [True]
+    with qtbot.waitSignal(dialog.quizCorrectStarDownChanged) as correct_adjustment:
+        dialog.quiz_correct_star_down_checkbox.setChecked(True)
+    assert correct_adjustment.args == [True]
+
     with qtbot.waitSignal(dialog.exportProgressRequested):
         dialog.export_button.click()
     with qtbot.waitSignal(dialog.importProgressRequested):
@@ -61,6 +68,12 @@ def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
     assert QApplication.clipboard().text() == "GRE1-secret"
     dialog.set_auto_speak(False)
     assert not dialog.auto_speak_checkbox.isChecked()
+    dialog.set_quiz_star_adjustments(
+        add_on_wrong=False,
+        remove_on_correct=False,
+    )
+    assert not dialog.quiz_wrong_star_up_checkbox.isChecked()
+    assert not dialog.quiz_correct_star_down_checkbox.isChecked()
 
 
 def test_clear_all_requires_named_confirmation(qtbot, monkeypatch):

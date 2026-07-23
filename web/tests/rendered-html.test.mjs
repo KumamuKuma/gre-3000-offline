@@ -39,6 +39,10 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(page, /AES-256-GCM/);
   assert.match(page, /到 List 开头/);
   assert.match(page, /到 List 结尾/);
+  assert.match(page, /答错 \+1 星/);
+  assert.match(page, /答对 −1 星/);
+  assert.match(page, /quiz_wrong_star_up/);
+  assert.match(page, /quiz_correct_star_down/);
   assert.match(worker, /data\/words\.json/);
   assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);
 });

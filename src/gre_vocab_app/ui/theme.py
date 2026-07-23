@@ -132,6 +132,11 @@ QFrame#studyHeader, QFrame#navigationBar {
     border-color: #e2e8f0;
     border-radius: 14px;
 }
+QFrame#quizAutomationBar {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 12px;
+}
 QWidget#wordCard {
     border-radius: 19px;
     border-top: 3px solid #6366f1;

@@ -45,6 +45,8 @@ def test_progress_round_trip_preserves_stars_lists_positions_and_settings(
     )
     source.save_setting("study_list", list_key)
     source.save_setting("study_mode", "recall")
+    source.save_setting("quiz_wrong_star_up", "1")
+    source.save_setting("quiz_correct_star_down", "1")
     source.save_setting("voice_name", "device-only")
 
     payload = export_progress(source, content_repository)
@@ -56,6 +58,8 @@ def test_progress_round_trip_preserves_stars_lists_positions_and_settings(
     assert target.list_completion_count(list_key) == 4
     assert target.load_queue(f"source:list:{list_key}:all").position == 2
     assert target.load_setting("study_mode") == "recall"
+    assert target.load_setting("quiz_wrong_star_up") == "1"
+    assert target.load_setting("quiz_correct_star_down") == "1"
     assert target.load_setting("voice_name") is None
 
 

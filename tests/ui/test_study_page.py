@@ -77,6 +77,38 @@ def test_clicking_active_quiz_mode_does_not_emit_or_reset_answer(qtbot, sample_w
     assert page.word_detail._quiz_selected_index == 0
 
 
+def test_quiz_auto_star_switches_are_available_only_in_quiz_mode(
+    qtbot, sample_word
+):
+    page = StudyPage()
+    qtbot.addWidget(page)
+    page.show()
+    page.render(snapshot(sample_word, mode=StudyMode.READING))
+    assert page.quiz_automation_bar.isHidden()
+
+    page.render(
+        snapshot(
+            sample_word,
+            mode=StudyMode.QUIZ,
+            quiz_choices=("甲", "乙", "丙", "丁"),
+            quiz_correct_index=2,
+        )
+    )
+    assert page.quiz_automation_bar.isVisible()
+    with qtbot.waitSignal(page.quizWrongStarUpChanged) as wrong:
+        page.quiz_wrong_star_up_checkbox.setChecked(True)
+    assert wrong.args == [True]
+    with qtbot.waitSignal(page.quizCorrectStarDownChanged) as correct:
+        page.quiz_correct_star_down_checkbox.setChecked(True)
+    assert correct.args == [True]
+    page.set_quiz_star_adjustments(
+        add_on_wrong=False,
+        remove_on_correct=False,
+    )
+    assert not page.quiz_wrong_star_up_checkbox.isChecked()
+    assert not page.quiz_correct_star_down_checkbox.isChecked()
+
+
 def test_star_rating_is_zero_through_three_and_no_favorite_control(qtbot, sample_word):
     page = StudyPage()
     qtbot.addWidget(page)

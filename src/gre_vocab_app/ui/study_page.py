@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QFrame,
     QHBoxLayout,
@@ -36,6 +37,8 @@ class StudyPage(QWidget):
     speechRequested = Signal(str)
     starRatingRequested = Signal(int)
     quizChoiceRequested = Signal(int)
+    quizWrongStarUpChanged = Signal(bool)
+    quizCorrectStarDownChanged = Signal(bool)
     relatedWordRequested = Signal(int)
 
     def __init__(self, parent: QWidget | None = None):
@@ -86,6 +89,21 @@ class StudyPage(QWidget):
         top.addWidget(self.star_button)
         root.addWidget(study_header)
 
+        self.quiz_automation_bar = QFrame(objectName="quizAutomationBar")
+        quiz_automation = QHBoxLayout(self.quiz_automation_bar)
+        quiz_automation.setContentsMargins(14, 8, 14, 8)
+        quiz_automation.setSpacing(16)
+        quiz_automation_label = QLabel("四选一自动调星")
+        quiz_automation_label.setObjectName("fieldLabel")
+        self.quiz_wrong_star_up_checkbox = QCheckBox("答错 +1 星")
+        self.quiz_correct_star_down_checkbox = QCheckBox("答对 −1 星")
+        quiz_automation.addWidget(quiz_automation_label)
+        quiz_automation.addStretch(1)
+        quiz_automation.addWidget(self.quiz_wrong_star_up_checkbox)
+        quiz_automation.addWidget(self.quiz_correct_star_down_checkbox)
+        self.quiz_automation_bar.setVisible(False)
+        root.addWidget(self.quiz_automation_bar)
+
         self.word_detail = WordDetail()
         root.addWidget(self.word_detail, 1)
 
@@ -130,6 +148,12 @@ class StudyPage(QWidget):
             lambda checked: self._request_mode(StudyMode.QUIZ, checked)
         )
         self.star_button.clicked.connect(self._request_next_star_rating)
+        self.quiz_wrong_star_up_checkbox.toggled.connect(
+            self.quizWrongStarUpChanged.emit
+        )
+        self.quiz_correct_star_down_checkbox.toggled.connect(
+            self.quizCorrectStarDownChanged.emit
+        )
         self.word_detail.speechRequested.connect(self.speechRequested.emit)
         self.word_detail.revealRequested.connect(self.answerToggleRequested.emit)
         self.word_detail.quizChoiceRequested.connect(
@@ -182,6 +206,7 @@ class StudyPage(QWidget):
             self.recall_button.setChecked(snapshot.mode is StudyMode.RECALL)
             self.quiz_button.setChecked(snapshot.mode is StudyMode.QUIZ)
         self._render_star_rating(snapshot.star_rating)
+        self.quiz_automation_bar.setVisible(snapshot.mode is StudyMode.QUIZ)
         self.word_detail.set_word(
             snapshot.word,
             mode=snapshot.mode,
@@ -280,6 +305,21 @@ class StudyPage(QWidget):
         self._speech_available = bool(available)
         self._sync_shortcut_state()
         self.word_detail.set_speech_available(self._speech_available)
+
+    def set_quiz_star_adjustments(
+        self,
+        *,
+        add_on_wrong: bool,
+        remove_on_correct: bool,
+    ) -> None:
+        with (
+            QSignalBlocker(self.quiz_wrong_star_up_checkbox),
+            QSignalBlocker(self.quiz_correct_star_down_checkbox),
+        ):
+            self.quiz_wrong_star_up_checkbox.setChecked(bool(add_on_wrong))
+            self.quiz_correct_star_down_checkbox.setChecked(
+                bool(remove_on_correct)
+            )
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if (

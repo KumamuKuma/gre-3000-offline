@@ -66,6 +66,7 @@ class SessionSnapshot:
     star_rating: int = 0
     star_filter: int | None = None
     list_key: str | None = None
+    list_keys: tuple[str, ...] = ()
     list_label: str = ""
     can_complete_round: bool = False
     root_families: tuple[RootFamily, ...] = ()

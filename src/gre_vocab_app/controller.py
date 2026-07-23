@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import json
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,8 @@ class ApplicationController:
         home.searchRequested.connect(self._search_home)
         home.listStudyRequested.connect(self._open_list_study)
         home.listSelectionChanged.connect(self._select_list)
+        home.starFilterChanged.connect(self._select_star_filter)
+        home.starStudyScopeChanged.connect(self._select_star_lists)
         home.listCompletionAdjustmentRequested.connect(
             self._adjust_list_completion
         )
@@ -134,21 +137,40 @@ class ApplicationController:
         )
         self._source_lists = tuple(self.content.source_lists())
         self._configure_settings()
-        self.window.home_page.set_source_lists(
+        self._configure_home_scope()
+        self._refresh_stats()
+        self.window.show_home()
+
+    def _saved_star_list_keys(self) -> tuple[str, ...]:
+        all_keys = tuple(item.key for item in self._source_lists)
+        saved = self.user.load_setting("study_star_lists")
+        if not saved or saved == "all":
+            return all_keys
+        requested = tuple(
+            part.strip() for part in saved.split(",") if part.strip()
+        )
+        requested_set = set(requested)
+        selected = tuple(key for key in all_keys if key in requested_set)
+        return selected or all_keys
+
+    def _configure_home_scope(self) -> None:
+        home = self.window.home_page
+        home.set_source_lists(
             self._source_lists,
             self.user.list_completion_counts(),
             selected_key=self.user.load_setting("study_list"),
+            selected_star_keys=self._saved_star_list_keys(),
         )
         saved_filter = self.user.load_setting("study_filter") or "all"
+        rating: int | None = None
         if saved_filter.startswith("star:"):
             try:
-                rating = int(saved_filter.removeprefix("star:"))
+                candidate = int(saved_filter.removeprefix("star:"))
             except ValueError:
-                rating = -1
-            if 0 <= rating <= 3:
-                self.window.home_page.set_selected_star_filter(rating)
-        self._refresh_stats()
-        self.window.show_home()
+                candidate = -1
+            if 0 <= candidate <= 3:
+                rating = candidate
+        home.set_selected_star_filter(rating)
 
     def _configure_settings(self) -> None:
         names = tuple(self.speech.voice_names())
@@ -215,12 +237,24 @@ class ApplicationController:
         self._refresh_selected_list_counts()
 
     def _refresh_selected_list_counts(self, key: str | None = None) -> None:
-        selected = key or self.window.home_page.selected_list_key()
-        if selected is None:
+        home = self.window.home_page
+        rating = home.selected_star_filter()
+        if rating is None:
+            selected_keys = (key or home.selected_list_key(),)
+        else:
+            selected_keys = home.selected_star_list_keys()
+        selected_keys = tuple(
+            selected for selected in selected_keys if selected is not None
+        )
+        if not selected_keys:
             self.window.home_page.set_star_counts({})
             return
         try:
-            word_ids = tuple(self.content.ids_for_section(selected))
+            word_ids = tuple(
+                word_id
+                for selected in selected_keys
+                for word_id in self.content.ids_for_section(selected)
+            )
         except KeyError:
             self.window.home_page.set_star_counts({})
             return
@@ -229,6 +263,31 @@ class ApplicationController:
     def _select_list(self, key: str) -> None:
         self.user.save_setting("study_list", str(key))
         self._refresh_selected_list_counts(str(key))
+        self._report_persistence_issue()
+
+    def _select_star_filter(self, star_rating: object) -> None:
+        rating = None if star_rating is None else int(star_rating)
+        self.user.save_setting(
+            "study_filter",
+            "all" if rating is None else f"star:{rating}",
+        )
+        self._refresh_selected_list_counts()
+        self._report_persistence_issue()
+
+    def _select_star_lists(self, source_sections: object) -> None:
+        if not isinstance(source_sections, Sequence) or isinstance(
+            source_sections, (str, bytes)
+        ):
+            return
+        requested = tuple(str(key) for key in source_sections)
+        all_keys = tuple(item.key for item in self._source_lists)
+        requested_set = set(requested)
+        selected = tuple(key for key in all_keys if key in requested_set)
+        if not selected:
+            return
+        value = "all" if selected == all_keys else ",".join(selected)
+        self.user.save_setting("study_star_lists", value)
+        self._refresh_selected_list_counts()
         self._report_persistence_issue()
 
     def _adjust_list_completion(self, key: str, delta: int) -> None:
@@ -278,26 +337,35 @@ class ApplicationController:
     def _search_home(self, query: str) -> None:
         self.window.home_page.set_results(self.search.search(query))
 
-    def _open_list_study(
-        self, source_section: str, star_rating: object
-    ) -> None:
+    def _open_list_study(self, source_scope: object, star_rating: object) -> None:
         rating = None if star_rating is None else int(star_rating)
-        self._open_study(str(source_section), rating)
+        self._open_study(source_scope, rating)
 
     def _open_study(
-        self, source_section: str, star_rating: int | None = None
+        self, source_scope: object, star_rating: int | None = None
     ) -> None:
+        if isinstance(source_scope, str):
+            start_kwargs = {"source_section": source_scope}
+        elif isinstance(source_scope, Sequence) and not isinstance(
+            source_scope, (str, bytes)
+        ):
+            start_kwargs = {
+                "source_sections": tuple(str(key) for key in source_scope)
+            }
+        else:
+            self._show_status("无法开始学习：List 范围无效。")
+            return
         try:
             snapshot = self.study.start(
                 BrowseOrder.SOURCE,
-                source_section=source_section,
                 star_rating=star_rating,
+                **start_kwargs,
             )
         except (KeyError, ValueError, RuntimeError) as error:
             LOGGER.exception("Unable to start study session")
             if star_rating is not None and "no words match" in str(error):
                 self._show_status(
-                    f"所选 List 中没有 {star_rating} 星单词。"
+                    f"所选 List 范围中没有 {star_rating} 星单词。"
                 )
             else:
                 self._show_status(f"无法开始学习：{error}")
@@ -600,7 +668,9 @@ class ApplicationController:
         self.user.reset_all_positions()
         self._show_status("学习位置已重置。")
         if active is not None and active.list_key is not None:
-            self._open_study(active.list_key, active.star_filter)
+            self._open_study(active.list_keys or active.list_key, active.star_filter)
+        elif active is not None and active.list_keys:
+            self._open_study(active.list_keys, active.star_filter)
         self._report_persistence_issue()
 
     def _export_progress(self) -> None:
@@ -650,11 +720,7 @@ class ApplicationController:
             return
         self._detail_snapshot = None
         self._configure_settings()
-        self.window.home_page.set_source_lists(
-            self._source_lists,
-            self.user.list_completion_counts(),
-            selected_key=self.user.load_setting("study_list"),
-        )
+        self._configure_home_scope()
         self._refresh_stats()
         self._refresh_word_list()
         self.window.show_home()
@@ -703,11 +769,7 @@ class ApplicationController:
             return
         self._detail_snapshot = None
         self._configure_settings()
-        self.window.home_page.set_source_lists(
-            self._source_lists,
-            self.user.list_completion_counts(),
-            selected_key=self.user.load_setting("study_list"),
-        )
+        self._configure_home_scope()
         self._refresh_stats()
         self._refresh_word_list()
         self.window.show_home()
@@ -721,10 +783,7 @@ class ApplicationController:
         self.user.clear_all()
         self._detail_snapshot = None
         self._configure_settings()
-        self.window.home_page.set_source_lists(
-            self._source_lists,
-            self.user.list_completion_counts(),
-        )
+        self._configure_home_scope()
         self._refresh_stats()
         self._refresh_word_list()
         self.window.show_home()

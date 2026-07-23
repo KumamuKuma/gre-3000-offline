@@ -53,6 +53,16 @@ class FakeContent:
         ids = self.ids_for_section(key)
         return SourceList(key, "List 1" if key == "list1" else "List 2", len(ids), ids[0], ids[-1])
 
+    def source_lists(self):
+        result = []
+        for key, label in (("list1", "List 1"), ("list2", "List 2")):
+            try:
+                ids = self.ids_for_section(key)
+            except KeyError:
+                continue
+            result.append(SourceList(key, label, len(ids), ids[0], ids[-1]))
+        return tuple(result)
+
     def get(self, word_id):
         return self.words[word_id]
 
@@ -243,6 +253,48 @@ def test_star_filter_is_list_scoped_source_order_and_restores_position(user_repo
 
     restored = StudySession(content, user_repo, random.Random(2))
     assert start(restored, star_rating=3).word.id == 5
+
+
+def test_star_filter_can_merge_multiple_or_all_lists_in_source_order(user_repo):
+    user_repo.ratings.update({1: 2, 3: 2, 6: 2, 8: 2})
+    content = FakeContent(10)
+    session = StudySession(content, user_repo, random.Random(1))
+    first = session.start(
+        source_sections=("list2", "list1"),
+        star_rating=2,
+    )
+    assert first.word.id == 1
+    assert first.total == 4
+    assert first.list_keys == ("list1", "list2")
+    assert first.list_key is None
+    assert first.list_label == "全部 List"
+    assert not first.can_complete_round
+    assert [session.next().word.id for _ in range(3)] == [3, 6, 8]
+    name = "source:lists:all:star:2"
+    assert user_repo.load_queue(name) == QueueState((1, 3, 6, 8), 3, 0)
+    assert user_repo.settings["study_star_lists"] == "all"
+    assert user_repo.settings["study_star_current_word_id"] == "8"
+
+    restored = StudySession(content, user_repo, random.Random(2))
+    assert restored.start(
+        source_sections=("list1", "list2"),
+        star_rating=2,
+    ).word.id == 8
+
+    user_repo.queues.clear()
+    restored_from_synced_anchor = StudySession(
+        content, user_repo, random.Random(3)
+    )
+    assert restored_from_synced_anchor.start(
+        source_sections=("list1", "list2"),
+        star_rating=2,
+    ).word.id == 8
+
+
+def test_multiple_lists_require_a_specific_star_filter(user_repo):
+    session = StudySession(FakeContent(10), user_repo, random.Random(1))
+    with pytest.raises(ValueError, match="require a star"):
+        session.start(source_sections=("list1", "list2"))
 
 
 def test_star_filter_membership_change_keeps_source_anchor(user_repo):

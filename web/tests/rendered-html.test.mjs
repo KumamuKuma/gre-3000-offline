@@ -37,8 +37,12 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(page, /GRE-3000-学习进度\.json/);
   assert.match(page, /免账号同步码/);
   assert.match(page, /AES-256-GCM/);
-  assert.match(page, /到 List 开头/);
-  assert.match(page, /到 List 结尾/);
+  assert.match(page, /星级学习包含的 List/);
+  assert.match(page, /选择全部 List/);
+  assert.match(page, /study_star_lists/);
+  assert.match(page, /study_star_current_word_id/);
+  assert.match(page, /到\{starFilter === "all" \? " List" : "筛选"\}开头/);
+  assert.match(page, /到\{starFilter === "all" \? " List" : "筛选"\}结尾/);
   assert.match(page, /答错 \+1 星/);
   assert.match(page, /答对 −1 星/);
   assert.match(page, /quiz_wrong_star_up/);

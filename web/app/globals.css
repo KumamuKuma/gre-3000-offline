@@ -56,8 +56,25 @@ button { color: inherit; }
 .filter { flex: 0 0 auto; padding: 9px 11px; border: 1px solid var(--line); border-radius: 99px; background: transparent; font-size: 11px; cursor: pointer; }
 .filter small { color: var(--muted); margin-left: 3px; }
 .filter.active { color: var(--orange); border-color: #efb493; background: var(--orange-soft); font-weight: 700; }
+.list-scope-picker { margin: -4px 0 18px; border: 1px solid var(--line); border-radius: 14px; background: #faf8f3; overflow: hidden; }
+.list-scope-picker summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 14px; cursor: pointer; list-style: none; }
+.list-scope-picker summary::-webkit-details-marker { display: none; }
+.list-scope-picker summary span { color: var(--muted); font-size: 11px; font-weight: 700; }
+.list-scope-picker summary strong { color: var(--orange); font-size: 12px; }
+.list-scope-picker[open] summary { border-bottom: 1px solid var(--line); }
+.scope-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 8px; }
+.scope-toolbar button { padding: 7px 10px; color: var(--orange); border: 1px solid #efb493; border-radius: 99px; background: var(--orange-soft); font-size: 10px; font-weight: 750; cursor: pointer; }
+.scope-toolbar span { color: var(--muted); font-size: 10px; }
+.scope-list-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; max-height: 240px; padding: 4px 12px 13px; overflow-y: auto; }
+.scope-list { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 11px; background: white; cursor: pointer; }
+.scope-list.active { border-color: #efb493; background: var(--orange-soft); }
+.scope-list input { accent-color: var(--orange); }
+.scope-list span, .scope-list strong, .scope-list small { display: block; min-width: 0; }
+.scope-list strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.scope-list small { margin-top: 2px; color: var(--muted); font-size: 9px; }
 .primary, .secondary { width: 100%; min-height: 48px; border-radius: 14px; font-weight: 750; cursor: pointer; }
 .primary { display: flex; align-items: center; justify-content: space-between; padding: 0 18px; color: white; border: 0; background: var(--orange); box-shadow: 0 10px 24px rgba(231,111,53,.24); text-decoration: none; }
+.primary:disabled { cursor: not-allowed; opacity: .48; box-shadow: none; }
 .secondary { margin-top: 10px; color: var(--ink); border: 1px solid var(--line); background: #faf8f3; }
 .resume-note { margin: 12px 0 0; color: var(--muted); text-align: center; font-size: 10px; }
 .install-card { display: flex; gap: 14px; align-items: center; margin: 14px 2px 0; padding: 16px; border: 1px dashed #cfc6b7; border-radius: 17px; }

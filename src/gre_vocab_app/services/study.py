@@ -31,6 +31,7 @@ class StudySession:
         self._queue_name = BrowseOrder.SOURCE.value
         self._star_filter: int | None = None
         self._list_key: str | None = None
+        self._list_keys: tuple[str, ...] = ()
         self._list_label = ""
         self._answer_visible = False
         self._quiz_choices: tuple[str, ...] = ()
@@ -98,6 +99,11 @@ class StudySession:
             seen_word_id=self._ids[self._position],
             event_id=uuid.uuid4().hex,
         )
+        if self._star_filter is not None:
+            self._user.save_setting(
+                "study_star_current_word_id",
+                str(self._ids[self._position]),
+            )
 
     def _load_mode(self) -> StudyMode:
         value = self._user.load_setting("study_mode")
@@ -189,7 +195,8 @@ class StudySession:
         self,
         order: BrowseOrder = BrowseOrder.SOURCE,
         *,
-        source_section: str,
+        source_section: str | None = None,
+        source_sections: Sequence[str] | None = None,
         star_rating: int | None = None,
     ) -> SessionSnapshot:
         try:
@@ -200,19 +207,66 @@ class StudySession:
             raise ValueError("only source-order study is supported")
 
         star_filter = self._validate_star_filter(star_rating)
-        if not isinstance(source_section, str) or not source_section.strip():
-            raise ValueError("source section cannot be blank")
-        source_section = source_section.strip()
+        if source_section is not None and source_sections is not None:
+            raise ValueError("choose either one source section or multiple sections")
+        if source_sections is None:
+            if not isinstance(source_section, str) or not source_section.strip():
+                raise ValueError("source section cannot be blank")
+            requested_sections = (source_section.strip(),)
+        else:
+            if isinstance(source_sections, (str, bytes)):
+                raise ValueError("source sections must be a sequence of List keys")
+            requested_sections = tuple(source_sections)
+            if (
+                not requested_sections
+                or any(
+                    not isinstance(key, str) or not key.strip()
+                    for key in requested_sections
+                )
+            ):
+                raise ValueError("source sections cannot be empty")
+            requested_sections = tuple(key.strip() for key in requested_sections)
+        if len(set(requested_sections)) != len(requested_sections):
+            raise ValueError("source sections cannot contain duplicates")
+
+        available_lists = tuple(self._content.source_lists())
+        list_by_key = {item.key: item for item in available_lists}
+        unknown = tuple(
+            key for key in requested_sections if key not in list_by_key
+        )
+        if unknown:
+            raise ValueError(f"unknown source section: {unknown[0]}")
+        requested_set = set(requested_sections)
+        selected_lists = tuple(
+            item for item in available_lists if item.key in requested_set
+        )
+        selected_keys = tuple(item.key for item in selected_lists)
+        if len(selected_keys) > 1 and star_filter is None:
+            raise ValueError("multiple Lists require a star rating filter")
+
         try:
-            source_list = self._content.source_list(source_section)
-            content_ids = tuple(self._content.ids_for_section(source_section))
+            content_ids = tuple(
+                word_id
+                for key in selected_keys
+                for word_id in self._content.ids_for_section(key)
+            )
         except KeyError as error:
-            raise ValueError(f"unknown source section: {source_section}") from error
+            raise ValueError(f"unknown source section: {error.args[0]}") from error
         if not content_ids:
-            raise ValueError(f"source section is empty: {source_section}")
+            raise ValueError("selected source sections are empty")
+        all_keys = tuple(item.key for item in available_lists)
+        if len(selected_keys) == 1:
+            scope_name = f"list:{selected_keys[0]}"
+            list_label = str(selected_lists[0].label)
+        elif selected_keys == all_keys:
+            scope_name = "lists:all"
+            list_label = "全部 List"
+        else:
+            scope_name = f"lists:{'+'.join(selected_keys)}"
+            list_label = f"已选 {len(selected_keys)} 个 List"
         if star_filter is None:
             ids = content_ids
-            queue_name = f"source:list:{source_section}:all"
+            queue_name = f"source:{scope_name}:all"
             filter_setting = "all"
         else:
             ids = tuple(
@@ -220,7 +274,7 @@ class StudySession:
                 for word_id in content_ids
                 if self._user.star_rating(word_id) == star_filter
             )
-            queue_name = f"source:list:{source_section}:star:{star_filter}"
+            queue_name = f"source:{scope_name}:star:{star_filter}"
             filter_setting = f"star:{star_filter}"
         if not ids:
             raise ValueError(f"no words match star rating {star_filter}")
@@ -238,6 +292,16 @@ class StudySession:
                 ids,
                 content_ids,
             )
+            if saved is None:
+                raw_anchor = self._user.load_setting(
+                    "study_star_current_word_id"
+                )
+                try:
+                    anchor_id = int(raw_anchor) if raw_anchor else None
+                except ValueError:
+                    anchor_id = None
+                if anchor_id in ids:
+                    position = ids.index(anchor_id)
         else:
             position = 0
 
@@ -248,12 +312,17 @@ class StudySession:
         self._seed = 0
         self._queue_name = queue_name
         self._star_filter = star_filter
-        self._list_key = source_section
-        self._list_label = str(source_list.label)
+        self._list_key = selected_keys[0] if len(selected_keys) == 1 else None
+        self._list_keys = selected_keys
+        self._list_label = list_label
         self._answer_visible = False
         self._started = True
         self._user.save_setting("browse_order", self._order.value)
-        self._user.save_setting("study_list", source_section)
+        if len(selected_keys) == 1:
+            self._user.save_setting("study_list", selected_keys[0])
+        if star_filter is not None:
+            star_scope = "all" if selected_keys == all_keys else ",".join(selected_keys)
+            self._user.save_setting("study_star_lists", star_scope)
         self._user.save_setting("study_filter", filter_setting)
         self._prepare_quiz()
         self._save_navigation()
@@ -278,6 +347,7 @@ class StudySession:
         quiz_correct_index: int | None = None,
         quiz_selected_index: int | None = None,
         list_key: str | None = None,
+        list_keys: tuple[str, ...] = (),
         list_label: str = "",
     ) -> SessionSnapshot:
         root_lookup = getattr(self._content, "root_families", None)
@@ -314,9 +384,10 @@ class StudySession:
             star_rating=int(self._user.star_rating(word.id)),
             star_filter=star_filter,
             list_key=list_key,
+            list_keys=list_keys,
             list_label=list_label,
             can_complete_round=(
-                list_key is not None and star_filter is None and at_end
+                len(list_keys) == 1 and star_filter is None and at_end
             ),
             root_families=root_families,
             lookalikes=lookalikes,
@@ -343,6 +414,7 @@ class StudySession:
             quiz_correct_index=self._quiz_correct_index,
             quiz_selected_index=self._quiz_selected_index,
             list_key=self._list_key,
+            list_keys=self._list_keys,
             list_label=self._list_label,
         )
 

@@ -2,10 +2,10 @@ from dataclasses import replace
 
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QSignalSpy
-from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QDialogButtonBox, QLabel
 
 from gre_vocab_app.domain import SourceList
-from gre_vocab_app.ui.home_page import HomePage
+from gre_vocab_app.ui.home_page import HomePage, ListScopeDialog
 
 
 LISTS = (
@@ -50,11 +50,20 @@ def test_home_selects_list_and_emits_list_scoped_study(qtbot):
 
     page.set_star_counts({0: 90, 1: 10, 2: 4, 3: 1})
     page.star_combo.setCurrentIndex(3)
+    assert page.star_list_button.isEnabled()
+    assert page.star_list_button.text() == "全部 2 个 List"
     with qtbot.waitSignal(page.listStudyRequested) as requested:
         page.start_button.click()
-    assert requested.args == ["list2", 2]
+    assert requested.args == [("list1", "list2"), 2]
+
+    assert page.set_selected_star_lists(("list2",))
+    assert page.star_list_button.text() == "已选 1 个 List"
+    with qtbot.waitSignal(page.listStudyRequested) as narrowed:
+        page.start_button.click()
+    assert narrowed.args == [("list2",), 2]
 
     page.star_combo.setCurrentIndex(0)
+    assert not page.star_list_button.isEnabled()
     with qtbot.waitSignal(page.listStudyRequested) as all_words:
         page.start_button.click()
     assert all_words.args == ["list2", None]
@@ -78,6 +87,22 @@ def test_home_allows_manual_list_completion_adjustment(qtbot):
 
     page.set_list_completion_counts({"list1": 0})
     assert not page.decrease_rounds_button.isEnabled()
+
+
+def test_multi_list_scope_dialog_supports_select_all_and_requires_one(qtbot):
+    dialog = ListScopeDialog(LISTS, ("list1",))
+    qtbot.addWidget(dialog)
+    assert dialog.selected_keys() == ("list1",)
+    assert not dialog.all_checkbox.isChecked()
+
+    dialog.all_checkbox.click()
+    assert dialog.selected_keys() == ("list1", "list2")
+    assert dialog.all_checkbox.isChecked()
+
+    dialog.all_checkbox.click()
+    assert dialog.selected_keys() == ()
+    ok_button = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
+    assert not ok_button.isEnabled()
 
 
 def test_home_word_list_and_result_selection_emit_domain_values(qtbot, sample_word):

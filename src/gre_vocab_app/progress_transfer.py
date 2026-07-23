@@ -9,6 +9,8 @@ PROGRESS_SCHEMA = "gre-vocab-progress"
 PROGRESS_VERSION = 1
 _SYNC_SETTING_KEYS = (
     "study_list",
+    "study_star_lists",
+    "study_star_current_word_id",
     "study_filter",
     "study_mode",
     "auto_speak",
@@ -133,6 +135,26 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
             raise ProgressFormatError(f"{label}设置无效。")
     if "study_list" in settings and settings["study_list"] not in source_lists:
         raise ProgressFormatError("默认 List 无效。")
+    if "study_star_lists" in settings:
+        raw_scope = settings["study_star_lists"]
+        if raw_scope != "all":
+            selected_scope = tuple(
+                key.strip() for key in raw_scope.split(",") if key.strip()
+            )
+            if (
+                not selected_scope
+                or len(set(selected_scope)) != len(selected_scope)
+                or any(key not in source_lists for key in selected_scope)
+            ):
+                raise ProgressFormatError("星级学习的 List 范围无效。")
+    if "study_star_current_word_id" in settings:
+        raw_word_id = settings["study_star_current_word_id"]
+        try:
+            star_word_id = int(raw_word_id)
+        except ValueError as error:
+            raise ProgressFormatError("星级学习当前位置无效。") from error
+        if str(star_word_id) != raw_word_id or star_word_id not in valid_word_ids:
+            raise ProgressFormatError("星级学习当前位置无效。")
     if "study_filter" in settings and settings["study_filter"] not in {
         "all",
         "star:0",

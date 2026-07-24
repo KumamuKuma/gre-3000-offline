@@ -58,6 +58,8 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(page, /LookupText/);
   assert.match(page, /selection-translate/);
   assert.match(page, /联网翻译/);
+  assert.match(page, /api\.mymemory\.translated\.net\/get/);
+  assert.match(page, /translateViaMyMemoryDirect/);
   assert.match(translateRoute, /MAX_CHARS = 500/);
   assert.match(translateRoute, /cache-control": "private, no-store/);
 });

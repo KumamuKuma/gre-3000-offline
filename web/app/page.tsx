@@ -325,6 +325,28 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+async function translateViaMyMemoryDirect(text: string) {
+  const params = new URLSearchParams({ q: text, langpair: "en|zh-CN" });
+  const response = await fetchWithTimeout(
+    `https://api.mymemory.translated.net/get?${params.toString()}`,
+    { cache: "no-store" },
+    "翻译请求超时，请检查网络后重试。",
+  );
+  const payload = await response.json() as {
+    responseStatus?: number | string;
+    responseDetails?: string;
+    responseData?: { translatedText?: string };
+  };
+  const serviceStatus = Number(payload.responseStatus ?? response.status);
+  const translation = payload.responseData?.translatedText?.trim() ?? "";
+  if (!response.ok || serviceStatus >= 400 || !translation) {
+    throw new Error(payload.responseDetails || `HTTP ${serviceStatus}`);
+  }
+  const decoder = document.createElement("textarea");
+  decoder.innerHTML = translation;
+  return decoder.value;
+}
+
 export default function Home() {
   const [data, setData] = useState<ContentPayload | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -740,19 +762,25 @@ export default function Home() {
     }
     setLookup((current) => current && current.query === queryText ? { ...current, onlineStatus: "loading", onlineError: undefined } : current);
     try {
-      const response = await fetchWithTimeout(
-        "/api/translate",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ text: queryText }),
-        },
-        "翻译请求超时，请检查网络后重试。",
-      );
-      const payload = await response.json() as { translation?: string; error?: string };
-      if (!response.ok || !payload.translation) throw new Error(payload.error || `HTTP ${response.status}`);
-      translationCache.current.set(cacheKey, payload.translation);
-      setLookup((current) => current && current.query === queryText ? { ...current, onlineStatus: "ready", onlineTranslation: payload.translation, onlineError: undefined } : current);
+      let translation = "";
+      try {
+        const response = await fetchWithTimeout(
+          "/api/translate",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text: queryText }),
+          },
+          "翻译请求超时，请检查网络后重试。",
+        );
+        const payload = await response.json() as { translation?: string; error?: string };
+        if (!response.ok || !payload.translation) throw new Error(payload.error || `HTTP ${response.status}`);
+        translation = payload.translation;
+      } catch {
+        translation = await translateViaMyMemoryDirect(queryText);
+      }
+      translationCache.current.set(cacheKey, translation);
+      setLookup((current) => current && current.query === queryText ? { ...current, onlineStatus: "ready", onlineTranslation: translation, onlineError: undefined } : current);
     } catch (error) {
       setLookup((current) => current && current.query === queryText ? { ...current, onlineStatus: "error", onlineError: errorMessage(error, "联网翻译暂时不可用。") } : current);
     }
@@ -1111,7 +1139,7 @@ export default function Home() {
                 {lookup.onlineStatus === "error" && <p>翻译失败：{lookup.onlineError}</p>}
               </div>
             )}
-            <p className="lookup-privacy">点词释义来自本地；只有点击联网翻译时，当前文字才会经本站后端发送给第三方 MyMemory 翻译服务。</p>
+            <p className="lookup-privacy">点词释义来自本地；只有点击联网翻译时，当前文字才会发送给第三方 MyMemory。本站后端限流时，浏览器会直接连接该服务重试。</p>
             <div className="lookup-actions">
               {lookup.greWordId && <button onClick={() => { openWord(wordMap.get(lookup.greWordId!)!); setLookup(null); }}>打开 GRE 词条</button>}
               <button onClick={() => navigator.clipboard?.writeText([lookup.headword, lookup.translation, lookup.onlineTranslation].filter(Boolean).join("\n"))}>复制</button>

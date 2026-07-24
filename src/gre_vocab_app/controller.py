@@ -22,6 +22,8 @@ from gre_vocab_app.services.cloud_sync import (
     download_progress,
     upload_progress,
 )
+from gre_vocab_app.services.dictionary import DictionaryService
+from gre_vocab_app.services.translation import TranslationService
 from gre_vocab_app.ui.main_window import MainWindow
 from gre_vocab_app.ui.word_list_page import WordListRow
 
@@ -39,6 +41,8 @@ class ApplicationController:
         study_session: Any,
         search_service: Any,
         speech_service: Any,
+        dictionary_service: Any | None = None,
+        translation_service: Any | None = None,
     ):
         self.window = window
         self.content = content_repository
@@ -46,6 +50,9 @@ class ApplicationController:
         self.study = study_session
         self.search = search_service
         self.speech = speech_service
+        self.dictionary = dictionary_service or DictionaryService()
+        self.translation = translation_service or TranslationService()
+        self._translation_request_id: int | None = None
         self._detail_snapshot: SessionSnapshot | None = None
         self._detail_origin = "home"
         self._all_words: list[WordEntry] = []
@@ -88,6 +95,23 @@ class ApplicationController:
             self._set_quiz_correct_star_down
         )
         study_page.relatedWordRequested.connect(self._open_related_word)
+        study_page.lookupRequested.connect(self._lookup_text)
+        study_page.selectionTranslationRequested.connect(
+            self._lookup_selection
+        )
+        self.window.lookup_dialog.translateRequested.connect(
+            self._translate_lookup
+        )
+        self.window.lookup_dialog.openWordRequested.connect(
+            self._open_related_word
+        )
+        self.window.lookup_dialog.lookupRequested.connect(self._lookup_text)
+        self.translation.translationReady.connect(
+            self._translation_ready
+        )
+        self.translation.translationFailed.connect(
+            self._translation_failed
+        )
 
         word_list = self.window.word_list_page
         word_list.wordSelected.connect(
@@ -135,6 +159,7 @@ class ApplicationController:
         self._all_words = self.content.list_by_ids(
             tuple(self.content.ids_in_source_order())
         )
+        self.dictionary.set_gre_words(self._all_words)
         self._source_lists = tuple(self.content.source_lists())
         self._configure_settings()
         self._configure_home_scope()
@@ -401,6 +426,45 @@ class ApplicationController:
             self._show_status(f"无法打开相关词：{error}")
             return
         self._open_detail(word, origin)
+
+    def _lookup_text(self, text: str) -> None:
+        self._translation_request_id = None
+        try:
+            result = self.dictionary.lookup(text)
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            LOGGER.exception("Unable to read the offline click dictionary")
+            self._show_status(f"内置词典暂时无法读取：{error}")
+            return
+        self.window.lookup_dialog.show_result(result)
+
+    def _lookup_selection(self, text: str) -> None:
+        cleaned = " ".join(str(text).split()).strip()
+        if not cleaned:
+            return
+        if len(cleaned) > 500:
+            self._show_status("选中文字不能超过 500 个字符。")
+            return
+        self._lookup_text(cleaned)
+
+    def _translate_lookup(self, text: str) -> None:
+        try:
+            self._translation_request_id = self.translation.translate(text)
+        except ValueError as error:
+            self.window.lookup_dialog.set_translation_error(str(error))
+            return
+        self.window.lookup_dialog.set_translating()
+
+    def _translation_ready(self, request_id: int, value: str) -> None:
+        if request_id != self._translation_request_id:
+            return
+        self.window.lookup_dialog.set_online_translation(value)
+
+    def _translation_failed(self, request_id: int, message: str) -> None:
+        if request_id != self._translation_request_id:
+            return
+        self.window.lookup_dialog.set_translation_error(
+            message or "网络不可用，请稍后重试"
+        )
 
     def _back_from_study(self) -> None:
         if (
@@ -827,6 +891,9 @@ class ApplicationController:
             return
 
     def shutdown(self) -> None:
+        translation_shutdown = getattr(self.translation, "shutdown", None)
+        if callable(translation_shutdown):
+            translation_shutdown()
         for name, resource in (("user", self.user), ("content", self.content)):
             try:
                 closed = resource.close()

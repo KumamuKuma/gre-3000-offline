@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   createSyncCode,
   decryptProgress,
@@ -63,6 +63,37 @@ type CloudState = {
   message?: string;
 };
 
+type DictionaryEntry = {
+  word: string;
+  phonetic: string;
+  translation: string;
+  definition: string;
+  exchange: string;
+  phrases: [string, string][];
+};
+
+type DictionaryPayload = {
+  schema: "gre-click-dictionary";
+  version: 1;
+  entries: Record<string, DictionaryEntry>;
+};
+
+type LookupView = {
+  query: string;
+  normalized: string;
+  source: string;
+  headword: string;
+  phonetic: string;
+  translation: string;
+  definition: string;
+  exchange: string;
+  phrases: [string, string][];
+  greWordId?: number;
+  onlineStatus: "idle" | "loading" | "ready" | "error";
+  onlineTranslation?: string;
+  onlineError?: string;
+};
+
 const STORAGE_KEY = "gre-vocab-progress-v1";
 const SYNC_CODE_STORAGE_KEY = "gre-vocab-sync-code-v1";
 const SYNC_TIMEOUT_MS = 12_000;
@@ -72,6 +103,60 @@ const MODES: { key: StudyMode; label: string; hint: string }[] = [
   { key: "recall", label: "回忆", hint: "主动揭晓" },
   { key: "quiz", label: "四选一", hint: "选择词义" },
 ];
+const LOOKUP_TOKEN = /[A-Za-z]+(?:['’-][A-Za-z]+)*/g;
+let lookupClickTimer: ReturnType<typeof setTimeout> | null = null;
+
+function normalizeLookupQuery(value: string) {
+  const text = value.normalize("NFKC").replaceAll("’", "'").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  if (text.includes(" ")) {
+    return text.replace(/^[\s.,;:!?"“”‘’()[\]{}]+|[\s.,;:!?"“”‘’()[\]{}]+$/g, "").toLowerCase();
+  }
+  return text.match(/[A-Za-z]+(?:['-][A-Za-z]+)*/)?.[0]?.toLowerCase() ?? "";
+}
+
+function LookupText({ text, className, onLookup }: { text: string; className?: string; onLookup: (word: string) => void }) {
+  const parts: Array<string | { token: string; offset: number }> = [];
+  let cursor = 0;
+  for (const match of text.matchAll(LOOKUP_TOKEN)) {
+    const offset = match.index ?? 0;
+    if (offset > cursor) parts.push(text.slice(cursor, offset));
+    parts.push({ token: match[0], offset });
+    cursor = offset + match[0].length;
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return (
+    <span className={className} data-lookup-scope>
+      {parts.map((part, index) => typeof part === "string"
+        ? part
+        : <span
+            className="lookup-token"
+            key={`${part.offset}-${part.token}-${index}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (window.getSelection()?.toString().trim()) return;
+              if (lookupClickTimer) window.clearTimeout(lookupClickTimer);
+              lookupClickTimer = window.setTimeout(() => {
+                lookupClickTimer = null;
+                onLookup(part.token);
+              }, 180);
+            }}
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              if (lookupClickTimer) {
+                window.clearTimeout(lookupClickTimer);
+                lookupClickTimer = null;
+              }
+              const range = document.createRange();
+              range.selectNodeContents(event.currentTarget);
+              const selection = window.getSelection();
+              selection?.removeAllRanges();
+              selection?.addRange(range);
+            }}
+          >{part.token}</span>)}
+    </span>
+  );
+}
 
 function normalizeStarListScope(value: string | undefined, data: ContentPayload) {
   const allKeys = data.lists.map((item) => item.key);
@@ -254,9 +339,14 @@ export default function Home() {
   const [syncCode, setSyncCode] = useState("");
   const [syncCodeInput, setSyncCodeInput] = useState("");
   const [syncRetry, setSyncRetry] = useState(0);
+  const [dictionary, setDictionary] = useState<DictionaryPayload | null>(null);
+  const [dictionaryStatus, setDictionaryStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [lookup, setLookup] = useState<LookupView | null>(null);
+  const [selectionText, setSelectionText] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
   const loadedSyncCode = useRef("");
   const firstCloudUploadNoticeShown = useRef(false);
+  const translationCache = useRef(new Map<string, string>());
 
   useEffect(() => {
     fetch("/data/words.json")
@@ -291,6 +381,46 @@ export default function Home() {
       })
       .catch((error) => setNotice(`词库加载失败：${error.message}`));
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    fetch("/data/click_dictionary.json")
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((payload: DictionaryPayload) => {
+        if (payload.schema !== "gre-click-dictionary" || payload.version !== 1) throw new Error("词典校验失败");
+        setDictionary(payload);
+        setDictionaryStatus("ready");
+      })
+      .catch(() => setDictionaryStatus("error"));
+  }, []);
+
+  useEffect(() => {
+    let timer = 0;
+    const readSelection = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const selection = window.getSelection();
+        const text = selection?.toString().replace(/\s+/g, " ").trim() ?? "";
+        if (!selection || selection.rangeCount === 0 || !text || text.length > 500) {
+          setSelectionText("");
+          return;
+        }
+        const ancestor = selection.getRangeAt(0).commonAncestorContainer;
+        const element = ancestor.nodeType === Node.ELEMENT_NODE ? ancestor as Element : ancestor.parentElement;
+        if (!element?.closest("[data-lookup-scope]")) {
+          setSelectionText("");
+          return;
+        }
+        setSelectionText(text);
+      }, 140);
+    };
+    document.addEventListener("selectionchange", readSelection);
+    document.addEventListener("touchend", readSelection);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("selectionchange", readSelection);
+      document.removeEventListener("touchend", readSelection);
+    };
   }, []);
 
   useEffect(() => {
@@ -361,6 +491,10 @@ export default function Home() {
   }, [hydrated, progress, syncCode, cloud.status]);
 
   const wordMap = useMemo(() => new Map(data?.words.map((word) => [word.id, word]) ?? []), [data]);
+  const wordByHeadword = useMemo(
+    () => new Map(data?.words.map((word) => [normalizeLookupQuery(word.word), word]) ?? []),
+    [data],
+  );
   const selectedList = progress?.settings.study_list ?? data?.lists[0]?.key ?? "list1";
   const starFilter = progress?.settings.study_filter ?? "all";
   const mode = (progress?.settings.study_mode ?? "reading") as StudyMode;
@@ -541,6 +675,94 @@ export default function Home() {
     } else {
       setNotice(isCorrect ? `回答正确，已自动减为 ${next} 星。` : `回答错误，已自动加为 ${next} 星。`);
     }
+  }
+
+  function openLookup(queryText: string) {
+    const normalized = normalizeLookupQuery(queryText);
+    if (!normalized) return;
+    const greWord = wordByHeadword.get(normalized);
+    const local = dictionary?.entries[normalized];
+    let phrase: [string, string] | undefined;
+    if (!greWord && !local && normalized.includes(" ")) {
+      const first = dictionary?.entries[normalized.split(" ")[0]];
+      phrase = first?.phrases.find(([value]) => normalizeLookupQuery(value) === normalized);
+    }
+    setLookup({
+      query: queryText.trim(),
+      normalized,
+      source: greWord
+        ? "GRE 3000 已审核词库"
+        : local || phrase
+          ? "ECDICT 离线英汉词典"
+          : dictionaryStatus === "loading"
+            ? "内置词典载入中"
+            : dictionaryStatus === "error"
+              ? "内置词典载入失败"
+              : "本地词典",
+      headword: greWord?.word ?? local?.word ?? phrase?.[0] ?? queryText.trim(),
+      phonetic: greWord?.phonetic ?? local?.phonetic ?? "",
+      translation: greWord?.definition_zh ?? local?.translation ?? phrase?.[1] ?? "",
+      definition: greWord?.definition_en ?? local?.definition ?? "",
+      exchange: local?.exchange ?? "",
+      phrases: local?.phrases ?? [],
+      greWordId: greWord?.id,
+      onlineStatus: "idle",
+    });
+    setSelectionText("");
+    window.getSelection()?.removeAllRanges();
+  }
+
+  function captureSelection(event: PointerEvent<HTMLElement>) {
+    const scope = event.currentTarget;
+    window.requestAnimationFrame(() => {
+      const selection = window.getSelection();
+      const text = selection?.toString().replace(/\s+/g, " ").trim() ?? "";
+      if (!selection || selection.rangeCount === 0 || !text || text.length > 500) {
+        setSelectionText("");
+        return;
+      }
+      const ancestor = selection.getRangeAt(0).commonAncestorContainer;
+      const element = ancestor.nodeType === Node.ELEMENT_NODE ? ancestor as Element : ancestor.parentElement;
+      if (!element || !scope.contains(element) || !element.closest("[data-lookup-scope]")) {
+        setSelectionText("");
+        return;
+      }
+      setSelectionText(text);
+    });
+  }
+
+  async function translateLookup(queryText: string) {
+    const cacheKey = queryText.trim().toLowerCase();
+    const cached = translationCache.current.get(cacheKey);
+    if (cached) {
+      setLookup((current) => current && current.query === queryText ? { ...current, onlineStatus: "ready", onlineTranslation: cached, onlineError: undefined } : current);
+      return;
+    }
+    setLookup((current) => current && current.query === queryText ? { ...current, onlineStatus: "loading", onlineError: undefined } : current);
+    try {
+      const response = await fetchWithTimeout(
+        "/api/translate",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: queryText }),
+        },
+        "翻译请求超时，请检查网络后重试。",
+      );
+      const payload = await response.json() as { translation?: string; error?: string };
+      if (!response.ok || !payload.translation) throw new Error(payload.error || `HTTP ${response.status}`);
+      translationCache.current.set(cacheKey, payload.translation);
+      setLookup((current) => current && current.query === queryText ? { ...current, onlineStatus: "ready", onlineTranslation: payload.translation, onlineError: undefined } : current);
+    } catch (error) {
+      setLookup((current) => current && current.query === queryText ? { ...current, onlineStatus: "error", onlineError: errorMessage(error, "联网翻译暂时不可用。") } : current);
+    }
+  }
+
+  function translateSelection() {
+    const text = selectionText;
+    if (!text) return;
+    openLookup(text);
+    void translateLookup(text);
   }
 
   function completeRound() {
@@ -726,13 +948,13 @@ export default function Home() {
           </div>
           <div className="progress-track"><span style={{ width: `${Math.max(3, ((activeQueueIndex + 1) / Math.max(studyQueue.length, 1)) * 100)}%` }} /></div>
 
-          <article className="word-card">
+          <article className="word-card" onPointerUp={captureSelection}>
             <div className="word-flags">
               <span>#{activeWord.order}</span>
               {activeWord.machine7 && <em>机经 7.0 重点</em>}
               <button className="star-button" onClick={() => cycleStar(activeWord)} aria-label="修改星级">{starText(progress.stars[String(activeWord.id)] ?? 0)}</button>
             </div>
-            <div className="word-title-row"><div><h1>{activeWord.word}</h1><p>{activeWord.phonetic}</p></div><button className="speak" onClick={() => speak(activeWord.word)} aria-label="朗读单词">▶</button></div>
+            <div className="word-title-row"><div><h1><LookupText text={activeWord.word} onLookup={openLookup} /></h1><p>{activeWord.phonetic}</p></div><button className="speak" onClick={() => speak(activeWord.word)} aria-label="朗读单词">▶</button></div>
 
             {mode === "recall" && !answerVisible && <button className="reveal" onClick={() => setAnswerVisible(true)}>想一想，然后点击揭晓</button>}
 
@@ -755,18 +977,18 @@ export default function Home() {
 
             {showAnswer && (
               <div className="answer-block">
-                <p className="definition-en">{activeWord.definition_en}</p>
+                <p className="definition-en"><LookupText text={activeWord.definition_en} onLookup={openLookup} /></p>
                 <p className="definition-zh">{activeWord.definition_zh}</p>
-                {mode === "reading" && activeWord.synonyms && <div className="detail-line"><span>近义词</span><p>{activeWord.synonyms}</p></div>}
-                {mode === "reading" && activeWord.example_en && <div className="example"><span>例句</span><p>{activeWord.example_en}</p><small>{activeWord.example_zh}</small></div>}
+                {mode === "reading" && activeWord.synonyms && <div className="detail-line"><span>近义词</span><p><LookupText text={activeWord.synonyms} onLookup={openLookup} /></p></div>}
+                {mode === "reading" && activeWord.example_en && <div className="example"><span>例句</span><p><LookupText text={activeWord.example_en} onLookup={openLookup} /></p><small>{activeWord.example_zh}</small></div>}
               </div>
             )}
 
             {relationVisible && (
               <div className="relations">
-                {activeWord.equivalents.length > 0 && <Relation title="真经等价词" ids={activeWord.equivalents} wordMap={wordMap} onOpen={(id) => openWord(wordMap.get(id)!)} />}
-                {activeWord.roots.map((family) => <Relation key={family.root} title={`词根 ${family.root}`} ids={family.words} wordMap={wordMap} onOpen={(id) => openWord(wordMap.get(id)!)} />)}
-                {activeWord.lookalikes.length > 0 && <Relation title="近形异义词" ids={activeWord.lookalikes} wordMap={wordMap} onOpen={(id) => openWord(wordMap.get(id)!)} />}
+                {activeWord.equivalents.length > 0 && <Relation title="真经等价词" ids={activeWord.equivalents} wordMap={wordMap} onOpen={(id) => openWord(wordMap.get(id)!)} onLookup={openLookup} />}
+                {activeWord.roots.map((family) => <Relation key={family.root} title={`词根 ${family.root}`} ids={family.words} wordMap={wordMap} onOpen={(id) => openWord(wordMap.get(id)!)} onLookup={openLookup} />)}
+                {activeWord.lookalikes.length > 0 && <Relation title="近形异义词" ids={activeWord.lookalikes} wordMap={wordMap} onOpen={(id) => openWord(wordMap.get(id)!)} onLookup={openLookup} />}
               </div>
             )}
           </article>
@@ -790,11 +1012,13 @@ export default function Home() {
         <section className="page words-page">
           <div className="page-title"><p className="eyebrow">WORD INDEX</p><h1>完整词表</h1><span>共 {data.record_count.toLocaleString()} 词，按原书词序</span></div>
           <input className="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索单词，例如 proselytize" autoCapitalize="none" />
-          <div className="word-list">
+          <div className="word-list" onPointerUp={captureSelection}>
             {filteredWords.map((word) => (
-              <button key={word.id} onClick={() => openWord(word)}>
+              <button key={word.id} onClick={() => {
+                if (!window.getSelection()?.toString().trim()) openWord(word);
+              }}>
                 <span className="word-order">{word.order}</span>
-                <span className="word-main"><strong>{word.word}</strong><small>{word.definition_zh || word.definition_en}</small></span>
+                <span className="word-main"><strong><LookupText text={word.word} onLookup={openLookup} /></strong><small>{word.definition_zh || <LookupText text={word.definition_en} onLookup={openLookup} />}</small></span>
                 {word.machine7 && <em>重点</em>}
                 <span className="word-star">{starText(progress.stars[String(word.id)] ?? 0)}</span>
               </button>
@@ -852,6 +1076,51 @@ export default function Home() {
         </section>
       )}
 
+      {selectionText && !lookup && (
+        <button className="selection-translate" onClick={translateSelection}>
+          翻译“{selectionText.length > 28 ? `${selectionText.slice(0, 28)}…` : selectionText}”
+        </button>
+      )}
+
+      {lookup && (
+        <div className="lookup-backdrop" onClick={() => setLookup(null)}>
+          <section className="lookup-sheet" role="dialog" aria-modal="true" aria-label={`${lookup.headword} 的释义`} onClick={(event) => event.stopPropagation()}>
+            <div className="lookup-handle" />
+            <header>
+              <div><h2>{lookup.headword}</h2>{lookup.phonetic && <p>{lookup.phonetic}</p>}</div>
+              <button onClick={() => setLookup(null)} aria-label="关闭词典">×</button>
+            </header>
+            <span className="lookup-source">{lookup.source}</span>
+            <div className={lookup.translation ? "lookup-meaning" : "lookup-meaning missing"}>
+              {lookup.translation || (
+                lookup.source === "内置词典载入中"
+                  ? "离线词典正在载入，请稍候再点一次。"
+                  : lookup.source === "内置词典载入失败"
+                    ? "离线词典载入失败；GRE 主词表仍可查询，也可使用联网翻译。"
+                    : "内置词典暂未收录，可使用联网翻译。"
+              )}
+            </div>
+            {lookup.definition && <div className="lookup-definition"><LookupText text={lookup.definition} onLookup={openLookup} /></div>}
+            {lookup.exchange && <p className="lookup-exchange">词形变化：{lookup.exchange}</p>}
+            {lookup.phrases.length > 0 && <div className="lookup-phrases"><h3>常用词组</h3>{lookup.phrases.map(([phrase, translation]) => <div key={phrase}><strong><LookupText text={phrase} onLookup={openLookup} /></strong><span>{translation}</span></div>)}</div>}
+            {lookup.onlineStatus !== "idle" && (
+              <div className={`lookup-online ${lookup.onlineStatus}`}>
+                <h3>联网翻译</h3>
+                {lookup.onlineStatus === "loading" && <p>正在翻译…</p>}
+                {lookup.onlineStatus === "ready" && <p>{lookup.onlineTranslation}</p>}
+                {lookup.onlineStatus === "error" && <p>翻译失败：{lookup.onlineError}</p>}
+              </div>
+            )}
+            <p className="lookup-privacy">点词释义来自本地；只有点击联网翻译时，当前文字才会经本站后端发送给第三方 MyMemory 翻译服务。</p>
+            <div className="lookup-actions">
+              {lookup.greWordId && <button onClick={() => { openWord(wordMap.get(lookup.greWordId!)!); setLookup(null); }}>打开 GRE 词条</button>}
+              <button onClick={() => navigator.clipboard?.writeText([lookup.headword, lookup.translation, lookup.onlineTranslation].filter(Boolean).join("\n"))}>复制</button>
+              <button className="translate" disabled={lookup.onlineStatus === "loading"} onClick={() => void translateLookup(lookup.query)}>{lookup.onlineStatus === "loading" ? "翻译中…" : "联网翻译"}</button>
+            </div>
+          </section>
+        </div>
+      )}
+
       <nav className="bottom-nav" aria-label="主导航">
         <button className={screen === "home" || screen === "study" ? "active" : ""} onClick={() => setScreen("home")}><span>⌂</span>学习</button>
         <button className={screen === "words" ? "active" : ""} onClick={() => setScreen("words")}><span>≡</span>词表</button>
@@ -861,10 +1130,10 @@ export default function Home() {
   );
 }
 
-function Relation({ title, ids, wordMap, onOpen }: { title: string; ids: number[]; wordMap: Map<number, WordEntry>; onOpen: (id: number) => void }) {
+function Relation({ title, ids, wordMap, onOpen, onLookup }: { title: string; ids: number[]; wordMap: Map<number, WordEntry>; onOpen: (id: number) => void; onLookup: (word: string) => void }) {
   const unique = [...new Set(ids)].filter((id) => wordMap.has(id));
   if (!unique.length) return null;
   return (
-    <div className="relation-block"><span>{title}</span><div>{unique.map((id) => { const word = wordMap.get(id)!; return <button key={id} onClick={() => onOpen(id)}><strong>{word.word}</strong><small>{word.definition_zh || word.definition_en}</small></button>; })}</div></div>
+    <div className="relation-block"><span>{title}</span><div>{unique.map((id) => { const word = wordMap.get(id)!; return <button key={id} onClick={() => { if (!window.getSelection()?.toString().trim()) onOpen(id); }}><strong><LookupText text={word.word} onLookup={onLookup} /></strong><small>{word.definition_zh || <LookupText text={word.definition_en} onLookup={onLookup} />}</small></button>; })}</div></div>
   );
 }

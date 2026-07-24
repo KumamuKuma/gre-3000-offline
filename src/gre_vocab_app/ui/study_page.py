@@ -40,6 +40,8 @@ class StudyPage(QWidget):
     quizWrongStarUpChanged = Signal(bool)
     quizCorrectStarDownChanged = Signal(bool)
     relatedWordRequested = Signal(int)
+    lookupRequested = Signal(str)
+    selectionTranslationRequested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -161,6 +163,10 @@ class StudyPage(QWidget):
         )
         self.word_detail.relatedWordRequested.connect(
             self.relatedWordRequested.emit
+        )
+        self.word_detail.lookupRequested.connect(self.lookupRequested.emit)
+        self.word_detail.selectionTranslationRequested.connect(
+            self.selectionTranslationRequested.emit
         )
 
         self.previous_shortcut = self._shortcut(Qt.Key_Left, self._previous)

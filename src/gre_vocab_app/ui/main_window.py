@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from .home_page import HomePage
 from .settings_dialog import SettingsDialog
 from .study_page import StudyPage
+from .lookup_dialog import LookupDialog
 from .word_list_page import WordListPage
 
 
@@ -101,6 +102,7 @@ class MainWindow(QMainWindow):
         self.study_page.findRequested.connect(self.findRequested.emit)
 
         self.settings_dialog = SettingsDialog(self)
+        self.lookup_dialog = LookupDialog(self)
         self.settings_action.triggered.connect(self.show_settings)
         self.statusBar().showMessage("离线运行 · 学习数据仅保存在本机")
 
@@ -271,6 +273,7 @@ class MainWindow(QMainWindow):
             if dialog.isWindow():
                 dialog.close()
         self.settings_dialog.close()
+        self.lookup_dialog.close()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if not self._close_guard_enabled:

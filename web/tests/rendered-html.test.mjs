@@ -18,12 +18,15 @@ test("ships the GRE product metadata and install manifest", async () => {
 });
 
 test("contains all study modes, offline support, and progress transfer", async () => {
-  const [page, worker, content] = await Promise.all([
+  const [page, worker, content, dictionary, translateRoute] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("public/sw.js", root), "utf8"),
     readFile(new URL("public/data/words.json", root), "utf8"),
+    readFile(new URL("public/data/click_dictionary.json", root), "utf8"),
+    readFile(new URL("app/api/translate/route.ts", root), "utf8"),
   ]);
   const words = JSON.parse(content);
+  const clickDictionary = JSON.parse(dictionary);
   assert.equal(words.record_count, 3292);
   const numbered = words.words.filter((word) => /^(?:\(1\)|①)/.test(word.definition_en));
   assert.equal(numbered.length, 428);
@@ -48,5 +51,13 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(page, /quiz_wrong_star_up/);
   assert.match(page, /quiz_correct_star_down/);
   assert.match(worker, /data\/words\.json/);
+  assert.match(worker, /data\/click_dictionary\.json/);
   assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);
+  assert.equal(clickDictionary.schema, "gre-click-dictionary");
+  assert.ok(clickDictionary.entry_count > 11_000);
+  assert.match(page, /LookupText/);
+  assert.match(page, /selection-translate/);
+  assert.match(page, /联网翻译/);
+  assert.match(translateRoute, /MAX_CHARS = 500/);
+  assert.match(translateRoute, /cache-control": "private, no-store/);
 });

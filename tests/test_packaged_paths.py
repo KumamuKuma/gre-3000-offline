@@ -2,6 +2,7 @@ from pathlib import Path
 
 from gre_vocab_app import paths as paths_module
 from gre_vocab_app.paths import AppPaths
+from gre_vocab_app.services.dictionary import DictionaryService
 
 
 def test_packaged_content_override_points_to_embedded_database(
@@ -15,3 +16,20 @@ def test_packaged_content_override_points_to_embedded_database(
     monkeypatch.setattr(paths_module, "PACKAGE_ROOT", bundled.parents[1])
 
     assert AppPaths.resolve(user_root=tmp_path / "user").content_db == bundled
+
+
+def test_packaged_click_dictionary_prefers_embedded_data(
+    tmp_path: Path, monkeypatch
+):
+    bundled = (
+        tmp_path / "bundle" / "gre_vocab_app" / "data" / "click_dictionary.json"
+    )
+    bundled.parent.mkdir(parents=True)
+    bundled.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(paths_module, "PACKAGE_ROOT", bundled.parents[1])
+    monkeypatch.setattr(
+        "gre_vocab_app.services.dictionary.PACKAGE_ROOT",
+        bundled.parents[1],
+    )
+
+    assert DictionaryService.default_path() == bundled

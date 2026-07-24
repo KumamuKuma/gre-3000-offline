@@ -1,5 +1,5 @@
-const CACHE = "gre-3000-pwa-v6";
-const CORE = ["/", "/manifest.webmanifest", "/icon.svg", "/data/words.json"];
+const CACHE = "gre-3000-pwa-v7";
+const CORE = ["/", "/manifest.webmanifest", "/icon.svg", "/data/words.json", "/data/click_dictionary.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(CORE)));

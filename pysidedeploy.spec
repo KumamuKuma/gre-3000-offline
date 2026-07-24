@@ -21,7 +21,7 @@ icon = resources/app.ico
 [python]
 
 # python path
-python_path = .venv/Scripts/python.exe
+python_path = C:\Users\27899\Documents\Codex\2026-07-14\ni\.worktrees\gre-vocab-app\.venv\Scripts\python.exe
 
 # python packages to install
 packages = Nuitka==4.1.3
@@ -40,7 +40,7 @@ qml_files =
 excluded_qml_plugins =
 
 # qt modules used. comma separated
-modules = Core,Gui,Widgets,Sql,TextToSpeech
+modules = Core,Gui,Network,Sql,Svg,TextToSpeech,Widgets
 
 # qt plugins used by the application. only relevant for desktop deployment
 # for qt plugins used in android application see [android][plugins]
@@ -68,7 +68,7 @@ macos.permissions =
 mode = onefile
 
 # specify any extra nuitka arguments
-extra_args = --quiet --noinclude-qt-translations --windows-console-mode=disable --include-module=PySide6.QtSql --include-data-files=build/generated/words.db=gre_vocab_app/data/words.db --msvc=latest --assume-yes-for-downloads
+extra_args = --quiet --noinclude-qt-translations --windows-console-mode=disable --include-module=PySide6.QtSql --include-module=PySide6.QtNetwork --include-data-files=build/generated/words.db=gre_vocab_app/data/words.db --include-data-files=resources/click_dictionary.json=gre_vocab_app/data/click_dictionary.json --include-data-files=resources/ECDICT-LICENSE.txt=gre_vocab_app/data/ECDICT-LICENSE.txt --msvc=latest --assume-yes-for-downloads
 
 [buildozer]
 

@@ -147,6 +147,24 @@ QLabel#statValue { color: #172033; font-size: 24px; font-weight: 780; }
 QLabel#headword { color: #101828; font-size: 36px; font-weight: 800; }
 QLabel#phonetic { color: #64748b; font-size: 16px; }
 QLabel#definition { color: #172033; font-size: 17px; font-weight: 650; }
+QLabel#lookupHeadword { color: #101828; font-size: 30px; font-weight: 800; }
+QLabel#lookupTranslation {
+    color: #172033;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 650;
+}
+QLabel#lookupOnline {
+    color: #172033;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 16px;
+}
 QLabel#sourceBadge {
     color: #9a3412;
     background: #fff7ed;

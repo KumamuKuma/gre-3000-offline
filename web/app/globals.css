@@ -104,6 +104,36 @@ button { color: inherit; }
 .detail-line span, .example span, .relation-block > span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
 .detail-line p, .example p { margin: 7px 0 0; font-size: 14px; line-height: 1.55; }
 .example small { display: block; margin-top: 6px; color: var(--muted); line-height: 1.5; }
+.lookup-token { color: inherit; border-bottom: 1px dotted rgba(67,56,202,.38); cursor: pointer; user-select: text; -webkit-user-select: text; -webkit-tap-highlight-color: rgba(231,111,53,.14); }
+[data-lookup-scope] { user-select: text; -webkit-user-select: text; }
+.lookup-token:hover { color: #4338ca; border-bottom-color: #6366f1; }
+.selection-translate { position: fixed; z-index: 65; left: 50%; bottom: calc(82px + env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: min(88vw, 520px); padding: 11px 16px; overflow: hidden; color: white; background: var(--ink); border: 0; border-radius: 99px; box-shadow: 0 12px 35px rgba(24,34,56,.28); text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 750; cursor: pointer; }
+.lookup-backdrop { position: fixed; z-index: 80; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: 20px 12px 0; background: rgba(15,23,42,.38); backdrop-filter: blur(5px); }
+.lookup-sheet { width: min(100%, 640px); max-height: min(82dvh, 760px); padding: 10px 20px calc(18px + env(safe-area-inset-bottom)); overflow-y: auto; color: var(--ink); background: #fffefa; border: 1px solid rgba(255,255,255,.75); border-radius: 25px 25px 0 0; box-shadow: 0 -22px 60px rgba(15,23,42,.2); }
+.lookup-handle { width: 38px; height: 4px; margin: 0 auto 14px; background: #d5cec2; border-radius: 99px; }
+.lookup-sheet header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.lookup-sheet h2 { margin: 0; font-family: Georgia, serif; font-size: 32px; overflow-wrap: anywhere; }
+.lookup-sheet header p { margin: 6px 0 0; color: var(--muted); font-family: Georgia, serif; }
+.lookup-sheet header > button { width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 50%; background: #faf8f3; font-size: 24px; line-height: 1; cursor: pointer; }
+.lookup-source { display: inline-block; margin-top: 12px; padding: 5px 8px; color: var(--green); background: #eff8f4; border: 1px solid #b7d6ce; border-radius: 99px; font-size: 9px; font-weight: 800; }
+.lookup-meaning { margin-top: 14px; padding: 15px; color: #312e81; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 14px; white-space: pre-line; line-height: 1.65; font-size: 15px; font-weight: 650; }
+.lookup-meaning.missing { color: var(--muted); background: #faf8f3; border-color: var(--line); font-weight: 500; }
+.lookup-definition { margin-top: 12px; color: #374151; white-space: pre-line; line-height: 1.6; font-family: Georgia, serif; font-size: 13px; }
+.lookup-exchange { color: var(--muted); overflow-wrap: anywhere; font-size: 10px; }
+.lookup-phrases, .lookup-online { margin-top: 17px; padding-top: 14px; border-top: 1px solid var(--line); }
+.lookup-phrases h3, .lookup-online h3 { margin: 0 0 9px; color: var(--muted); font-size: 10px; letter-spacing: .1em; }
+.lookup-phrases > div { display: grid; grid-template-columns: minmax(100px, .75fr) 1.4fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee9df; }
+.lookup-phrases strong { font-family: Georgia, serif; font-size: 13px; }
+.lookup-phrases span { color: #4b5563; font-size: 11px; line-height: 1.5; }
+.lookup-online { padding: 14px; border: 1px solid #bbf7d0; border-radius: 14px; background: #f0fdf4; }
+.lookup-online h3 { color: var(--green); }
+.lookup-online p { margin: 0; white-space: pre-line; line-height: 1.65; font-size: 14px; }
+.lookup-online.error { border-color: #fed7aa; background: #fff7ed; }
+.lookup-privacy { margin: 14px 0 0; color: var(--muted); line-height: 1.5; font-size: 9px; }
+.lookup-actions { position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom)); display: flex; justify-content: flex-end; gap: 8px; margin: 14px -2px -2px; padding: 10px 2px 2px; background: linear-gradient(transparent, #fffefa 28%); }
+.lookup-actions button { padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: #faf8f3; font-size: 11px; font-weight: 700; cursor: pointer; }
+.lookup-actions .translate { color: white; border-color: var(--orange); background: var(--orange); }
+.lookup-actions button:disabled { opacity: .5; cursor: wait; }
 .reveal { width: 100%; margin-top: 24px; padding: 28px 15px; color: var(--orange); border: 1px dashed #e8ad8b; border-radius: 16px; background: var(--orange-soft); cursor: pointer; }
 .quiz-grid { display: grid; gap: 10px; margin-top: 22px; }
 .quiz-star-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 9px 14px; margin-top: 20px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 13px; background: #faf8f3; }
@@ -183,6 +213,9 @@ button.signout { padding: 0; border: 0; background: transparent; cursor: pointer
   .study-card { grid-column: 2; grid-row: 1 / span 2; }
   .install-card { grid-column: 1 / -1; }
   .word-main small { max-width: 420px; }
+  .lookup-backdrop { align-items: center; padding: 20px; }
+  .lookup-sheet { max-height: min(86vh, 760px); border-radius: 25px; padding-bottom: 20px; }
+  .lookup-actions { bottom: -20px; }
 }
 
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }

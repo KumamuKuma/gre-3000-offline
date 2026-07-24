@@ -80,6 +80,19 @@ def test_release_script_imports_both_reviewed_reference_pdfs():
     assert '"--machine7-pdf", $env:GRE_MACHINE7_PDF' in script
 
 
+def test_release_bundles_the_offline_click_dictionary_and_license():
+    script = (ROOT / "scripts" / "build_release.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+    spec = (ROOT / "pysidedeploy.spec").read_text(encoding="utf-8")
+
+    assert '"resources\\click_dictionary.json"' in script
+    assert '"resources\\ECDICT-LICENSE.txt"' in script
+    assert "resources/click_dictionary.json=gre_vocab_app/data/click_dictionary.json" in spec
+    assert "resources/ECDICT-LICENSE.txt=gre_vocab_app/data/ECDICT-LICENSE.txt" in spec
+    assert "--include-module=PySide6.QtNetwork" in spec
+
+
 def test_release_script_uses_an_isolated_temp_directory_for_each_run():
     script = (ROOT / "scripts" / "build_release.ps1").read_text(
         encoding="utf-8-sig"

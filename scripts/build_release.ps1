@@ -1,5 +1,7 @@
 ﻿[CmdletBinding()]
-param()
+param(
+    [string]$OutputDirectory = ""
+)
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
@@ -81,6 +83,8 @@ $AuditJson = Join-Path $RepoRoot "build\audit\report.json"
 $StagedAuditHtml = Join-Path $RepoRoot "build\audit\词库导入审计报告.html"
 $IconSvg = Join-Path $RepoRoot "resources\app.svg"
 $IconIco = Join-Path $RepoRoot "resources\app.ico"
+$ClickDictionary = Join-Path $RepoRoot "resources\click_dictionary.json"
+$EcdictLicense = Join-Path $RepoRoot "resources\ECDICT-LICENSE.txt"
 $InstructionsSource = Join-Path $RepoRoot "resources\使用说明.txt"
 $ReleaseProbe = Join-Path $RepoRoot "scripts\windows_release_probe.py"
 $PublishReleaseSet = Join-Path $RepoRoot "scripts\publish_release_set.py"
@@ -88,10 +92,16 @@ $LauncherSource = Join-Path $RepoRoot "scripts\unicode_launcher.py"
 $InnerRuntime = Join-Path $RepoRoot "build\release\GRE3000OfflineRuntime.exe"
 $LauncherBuild = Join-Path $RepoRoot "build\launcher"
 $LauncherExe = Join-Path $LauncherBuild "GRELauncher.exe"
+$DeploymentDirectory = Join-Path $RepoRoot "deployment"
 $ReleaseCandidateDirectory = Join-Path $RepoRoot "build\release-candidate"
 $ReleaseCandidate = Join-Path $ReleaseCandidateDirectory "GRE 3000 词离线版.exe"
 $StagedInstructions = Join-Path $ReleaseCandidateDirectory "使用说明.txt"
-$OutputsDirectory = Join-Path $RepoRoot "outputs"
+$OutputsDirectory = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    Join-Path $RepoRoot "outputs"
+}
+else {
+    [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $OutputDirectory))
+}
 $OutputExe = Join-Path $OutputsDirectory "GRE 3000 词离线版.exe"
 $OutputAuditHtml = Join-Path $OutputsDirectory "词库导入审计报告.html"
 $OutputInstructions = Join-Path $OutputsDirectory "使用说明.txt"
@@ -110,6 +120,8 @@ foreach ($requiredFile in @(
     $Deploy,
     $Spec,
     $IconSvg,
+    $ClickDictionary,
+    $EcdictLicense,
     $InstructionsSource,
     $ReleaseProbe,
     $PublishReleaseSet,
@@ -197,6 +209,9 @@ try {
     if (Test-Path -LiteralPath $InnerRuntime) {
         Remove-Item -LiteralPath $InnerRuntime -Force
     }
+    Remove-WorkspaceDirectory `
+        -Path $DeploymentDirectory `
+        -AllowedRoot $RepoRoot
     $specEncoding = [System.Text.UTF8Encoding]::new($false)
     $specSnapshot = [System.IO.File]::ReadAllText($Spec, $specEncoding)
     try {

@@ -15,12 +15,16 @@ from PySide6.QtWidgets import (
 
 from gre_vocab_app.domain import RelatedWord, RootFamily, StudyMode, WordEntry
 
+from .lookup_label import LookupLabel
+
 
 class WordDetail(QWidget):
     speechRequested = Signal(str)
     revealRequested = Signal()
     quizChoiceRequested = Signal(int)
     relatedWordRequested = Signal(int)
+    lookupRequested = Signal(str)
+    selectionTranslationRequested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -54,7 +58,7 @@ class WordDetail(QWidget):
         word_layout.setContentsMargins(26, 21, 26, 21)
         word_layout.setSpacing(8)
         title_row = QHBoxLayout()
-        self.headword_label = self._label(object_name="headword")
+        self.headword_label = self._lookup_label(object_name="headword")
         self.headword_label.setAccessibleName("单词")
         title_row.addWidget(self.headword_label, 1)
         self.machine7_badge = QLabel("机经 7.0 重点词")
@@ -113,19 +117,19 @@ class WordDetail(QWidget):
         meaning_layout.setContentsMargins(26, 21, 26, 23)
         meaning_layout.setSpacing(9)
 
-        self.definition_label = self._label(object_name="definition")
+        self.definition_label = self._lookup_label(object_name="definition")
         self.definition_zh_label = self._label()
         meaning_layout.addWidget(self.definition_label)
         meaning_layout.addWidget(self.definition_zh_label)
 
         self.synonyms_title = self._section_title("近义词")
-        self.synonyms_label = self._label()
+        self.synonyms_label = self._lookup_label()
         meaning_layout.addSpacing(5)
         meaning_layout.addWidget(self.synonyms_title)
         meaning_layout.addWidget(self.synonyms_label)
 
         self.example_title = self._section_title("例句")
-        self.example_en_label = self._label()
+        self.example_en_label = self._lookup_label()
         self.example_zh_label = self._label(object_name="muted")
         meaning_layout.addSpacing(5)
         meaning_layout.addWidget(self.example_title)
@@ -164,6 +168,16 @@ class WordDetail(QWidget):
     def _section_title(cls, text: str) -> QLabel:
         label = cls._label(object_name="sectionTitle")
         label.setText(text)
+        return label
+
+    def _lookup_label(self, *, object_name: str = "") -> LookupLabel:
+        label = LookupLabel()
+        if object_name:
+            label.setObjectName(object_name)
+        label.lookupRequested.connect(self.lookupRequested.emit)
+        label.selectionTranslationRequested.connect(
+            self.selectionTranslationRequested.emit
+        )
         return label
 
     @classmethod
@@ -210,13 +224,13 @@ class WordDetail(QWidget):
         ):
             label.clear()
 
-        self.headword_label.setText(word.headword)
+        self.headword_label.set_lookup_text(word.headword)
         self.machine7_badge.setVisible(bool(in_machine7))
         self.phonetic_label.setText(word.phonetic)
-        self.definition_label.setText(word.definition_en)
+        self.definition_label.set_lookup_text(word.definition_en)
         self.definition_zh_label.setText(word.definition_zh)
-        self.synonyms_label.setText(word.synonyms)
-        self.example_en_label.setText(word.example_en)
+        self.synonyms_label.set_lookup_text(word.synonyms)
+        self.example_en_label.set_lookup_text(word.example_en)
         self.example_zh_label.setText(word.example_zh)
 
         self.phonetic_label.setVisible(bool(word.phonetic))

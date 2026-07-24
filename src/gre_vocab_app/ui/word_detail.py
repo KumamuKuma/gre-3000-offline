@@ -129,10 +129,22 @@ class WordDetail(QWidget):
         meaning_layout.addWidget(self.synonyms_label)
 
         self.example_title = self._section_title("例句")
+        example_header = QHBoxLayout()
+        example_header.setContentsMargins(0, 0, 0, 0)
+        example_header.addWidget(self.example_title)
+        example_header.addStretch(1)
+        self.example_speech_button = QPushButton("朗读例句")
+        self.example_speech_button.setObjectName("compactButton")
+        self.example_speech_button.setAccessibleName("朗读当前英文例句")
+        self.example_speech_button.setToolTip("朗读完整英文例句")
+        self.example_speech_button.setEnabled(False)
+        self.example_speech_button.hide()
+        self.example_speech_button.clicked.connect(self._request_example_speech)
+        example_header.addWidget(self.example_speech_button)
         self.example_en_label = self._lookup_label()
         self.example_zh_label = self._label(object_name="muted")
         meaning_layout.addSpacing(5)
-        meaning_layout.addWidget(self.example_title)
+        meaning_layout.addLayout(example_header)
         meaning_layout.addWidget(self.example_en_label)
         meaning_layout.addWidget(self.example_zh_label)
         root.addWidget(self.meaning_panel)
@@ -246,6 +258,9 @@ class WordDetail(QWidget):
         self.speech_button.setEnabled(
             self._speech_available and bool(word.headword)
         )
+        self.example_speech_button.setEnabled(
+            self._speech_available and bool(word.example_en)
+        )
         self._populate_root_relations()
         self._populate_related_words(
             self.equivalent_relations_layout, self._equivalents
@@ -275,6 +290,9 @@ class WordDetail(QWidget):
         self.example_title.setVisible(not brief and has_example)
         self.example_en_label.setVisible(not brief and bool(self.example_en_label.text()))
         self.example_zh_label.setVisible(not brief and bool(self.example_zh_label.text()))
+        self.example_speech_button.setVisible(
+            not brief and bool(self.example_en_label.text())
+        )
 
         recall = self._mode is StudyMode.RECALL
         quiz = self._mode is StudyMode.QUIZ
@@ -409,6 +427,11 @@ class WordDetail(QWidget):
             and self._word is not None
             and bool(self._word.headword)
         )
+        self.example_speech_button.setEnabled(
+            self._speech_available
+            and self._word is not None
+            and bool(self._word.example_en)
+        )
 
     def _request_speech(self) -> None:
         if (
@@ -417,6 +440,14 @@ class WordDetail(QWidget):
             and self._word.headword
         ):
             self.speechRequested.emit(self._word.headword)
+
+    def _request_example_speech(self) -> None:
+        if (
+            self._speech_available
+            and self._word is not None
+            and self._word.example_en
+        ):
+            self.speechRequested.emit(self._word.example_en)
 
     @staticmethod
     def _clear_relation_layout(layout: QVBoxLayout) -> None:

@@ -89,7 +89,8 @@ button { color: inherit; }
 .study-meta button { padding: 6px 0; border: 0; background: none; cursor: pointer; }
 .progress-track { height: 3px; margin: 13px 0 20px; overflow: hidden; background: #ded8cd; border-radius: 99px; }
 .progress-track span { display: block; height: 100%; background: var(--orange); transition: width .25s ease; }
-.word-card { min-height: 520px; padding: 22px; background: var(--card); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow); }
+.word-card { min-height: 520px; padding: 22px; touch-action: pan-y; background: var(--card); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow); }
+.swipe-hint { margin: -10px 0 10px; color: var(--muted); text-align: center; font-size: 9px; letter-spacing: .04em; }
 .word-flags { min-height: 30px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; }
 .word-flags em { padding: 5px 8px; color: var(--orange); background: var(--orange-soft); border-radius: 99px; font-style: normal; font-weight: 700; }
 .star-button { margin-left: auto; min-width: 48px; padding: 5px 9px; border: 1px solid #edc2a9; border-radius: 99px; color: var(--orange); background: #fff8f4; letter-spacing: 1px; cursor: pointer; }
@@ -102,6 +103,8 @@ button { color: inherit; }
 .definition-zh { margin: 9px 0 0; color: var(--orange); font-size: 16px; font-weight: 700; line-height: 1.75; white-space: pre-line; }
 .detail-line, .example { margin-top: 19px; padding-top: 16px; border-top: 1px solid var(--line); }
 .detail-line span, .example span, .relation-block > span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.example-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.example-heading button { padding: 7px 10px; color: var(--ink); border: 1px solid var(--line); border-radius: 99px; background: #faf8f3; font-size: 10px; font-weight: 700; cursor: pointer; }
 .detail-line p, .example p { margin: 7px 0 0; font-size: 14px; line-height: 1.55; }
 .example small { display: block; margin-top: 6px; color: var(--muted); line-height: 1.5; }
 .lookup-token { color: inherit; border-bottom: 1px dotted rgba(67,56,202,.38); cursor: pointer; user-select: text; -webkit-user-select: text; -webkit-tap-highlight-color: rgba(231,111,53,.14); }
@@ -216,6 +219,7 @@ button.signout { padding: 0; border: 0; background: transparent; cursor: pointer
   .lookup-backdrop { align-items: center; padding: 20px; }
   .lookup-sheet { max-height: min(86vh, 760px); border-radius: 25px; padding-bottom: 20px; }
   .lookup-actions { bottom: -20px; }
+  .swipe-hint { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }

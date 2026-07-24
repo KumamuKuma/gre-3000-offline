@@ -20,7 +20,7 @@ def lookup_html(text: str) -> str:
         token = match.group(0)
         href = urllib.parse.quote(token, safe="")
         pieces.append(
-            f'<a href="lookup:{href}" style="color:#4338ca;'
+            f'<a href="lookup:{href}" style="color:#101828;'
             f'text-decoration:none;">{html.escape(token)}</a>'
         )
         cursor = match.end()

@@ -1,4 +1,4 @@
-const CACHE = "gre-3000-pwa-v7";
+const CACHE = "gre-3000-pwa-v8";
 const CORE = ["/", "/manifest.webmanifest", "/icon.svg", "/data/words.json", "/data/click_dictionary.json"];
 
 self.addEventListener("install", (event) => {

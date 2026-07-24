@@ -53,7 +53,13 @@ def test_reading_shows_full_content_and_brief_hides_optional_sections(
     assert detail.synonyms_label.isVisible()
     assert detail.example_en_label.isVisible()
     assert detail.example_zh_label.isVisible()
+    assert detail.example_speech_button.isVisible()
+    assert detail.example_speech_button.isEnabled()
     assert detail.reveal_button.isHidden()
+
+    with qtbot.waitSignal(detail.speechRequested) as signal:
+        detail.example_speech_button.click()
+    assert signal.args == [word.example_en]
 
     detail.set_word(word, mode=StudyMode.BRIEF)
     assert detail.meaning_panel.isVisible()
@@ -64,6 +70,7 @@ def test_reading_shows_full_content_and_brief_hides_optional_sections(
     assert detail.example_title.isHidden()
     assert detail.example_en_label.isHidden()
     assert detail.example_zh_label.isHidden()
+    assert detail.example_speech_button.isHidden()
     assert detail.reveal_button.isHidden()
 
 
@@ -148,6 +155,8 @@ def test_word_detail_clears_stale_optional_fields_and_supports_long_text(
     assert detail.synonyms_label.isHidden()
     assert detail.example_en_label.text() == ""
     assert detail.example_en_label.isHidden()
+    assert detail.example_speech_button.isHidden()
+    assert not detail.example_speech_button.isEnabled()
     assert detail.definition_label.textInteractionFlags() & Qt.TextSelectableByMouse
 
 
@@ -159,9 +168,11 @@ def test_word_detail_speech_button_respects_backend_availability(qtbot, sample_w
     detail.set_speech_available(False)
     detail.set_word(sample_word, mode=StudyMode.READING)
     assert not detail.speech_button.isEnabled()
+    assert not detail.example_speech_button.isEnabled()
 
     detail.set_speech_available(True)
     assert detail.speech_button.isEnabled()
+    assert detail.example_speech_button.isEnabled()
 
 
 def test_related_words_render_below_answer_and_do_not_leak_recall_or_quiz(

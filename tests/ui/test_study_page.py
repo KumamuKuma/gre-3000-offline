@@ -207,5 +207,11 @@ def test_editable_focus_keeps_native_space_and_unavailable_speech_is_disabled(
     page.word_detail.headword_label.setFocusPolicy(Qt.StrongFocus)
     page.word_detail.headword_label.setFocus()
     qtbot.waitUntil(page.word_detail.headword_label.hasFocus)
+    previous = QSignalSpy(page.previousRequested)
+    next_word = QSignalSpy(page.nextRequested)
+    qtbot.keyClick(page.word_detail.headword_label, Qt.Key_Left)
+    qtbot.keyClick(page.word_detail.headword_label, Qt.Key_Right)
+    assert previous.count() == 1
+    assert next_word.count() == 1
     with qtbot.assertNotEmitted(page.answerToggleRequested):
         qtbot.keyClick(page.word_detail.headword_label, Qt.Key_Space)

@@ -369,6 +369,12 @@ export default function Home() {
   const loadedSyncCode = useRef("");
   const firstCloudUploadNoticeShown = useRef(false);
   const translationCache = useRef(new Map<string, string>());
+  const studySwipeStart = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    startedAt: number;
+  } | null>(null);
 
   useEffect(() => {
     fetch("/data/words.json")
@@ -664,6 +670,40 @@ export default function Home() {
       index += delta;
     }
     jumpToQueueIndex(index);
+  }
+
+  function startStudySwipe(event: PointerEvent<HTMLElement>) {
+    const target = event.target instanceof Element ? event.target : null;
+    if (
+      event.pointerType === "mouse"
+      || target?.closest("button, a, input, select, textarea, label, .lookup-token")
+    ) {
+      studySwipeStart.current = null;
+      return;
+    }
+    studySwipeStart.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      startedAt: Date.now(),
+    };
+  }
+
+  function finishStudySwipe(event: PointerEvent<HTMLElement>) {
+    captureSelection(event);
+    const start = studySwipeStart.current;
+    studySwipeStart.current = null;
+    if (!start || start.pointerId !== event.pointerId) return;
+    if (window.getSelection()?.toString().trim()) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    const elapsed = Date.now() - start.startedAt;
+    if (
+      elapsed > 800
+      || Math.abs(deltaX) < 72
+      || Math.abs(deltaX) < Math.abs(deltaY) * 1.35
+    ) return;
+    move(deltaX < 0 ? 1 : -1);
   }
 
   function cycleStar(word: WordEntry) {
@@ -975,8 +1015,14 @@ export default function Home() {
             <span>{studyScopeLabel} · {Math.max(activeQueueIndex + 1, 1)} / {studyQueue.length}</span>
           </div>
           <div className="progress-track"><span style={{ width: `${Math.max(3, ((activeQueueIndex + 1) / Math.max(studyQueue.length, 1)) * 100)}%` }} /></div>
+          <p className="swipe-hint">← 左右滑动切换单词 →</p>
 
-          <article className="word-card" onPointerUp={captureSelection}>
+          <article
+            className="word-card"
+            onPointerDown={startStudySwipe}
+            onPointerUp={finishStudySwipe}
+            onPointerCancel={() => { studySwipeStart.current = null; }}
+          >
             <div className="word-flags">
               <span>#{activeWord.order}</span>
               {activeWord.machine7 && <em>机经 7.0 重点</em>}
@@ -1008,7 +1054,7 @@ export default function Home() {
                 <p className="definition-en"><LookupText text={activeWord.definition_en} onLookup={openLookup} /></p>
                 <p className="definition-zh">{activeWord.definition_zh}</p>
                 {mode === "reading" && activeWord.synonyms && <div className="detail-line"><span>近义词</span><p><LookupText text={activeWord.synonyms} onLookup={openLookup} /></p></div>}
-                {mode === "reading" && activeWord.example_en && <div className="example"><span>例句</span><p><LookupText text={activeWord.example_en} onLookup={openLookup} /></p><small>{activeWord.example_zh}</small></div>}
+                {mode === "reading" && activeWord.example_en && <div className="example"><div className="example-heading"><span>例句</span><button onClick={() => speak(activeWord.example_en)} aria-label="朗读完整英文例句">▶ 朗读例句</button></div><p><LookupText text={activeWord.example_en} onLookup={openLookup} /></p><small>{activeWord.example_zh}</small></div>}
               </div>
             )}
 

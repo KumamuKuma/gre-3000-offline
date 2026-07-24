@@ -18,8 +18,9 @@ test("ships the GRE product metadata and install manifest", async () => {
 });
 
 test("contains all study modes, offline support, and progress transfer", async () => {
-  const [page, worker, content, dictionary, translateRoute] = await Promise.all([
+  const [page, styles, worker, content, dictionary, translateRoute] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
     readFile(new URL("public/sw.js", root), "utf8"),
     readFile(new URL("public/data/words.json", root), "utf8"),
     readFile(new URL("public/data/click_dictionary.json", root), "utf8"),
@@ -60,6 +61,11 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(page, /联网翻译/);
   assert.match(page, /api\.mymemory\.translated\.net\/get/);
   assert.match(page, /translateViaMyMemoryDirect/);
+  assert.match(page, /startStudySwipe/);
+  assert.match(page, /finishStudySwipe/);
+  assert.match(page, /左右滑动切换单词/);
+  assert.match(page, /朗读完整英文例句/);
+  assert.match(styles, /touch-action:\s*pan-y/);
   assert.match(translateRoute, /MAX_CHARS = 500/);
   assert.match(translateRoute, /cache-control": "private, no-store/);
 });

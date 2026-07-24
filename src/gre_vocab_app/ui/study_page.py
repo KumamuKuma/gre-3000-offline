@@ -268,29 +268,47 @@ class StudyPage(QWidget):
         focus = QApplication.focusWidget()
         if focus is None or not self.isAncestorOf(focus):
             return False
-        if isinstance(
-            focus, (QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox)
-        ):
+        if self._focus_blocks_navigation():
             return True
         text_interaction_flags = getattr(focus, "textInteractionFlags", None)
         return callable(text_interaction_flags) and bool(
             text_interaction_flags() & Qt.TextSelectableByKeyboard
         )
 
+    def _focus_blocks_navigation(self) -> bool:
+        focus = QApplication.focusWidget()
+        return (
+            focus is not None
+            and self.isAncestorOf(focus)
+            and isinstance(
+                focus,
+                (
+                    QLineEdit,
+                    QTextEdit,
+                    QPlainTextEdit,
+                    QAbstractSpinBox,
+                    QComboBox,
+                ),
+            )
+        )
+
     def _sync_shortcut_state(self, *_focus_widgets: QWidget | None) -> None:
-        active = self.snapshot is not None and not self._focus_uses_native_keys()
-        self.previous_shortcut.setEnabled(active)
-        self.next_shortcut.setEnabled(active)
-        self.speech_shortcut.setEnabled(active and self._speech_available)
+        navigation_active = (
+            self.snapshot is not None and not self._focus_blocks_navigation()
+        )
+        action_active = self.snapshot is not None and not self._focus_uses_native_keys()
+        self.previous_shortcut.setEnabled(navigation_active)
+        self.next_shortcut.setEnabled(navigation_active)
+        self.speech_shortcut.setEnabled(action_active and self._speech_available)
         recall = self.snapshot is not None and self.snapshot.mode is StudyMode.RECALL
-        self.answer_shortcut.setEnabled(active and recall)
+        self.answer_shortcut.setEnabled(action_active and recall)
 
     def _previous(self) -> None:
-        if self.snapshot is not None and not self._focus_uses_native_keys():
+        if self.snapshot is not None and not self._focus_blocks_navigation():
             self.previousRequested.emit()
 
     def _next(self) -> None:
-        if self.snapshot is not None and not self._focus_uses_native_keys():
+        if self.snapshot is not None and not self._focus_blocks_navigation():
             if self.snapshot.can_complete_round:
                 self.finishRequested.emit()
             elif not self.snapshot.at_end:

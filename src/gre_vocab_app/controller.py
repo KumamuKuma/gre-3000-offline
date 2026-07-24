@@ -24,6 +24,7 @@ from gre_vocab_app.services.cloud_sync import (
 )
 from gre_vocab_app.services.dictionary import DictionaryService
 from gre_vocab_app.services.translation import TranslationService
+from gre_vocab_app.services.speech import ONLINE_VOICE_NAME
 from gre_vocab_app.ui.main_window import MainWindow
 from gre_vocab_app.ui.word_list_page import WordListRow
 
@@ -204,7 +205,9 @@ class ApplicationController:
         names = tuple(self.speech.voice_names())
         saved_voice = self.user.load_setting("voice_name")
         selected = saved_voice if saved_voice in names else (names[0] if names else None)
-        secondary_names = tuple(name for name in names if name != selected)
+        secondary_names = tuple(name for name in names if name != selected) + (
+            ONLINE_VOICE_NAME,
+        )
         saved_secondary = self.user.load_setting("secondary_voice_name")
         self._secondary_voice_name = (
             saved_secondary
@@ -219,12 +222,13 @@ class ApplicationController:
             selected,
             self._secondary_voice_name,
             using_default_voice=using_default_voice,
+            secondary_names=secondary_names,
         )
         if selected:
             self.speech.select_voice(selected)
         self.window.study_page.set_speech_available(bool(self.speech.available))
         self.window.study_page.set_secondary_speech_available(
-            bool(self.speech.available and self._secondary_voice_name)
+            bool(self._secondary_voice_name)
         )
 
         raw_rate = self.user.load_setting("speech_rate")
@@ -690,7 +694,9 @@ class ApplicationController:
             self.user.save_setting("voice_name", name)
             names = tuple(self.speech.voice_names())
             if self._secondary_voice_name == name:
-                alternatives = tuple(candidate for candidate in names if candidate != name)
+                alternatives = tuple(
+                    candidate for candidate in names if candidate != name
+                ) + (ONLINE_VOICE_NAME,)
                 self._secondary_voice_name = alternatives[0] if alternatives else None
                 self.user.save_setting(
                     "secondary_voice_name", self._secondary_voice_name or ""
@@ -702,6 +708,10 @@ class ApplicationController:
                 using_default_voice=bool(
                     getattr(self.speech, "using_default_voice", False)
                 ),
+                secondary_names=tuple(
+                    candidate for candidate in names if candidate != name
+                )
+                + (ONLINE_VOICE_NAME,),
             )
             self.window.study_page.set_secondary_speech_available(
                 bool(self._secondary_voice_name)
@@ -711,7 +721,7 @@ class ApplicationController:
             self._show_status("无法使用所选英文语音。")
 
     def _select_secondary_voice(self, name: str) -> None:
-        if name not in self.speech.voice_names():
+        if name != ONLINE_VOICE_NAME and name not in self.speech.voice_names():
             self._show_status("无法使用所选备用英文语音。")
             return
         self._secondary_voice_name = name
@@ -721,8 +731,16 @@ class ApplicationController:
 
     def _speak_secondary(self, text: str) -> None:
         voice_name = self._secondary_voice_name
-        if not voice_name or not self.speech.speak_with_voice(text, voice_name):
+        if not voice_name:
             self._show_status("当前没有可用的备用英文语音。")
+            return
+        spoken = (
+            self.speech.speak_online(text)
+            if voice_name == ONLINE_VOICE_NAME
+            else self.speech.speak_with_voice(text, voice_name)
+        )
+        if not spoken:
+            self._show_status("备用音源正在准备或暂时不可用，请稍后重试。")
 
     def _set_rate(self, rate: float) -> None:
         self.speech.set_rate(rate)
@@ -968,7 +986,7 @@ class ApplicationController:
     def _speech_availability_changed(self, available: bool) -> None:
         self.window.study_page.set_speech_available(bool(available))
         self.window.study_page.set_secondary_speech_available(
-            bool(available and self._secondary_voice_name)
+            bool(self._secondary_voice_name)
         )
         if not available:
             self._show_status("语音引擎当前不可用，朗读功能已禁用。")

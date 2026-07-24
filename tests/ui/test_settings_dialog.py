@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QApplication, QLineEdit, QMessageBox
 
 from gre_vocab_app.domain import StudyMode
 from gre_vocab_app.ui.settings_dialog import SettingsDialog
+from gre_vocab_app.services.speech import ONLINE_VOICE_NAME
 
 
 def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
@@ -127,3 +128,12 @@ def test_settings_distinguishes_default_voice_fallback_from_unavailable(qtbot):
 
     dialog.set_voice_names((), using_default_voice=False)
     assert "不可用" in dialog.voice_combo.currentText()
+
+    dialog.set_voice_names(
+        (),
+        secondary_selected=ONLINE_VOICE_NAME,
+        using_default_voice=False,
+        secondary_names=(ONLINE_VOICE_NAME,),
+    )
+    assert dialog.secondary_voice_combo.isEnabled()
+    assert dialog.secondary_voice_combo.currentText() == ONLINE_VOICE_NAME

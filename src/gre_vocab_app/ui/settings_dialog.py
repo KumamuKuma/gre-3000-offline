@@ -164,6 +164,7 @@ class SettingsDialog(QDialog):
         secondary_selected: str | None = None,
         *,
         using_default_voice: bool = False,
+        secondary_names: tuple[str, ...] | None = None,
     ) -> None:
         with (
             QSignalBlocker(self.voice_combo),
@@ -176,7 +177,11 @@ class SettingsDialog(QDialog):
                 self.voice_combo.setEnabled(True)
                 if selected in names:
                     self.voice_combo.setCurrentText(selected)
-                alternatives = tuple(name for name in names if name != selected)
+                alternatives = (
+                    secondary_names
+                    if secondary_names is not None
+                    else tuple(name for name in names if name != selected)
+                )
                 if alternatives:
                     self.secondary_voice_combo.addItems(alternatives)
                     self.secondary_voice_combo.setEnabled(True)
@@ -194,8 +199,17 @@ class SettingsDialog(QDialog):
                     else "朗读不可用"
                 )
                 self.voice_combo.setEnabled(False)
-                self.secondary_voice_combo.addItem("备用音源不可用")
-                self.secondary_voice_combo.setEnabled(False)
+                alternatives = secondary_names or ()
+                if alternatives:
+                    self.secondary_voice_combo.addItems(alternatives)
+                    self.secondary_voice_combo.setEnabled(True)
+                    if secondary_selected in alternatives:
+                        self.secondary_voice_combo.setCurrentText(
+                            secondary_selected
+                        )
+                else:
+                    self.secondary_voice_combo.addItem("备用音源不可用")
+                    self.secondary_voice_combo.setEnabled(False)
 
     def set_rate(self, rate: float) -> None:
         value = max(-10, min(10, round(float(rate) * 10)))

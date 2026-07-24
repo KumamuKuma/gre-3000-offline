@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
+from pathlib import Path
+import tempfile
 from typing import Protocol
 
-from PySide6.QtCore import QObject, QTimer, Signal
+import edge_tts
+from PySide6.QtCore import QObject, QThread, QTimer, QUrl, Signal, Slot
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtTextToSpeech import QTextToSpeech, QVoice
+
+
+ONLINE_VOICE_NAME = "微软在线自然音（Aria，美音，需要联网）"
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +152,34 @@ class QtSpeechBackend(QObject):
         return errors
 
 
+class EdgeSpeechWorker(QObject):
+    succeeded = Signal(str)
+    failed = Signal(str, str)
+
+    def __init__(self, text: str, output_path: str):
+        super().__init__()
+        self._text = text
+        self._output_path = output_path
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            asyncio.run(
+                edge_tts.Communicate(
+                    self._text,
+                    voice="en-US-AriaNeural",
+                    rate="-10%",
+                ).save(self._output_path)
+            )
+        except Exception as error:  # network and service failures vary by platform
+            self.failed.emit(
+                "在线自然音朗读失败，请检查网络后重试。",
+                f"{type(error).__name__}: {error}",
+            )
+            return
+        self.succeeded.emit(self._output_path)
+
+
 class SpeechService(QObject):
     errorOccurred = Signal(str, str)
     availabilityChanged = Signal(bool)
@@ -161,6 +197,15 @@ class SpeechService(QObject):
         self._primary_voice_name: str | None = None
         self._active_voice_name: str | None = None
         self._availability_notice: str | None = None
+        self._online_thread: QThread | None = None
+        self._online_worker: EdgeSpeechWorker | None = None
+        self._online_audio_path: str | None = None
+        self._audio_output = QAudioOutput(self)
+        self._online_player = QMediaPlayer(self)
+        self._online_player.setAudioOutput(self._audio_output)
+        self._online_player.mediaStatusChanged.connect(
+            self._online_media_status_changed
+        )
         backend_error = getattr(self._backend, "errorOccurred", None)
         if backend_error is not None and hasattr(backend_error, "connect"):
             backend_error.connect(self._relay_error)
@@ -269,6 +314,76 @@ class SpeechService(QObject):
         except (RuntimeError, TypeError) as error:
             self._emit_exception("备用音源朗读失败，请检查 Windows 语音设置。", error)
             return False
+
+    def speak_online(self, text: str) -> bool:
+        value = text.strip()
+        if not value or self._online_thread is not None:
+            return False
+        handle = tempfile.NamedTemporaryFile(
+            prefix="gre-online-speech-",
+            suffix=".mp3",
+            delete=False,
+        )
+        output_path = handle.name
+        handle.close()
+        thread = QThread(self)
+        worker = EdgeSpeechWorker(value, output_path)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.succeeded.connect(self._online_speech_ready)
+        worker.failed.connect(self._online_speech_failed)
+        worker.succeeded.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._online_thread_finished)
+        self._online_thread = thread
+        self._online_worker = worker
+        thread.start()
+        return True
+
+    @Slot(str)
+    def _online_speech_ready(self, path: str) -> None:
+        self._discard_online_audio()
+        self._online_audio_path = path
+        self._online_player.setSource(QUrl.fromLocalFile(path))
+        self._online_player.play()
+
+    @Slot(str, str)
+    def _online_speech_failed(self, user_message: str, technical: str) -> None:
+        worker = self._online_worker
+        if worker is not None:
+            self._discard_path(worker._output_path)
+        self._queue_error(user_message, technical)
+
+    @Slot()
+    def _online_thread_finished(self) -> None:
+        self._online_thread = None
+        self._online_worker = None
+
+    @Slot(object)
+    def _online_media_status_changed(
+        self, status: QMediaPlayer.MediaStatus
+    ) -> None:
+        if status in (
+            QMediaPlayer.MediaStatus.EndOfMedia,
+            QMediaPlayer.MediaStatus.InvalidMedia,
+        ):
+            self._online_player.setSource(QUrl())
+            self._discard_online_audio()
+
+    def _discard_online_audio(self) -> None:
+        path = self._online_audio_path
+        self._online_audio_path = None
+        if path:
+            self._discard_path(path)
+
+    @staticmethod
+    def _discard_path(path: str) -> None:
+        try:
+            Path(path).unlink(missing_ok=True)
+        except OSError:
+            pass
 
     def _relay_error(self, user_message: str, technical: str) -> None:
         self._set_available(bool(self._backend.available))

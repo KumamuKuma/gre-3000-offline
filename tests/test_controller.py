@@ -199,6 +199,7 @@ class FakeSpeech(QObject):
     def __init__(self, *, available=True, notice=None, voices=("Microsoft Zira",)):
         super().__init__()
         self.spoken = []
+        self.online_spoken = []
         self.rate = 0.0
         self.selected = ""
         self._available = available
@@ -233,6 +234,10 @@ class FakeSpeech(QObject):
         if not self._available or voice_name not in self._voices:
             return False
         self.spoken.append((text, voice_name))
+        return True
+
+    def speak_online(self, text):
+        self.online_spoken.append(text)
         return True
 
     def take_availability_notice(self):
@@ -403,6 +408,10 @@ def test_controller_search_detail_speech_settings_and_errors(qtbot):
 
     window.study_page.word_detail.speech_button.click()
     assert speech.spoken == ["word2"]
+    assert window.study_page.word_detail.secondary_speech_button.isEnabled()
+    assert "在线自然音" in window.settings_dialog.secondary_voice_combo.currentText()
+    window.study_page.word_detail.secondary_speech_button.click()
+    assert speech.online_spoken == ["word2"]
 
     window.settings_dialog.rate_slider.setValue(3)
     assert speech.rate == 0.3

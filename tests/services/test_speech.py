@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, Signal
 
-from gre_vocab_app.services.speech import SpeechService, VoiceOption
+from gre_vocab_app.services.speech import EdgeSpeechWorker, SpeechService, VoiceOption
 
 
 class FakeSpeechBackend:
@@ -61,6 +61,32 @@ def test_secondary_voice_is_used_once_and_primary_restored_on_next_read():
     assert service.speak("abate") is True
     assert backend.selected == "Microsoft David"
     assert backend.spoken == ["example sentence", "abate"]
+
+
+def test_edge_speech_worker_saves_online_audio_without_blocking_ui(
+    qtbot, monkeypatch, tmp_path
+):
+    output = tmp_path / "speech.mp3"
+
+    class FakeCommunicate:
+        def __init__(self, text, *, voice, rate):
+            assert text == "inevitable"
+            assert voice == "en-US-AriaNeural"
+            assert rate == "-10%"
+
+        async def save(self, path):
+            assert path == str(output)
+            output.write_bytes(b"fake-mp3")
+
+    monkeypatch.setattr(
+        "gre_vocab_app.services.speech.edge_tts.Communicate",
+        FakeCommunicate,
+    )
+    worker = EdgeSpeechWorker("inevitable", str(output))
+    with qtbot.waitSignal(worker.succeeded) as succeeded:
+        worker.run()
+    assert succeeded.args == [str(output)]
+    assert output.read_bytes() == b"fake-mp3"
 
 
 def test_unavailable_engine_or_blank_text_does_not_raise():

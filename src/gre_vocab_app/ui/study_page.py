@@ -35,6 +35,7 @@ class StudyPage(QWidget):
     modeRequested = Signal(object)
     answerToggleRequested = Signal()
     speechRequested = Signal(str)
+    secondarySpeechRequested = Signal(str)
     starRatingRequested = Signal(int)
     quizChoiceRequested = Signal(int)
     quizWrongStarUpChanged = Signal(bool)
@@ -157,6 +158,9 @@ class StudyPage(QWidget):
             self.quizCorrectStarDownChanged.emit
         )
         self.word_detail.speechRequested.connect(self.speechRequested.emit)
+        self.word_detail.secondarySpeechRequested.connect(
+            self.secondarySpeechRequested.emit
+        )
         self.word_detail.revealRequested.connect(self.answerToggleRequested.emit)
         self.word_detail.quizChoiceRequested.connect(
             self.quizChoiceRequested.emit
@@ -334,6 +338,9 @@ class StudyPage(QWidget):
         self._speech_available = bool(available)
         self._sync_shortcut_state()
         self.word_detail.set_speech_available(self._speech_available)
+
+    def set_secondary_speech_available(self, available: bool) -> None:
+        self.word_detail.set_secondary_speech_available(bool(available))
 
     def set_quiz_star_adjustments(
         self,

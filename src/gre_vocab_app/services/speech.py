@@ -158,6 +158,8 @@ class SpeechService(QObject):
         self._voices: tuple[VoiceOption, ...] = ()
         self._available = bool(self._backend.available)
         self._using_default_voice = self._available
+        self._primary_voice_name: str | None = None
+        self._active_voice_name: str | None = None
         self._availability_notice: str | None = None
         backend_error = getattr(self._backend, "errorOccurred", None)
         if backend_error is not None and hasattr(backend_error, "connect"):
@@ -205,7 +207,11 @@ class SpeechService(QObject):
         if not self.available or name not in self.voice_names():
             return False
         try:
-            return bool(self._backend.select_voice(name))
+            selected = bool(self._backend.select_voice(name))
+            if selected:
+                self._primary_voice_name = name
+                self._active_voice_name = name
+            return selected
         except (RuntimeError, TypeError) as error:
             self._emit_exception("无法切换朗读语音。", error)
             return False
@@ -225,12 +231,43 @@ class SpeechService(QObject):
             self._set_available(False)
             return False
         try:
+            if (
+                self._primary_voice_name
+                and self._active_voice_name != self._primary_voice_name
+            ):
+                if not self._backend.select_voice(self._primary_voice_name):
+                    return False
+                self._active_voice_name = self._primary_voice_name
             spoken = bool(self._backend.say(value))
             if not spoken and not self._backend.available:
                 self._set_available(False)
             return spoken
         except (RuntimeError, TypeError) as error:
             self._emit_exception("朗读失败，请检查 Windows 语音设置。", error)
+            return False
+
+    def speak_with_voice(self, text: str, voice_name: str) -> bool:
+        value = text.strip()
+        if (
+            not value
+            or not self.available
+            or voice_name not in self.voice_names()
+        ):
+            return False
+        if not self._backend.available:
+            self._set_available(False)
+            return False
+        try:
+            if self._active_voice_name != voice_name:
+                if not self._backend.select_voice(voice_name):
+                    return False
+                self._active_voice_name = voice_name
+            spoken = bool(self._backend.say(value))
+            if not spoken and not self._backend.available:
+                self._set_available(False)
+            return spoken
+        except (RuntimeError, TypeError) as error:
+            self._emit_exception("备用音源朗读失败，请检查 Windows 语音设置。", error)
             return False
 
     def _relay_error(self, user_message: str, technical: str) -> None:

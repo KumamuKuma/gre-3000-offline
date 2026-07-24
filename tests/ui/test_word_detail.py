@@ -48,6 +48,7 @@ def test_reading_shows_full_content_and_brief_hides_optional_sections(
         example_zh="这个结果无法避免。",
     )
 
+    detail.set_secondary_speech_available(True)
     detail.set_word(word, mode=StudyMode.READING)
     assert detail.meaning_panel.isVisible()
     assert detail.synonyms_label.isVisible()
@@ -55,11 +56,20 @@ def test_reading_shows_full_content_and_brief_hides_optional_sections(
     assert detail.example_zh_label.isVisible()
     assert detail.example_speech_button.isVisible()
     assert detail.example_speech_button.isEnabled()
+    assert detail.secondary_speech_button.isEnabled()
+    assert detail.secondary_example_speech_button.isVisible()
+    assert detail.secondary_example_speech_button.isEnabled()
     assert detail.reveal_button.isHidden()
 
     with qtbot.waitSignal(detail.speechRequested) as signal:
         detail.example_speech_button.click()
     assert signal.args == [word.example_en]
+    with qtbot.waitSignal(detail.secondarySpeechRequested) as secondary_signal:
+        detail.secondary_speech_button.click()
+    assert secondary_signal.args == [word.headword]
+    with qtbot.waitSignal(detail.secondarySpeechRequested) as secondary_example:
+        detail.secondary_example_speech_button.click()
+    assert secondary_example.args == [word.example_en]
 
     detail.set_word(word, mode=StudyMode.BRIEF)
     assert detail.meaning_panel.isVisible()
@@ -71,6 +81,7 @@ def test_reading_shows_full_content_and_brief_hides_optional_sections(
     assert detail.example_en_label.isHidden()
     assert detail.example_zh_label.isHidden()
     assert detail.example_speech_button.isHidden()
+    assert detail.secondary_example_speech_button.isHidden()
     assert detail.reveal_button.isHidden()
 
 

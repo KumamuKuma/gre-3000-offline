@@ -193,6 +193,18 @@ def test_keyboard_shortcuts_navigate_reveal_and_speak(qtbot, sample_word):
     assert speech.at(0) == [sample_word.headword]
 
 
+def test_secondary_voice_signal_is_forwarded_from_word_detail(qtbot, sample_word):
+    page = StudyPage()
+    qtbot.addWidget(page)
+    page.show()
+    page.set_secondary_speech_available(True)
+    page.render(snapshot(sample_word))
+
+    with qtbot.waitSignal(page.secondarySpeechRequested) as signal:
+        page.word_detail.secondary_speech_button.click()
+    assert signal.args == [sample_word.headword]
+
+
 def test_editable_focus_keeps_native_space_and_unavailable_speech_is_disabled(
     qtbot, sample_word
 ):

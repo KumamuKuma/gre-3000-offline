@@ -20,7 +20,7 @@ class FakeSpeechBackend:
 
     def select_voice(self, name):
         self.selected = name
-        return name == "Microsoft David"
+        return any(voice.name == name for voice in self.voices())
 
     def set_rate(self, value):
         self.rate = value
@@ -44,6 +44,23 @@ def test_speech_service_uses_selected_english_voice_and_clamps_rate():
     assert service.speak("inevitable") is True
     assert backend.spoken == ["inevitable"]
     assert backend.rate == 1.0
+
+
+def test_secondary_voice_is_used_once_and_primary_restored_on_next_read():
+    backend = FakeSpeechBackend(
+        voices=(
+            VoiceOption(name="Microsoft David", locale="en-US"),
+            VoiceOption(name="Microsoft Zira", locale="en-US"),
+        )
+    )
+    service = SpeechService(backend=backend)
+
+    assert service.select_voice("Microsoft David") is True
+    assert service.speak_with_voice("example sentence", "Microsoft Zira") is True
+    assert backend.selected == "Microsoft Zira"
+    assert service.speak("abate") is True
+    assert backend.selected == "Microsoft David"
+    assert backend.spoken == ["example sentence", "abate"]
 
 
 def test_unavailable_engine_or_blank_text_does_not_raise():

@@ -24,6 +24,7 @@ from gre_vocab_app.domain import StudyMode
 
 class SettingsDialog(QDialog):
     voiceSelected = Signal(str)
+    secondaryVoiceSelected = Signal(str)
     rateChanged = Signal(float)
     defaultModeChanged = Signal(object)
     autoSpeakChanged = Signal(bool)
@@ -54,6 +55,7 @@ class SettingsDialog(QDialog):
         self.mode_combo.addItem("回忆模式", StudyMode.RECALL)
         self.mode_combo.addItem("四选一", StudyMode.QUIZ)
         self.voice_combo = QComboBox()
+        self.secondary_voice_combo = QComboBox()
         self.rate_slider = QSlider(Qt.Horizontal)
         self.rate_slider.setRange(-10, 10)
         self.rate_slider.setSingleStep(1)
@@ -70,7 +72,8 @@ class SettingsDialog(QDialog):
             "四选一答对时自动减 1 星"
         )
         form.addRow("默认模式", self.mode_combo)
-        form.addRow("英文语音", self.voice_combo)
+        form.addRow("主音源", self.voice_combo)
+        form.addRow("备用音源", self.secondary_voice_combo)
         form.addRow("朗读速度", rate_row)
         form.addRow("自动朗读", self.auto_speak_checkbox)
         form.addRow("自动调星", self.quiz_wrong_star_up_checkbox)
@@ -130,6 +133,9 @@ class SettingsDialog(QDialog):
         root.addWidget(buttons)
 
         self.voice_combo.currentTextChanged.connect(self._voice_changed)
+        self.secondary_voice_combo.currentTextChanged.connect(
+            self._secondary_voice_changed
+        )
         self.rate_slider.valueChanged.connect(self._rate_changed)
         self.mode_combo.currentIndexChanged.connect(self._mode_changed)
         self.auto_speak_checkbox.toggled.connect(self.autoSpeakChanged.emit)
@@ -155,16 +161,32 @@ class SettingsDialog(QDialog):
         self,
         names: tuple[str, ...],
         selected: str | None = None,
+        secondary_selected: str | None = None,
         *,
         using_default_voice: bool = False,
     ) -> None:
-        with QSignalBlocker(self.voice_combo):
+        with (
+            QSignalBlocker(self.voice_combo),
+            QSignalBlocker(self.secondary_voice_combo),
+        ):
             self.voice_combo.clear()
+            self.secondary_voice_combo.clear()
             if names:
                 self.voice_combo.addItems(names)
                 self.voice_combo.setEnabled(True)
                 if selected in names:
                     self.voice_combo.setCurrentText(selected)
+                alternatives = tuple(name for name in names if name != selected)
+                if alternatives:
+                    self.secondary_voice_combo.addItems(alternatives)
+                    self.secondary_voice_combo.setEnabled(True)
+                    if secondary_selected in alternatives:
+                        self.secondary_voice_combo.setCurrentText(
+                            secondary_selected
+                        )
+                else:
+                    self.secondary_voice_combo.addItem("未检测到第二个英文语音")
+                    self.secondary_voice_combo.setEnabled(False)
             else:
                 self.voice_combo.addItem(
                     "使用系统默认语音（建议安装英文语音包）"
@@ -172,6 +194,8 @@ class SettingsDialog(QDialog):
                     else "朗读不可用"
                 )
                 self.voice_combo.setEnabled(False)
+                self.secondary_voice_combo.addItem("备用音源不可用")
+                self.secondary_voice_combo.setEnabled(False)
 
     def set_rate(self, rate: float) -> None:
         value = max(-10, min(10, round(float(rate) * 10)))
@@ -237,6 +261,10 @@ class SettingsDialog(QDialog):
     def _voice_changed(self, name: str) -> None:
         if self.voice_combo.isEnabled() and name:
             self.voiceSelected.emit(name)
+
+    def _secondary_voice_changed(self, name: str) -> None:
+        if self.secondary_voice_combo.isEnabled() and name:
+            self.secondaryVoiceSelected.emit(name)
 
     def _rate_changed(self, value: int) -> None:
         rate = value / 10.0

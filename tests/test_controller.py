@@ -229,6 +229,12 @@ class FakeSpeech(QObject):
         self.spoken.append(word)
         return True
 
+    def speak_with_voice(self, text, voice_name):
+        if not self._available or voice_name not in self._voices:
+            return False
+        self.spoken.append((text, voice_name))
+        return True
+
     def take_availability_notice(self):
         notice = self._notice
         self._notice = None

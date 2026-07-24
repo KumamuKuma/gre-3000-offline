@@ -58,6 +58,7 @@ class ApplicationController:
         self._all_words: list[WordEntry] = []
         self._source_lists = ()
         self._auto_speak_enabled = False
+        self._secondary_voice_name: str | None = None
         self._quiz_wrong_star_up_enabled = False
         self._quiz_correct_star_down_enabled = False
         self._connect()
@@ -86,6 +87,7 @@ class ApplicationController:
         study_page.modeRequested.connect(self._set_mode)
         study_page.answerToggleRequested.connect(self._toggle_answer)
         study_page.speechRequested.connect(self._speak)
+        study_page.secondarySpeechRequested.connect(self._speak_secondary)
         study_page.starRatingRequested.connect(self._set_star_rating)
         study_page.quizChoiceRequested.connect(self._answer_quiz)
         study_page.quizWrongStarUpChanged.connect(
@@ -125,6 +127,7 @@ class ApplicationController:
         self.window.closing.connect(self._handle_close)
         self.window.enable_close_guard()
         settings.voiceSelected.connect(self._select_voice)
+        settings.secondaryVoiceSelected.connect(self._select_secondary_voice)
         settings.rateChanged.connect(self._set_rate)
         settings.defaultModeChanged.connect(self._set_default_mode)
         settings.autoSpeakChanged.connect(self._set_auto_speak)
@@ -201,17 +204,28 @@ class ApplicationController:
         names = tuple(self.speech.voice_names())
         saved_voice = self.user.load_setting("voice_name")
         selected = saved_voice if saved_voice in names else (names[0] if names else None)
+        secondary_names = tuple(name for name in names if name != selected)
+        saved_secondary = self.user.load_setting("secondary_voice_name")
+        self._secondary_voice_name = (
+            saved_secondary
+            if saved_secondary in secondary_names
+            else (secondary_names[0] if secondary_names else None)
+        )
         using_default_voice = bool(
             getattr(self.speech, "using_default_voice", False)
         )
         self.window.settings_dialog.set_voice_names(
             names,
             selected,
+            self._secondary_voice_name,
             using_default_voice=using_default_voice,
         )
         if selected:
             self.speech.select_voice(selected)
         self.window.study_page.set_speech_available(bool(self.speech.available))
+        self.window.study_page.set_secondary_speech_available(
+            bool(self.speech.available and self._secondary_voice_name)
+        )
 
         raw_rate = self.user.load_setting("speech_rate")
         try:
@@ -674,9 +688,41 @@ class ApplicationController:
     def _select_voice(self, name: str) -> None:
         if self.speech.select_voice(name):
             self.user.save_setting("voice_name", name)
+            names = tuple(self.speech.voice_names())
+            if self._secondary_voice_name == name:
+                alternatives = tuple(candidate for candidate in names if candidate != name)
+                self._secondary_voice_name = alternatives[0] if alternatives else None
+                self.user.save_setting(
+                    "secondary_voice_name", self._secondary_voice_name or ""
+                )
+            self.window.settings_dialog.set_voice_names(
+                names,
+                name,
+                self._secondary_voice_name,
+                using_default_voice=bool(
+                    getattr(self.speech, "using_default_voice", False)
+                ),
+            )
+            self.window.study_page.set_secondary_speech_available(
+                bool(self._secondary_voice_name)
+            )
             self._report_persistence_issue()
         else:
             self._show_status("无法使用所选英文语音。")
+
+    def _select_secondary_voice(self, name: str) -> None:
+        if name not in self.speech.voice_names():
+            self._show_status("无法使用所选备用英文语音。")
+            return
+        self._secondary_voice_name = name
+        self.user.save_setting("secondary_voice_name", name)
+        self.window.study_page.set_secondary_speech_available(True)
+        self._report_persistence_issue()
+
+    def _speak_secondary(self, text: str) -> None:
+        voice_name = self._secondary_voice_name
+        if not voice_name or not self.speech.speak_with_voice(text, voice_name):
+            self._show_status("当前没有可用的备用英文语音。")
 
     def _set_rate(self, rate: float) -> None:
         self.speech.set_rate(rate)
@@ -921,6 +967,9 @@ class ApplicationController:
 
     def _speech_availability_changed(self, available: bool) -> None:
         self.window.study_page.set_speech_available(bool(available))
+        self.window.study_page.set_secondary_speech_available(
+            bool(available and self._secondary_voice_name)
+        )
         if not available:
             self._show_status("语音引擎当前不可用，朗读功能已禁用。")
 

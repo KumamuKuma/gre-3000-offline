@@ -20,6 +20,7 @@ from .lookup_label import LookupLabel
 
 class WordDetail(QWidget):
     speechRequested = Signal(str)
+    secondarySpeechRequested = Signal(str)
     revealRequested = Signal()
     quizChoiceRequested = Signal(int)
     relatedWordRequested = Signal(int)
@@ -32,6 +33,7 @@ class WordDetail(QWidget):
         self._mode = StudyMode.READING
         self._revealed = True
         self._speech_available = True
+        self._secondary_speech_available = False
         self._quiz_choices: tuple[str, ...] = ()
         self._quiz_correct_index: int | None = None
         self._quiz_selected_index: int | None = None
@@ -67,13 +69,23 @@ class WordDetail(QWidget):
         self.machine7_badge.setToolTip("此词同时收录于《GRE 镇考机经词 7.0》")
         self.machine7_badge.hide()
         title_row.addWidget(self.machine7_badge)
-        self.speech_button = QPushButton("朗读")
+        self.speech_button = QPushButton("音源 1")
         self.speech_button.setObjectName("outlineButton")
         self.speech_button.setMinimumHeight(40)
         self.speech_button.setAccessibleName("朗读当前单词")
         self.speech_button.setEnabled(False)
         self.speech_button.clicked.connect(self._request_speech)
         title_row.addWidget(self.speech_button)
+        self.secondary_speech_button = QPushButton("音源 2")
+        self.secondary_speech_button.setObjectName("outlineButton")
+        self.secondary_speech_button.setMinimumHeight(40)
+        self.secondary_speech_button.setAccessibleName("使用备用音源朗读当前单词")
+        self.secondary_speech_button.setToolTip("使用设置中的备用英文语音")
+        self.secondary_speech_button.setEnabled(False)
+        self.secondary_speech_button.clicked.connect(
+            self._request_secondary_speech
+        )
+        title_row.addWidget(self.secondary_speech_button)
         word_layout.addLayout(title_row)
         self.phonetic_label = self._label(object_name="phonetic")
         word_layout.addWidget(self.phonetic_label)
@@ -141,6 +153,20 @@ class WordDetail(QWidget):
         self.example_speech_button.hide()
         self.example_speech_button.clicked.connect(self._request_example_speech)
         example_header.addWidget(self.example_speech_button)
+        self.secondary_example_speech_button = QPushButton("音源 2")
+        self.secondary_example_speech_button.setObjectName("compactButton")
+        self.secondary_example_speech_button.setAccessibleName(
+            "使用备用音源朗读当前英文例句"
+        )
+        self.secondary_example_speech_button.setToolTip(
+            "使用备用英文语音朗读完整例句"
+        )
+        self.secondary_example_speech_button.setEnabled(False)
+        self.secondary_example_speech_button.hide()
+        self.secondary_example_speech_button.clicked.connect(
+            self._request_secondary_example_speech
+        )
+        example_header.addWidget(self.secondary_example_speech_button)
         self.example_en_label = self._lookup_label()
         self.example_zh_label = self._label(object_name="muted")
         meaning_layout.addSpacing(5)
@@ -258,8 +284,14 @@ class WordDetail(QWidget):
         self.speech_button.setEnabled(
             self._speech_available and bool(word.headword)
         )
+        self.secondary_speech_button.setEnabled(
+            self._secondary_speech_available and bool(word.headword)
+        )
         self.example_speech_button.setEnabled(
             self._speech_available and bool(word.example_en)
+        )
+        self.secondary_example_speech_button.setEnabled(
+            self._secondary_speech_available and bool(word.example_en)
         )
         self._populate_root_relations()
         self._populate_related_words(
@@ -292,6 +324,11 @@ class WordDetail(QWidget):
         self.example_zh_label.setVisible(not brief and bool(self.example_zh_label.text()))
         self.example_speech_button.setVisible(
             not brief and bool(self.example_en_label.text())
+        )
+        self.secondary_example_speech_button.setVisible(
+            not brief
+            and self._secondary_speech_available
+            and bool(self.example_en_label.text())
         )
 
         recall = self._mode is StudyMode.RECALL
@@ -433,6 +470,25 @@ class WordDetail(QWidget):
             and bool(self._word.example_en)
         )
 
+    def set_secondary_speech_available(self, available: bool) -> None:
+        self._secondary_speech_available = bool(available)
+        self.secondary_speech_button.setEnabled(
+            self._secondary_speech_available
+            and self._word is not None
+            and bool(self._word.headword)
+        )
+        self.secondary_example_speech_button.setEnabled(
+            self._secondary_speech_available
+            and self._word is not None
+            and bool(self._word.example_en)
+        )
+        brief = self._mode in (StudyMode.BRIEF, StudyMode.RECALL)
+        self.secondary_example_speech_button.setVisible(
+            self._secondary_speech_available
+            and not brief
+            and bool(self.example_en_label.text())
+        )
+
     def _request_speech(self) -> None:
         if (
             self._speech_available
@@ -448,6 +504,22 @@ class WordDetail(QWidget):
             and self._word.example_en
         ):
             self.speechRequested.emit(self._word.example_en)
+
+    def _request_secondary_speech(self) -> None:
+        if (
+            self._secondary_speech_available
+            and self._word is not None
+            and self._word.headword
+        ):
+            self.secondarySpeechRequested.emit(self._word.headword)
+
+    def _request_secondary_example_speech(self) -> None:
+        if (
+            self._secondary_speech_available
+            and self._word is not None
+            and self._word.example_en
+        ):
+            self.secondarySpeechRequested.emit(self._word.example_en)
 
     @staticmethod
     def _clear_relation_layout(layout: QVBoxLayout) -> None:

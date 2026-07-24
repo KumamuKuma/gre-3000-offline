@@ -15,10 +15,20 @@ def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
     ]
     dialog.set_voice_names(("Microsoft Zira", "Microsoft David"), "Microsoft Zira")
     assert dialog.voice_combo.currentText() == "Microsoft Zira"
+    assert dialog.secondary_voice_combo.currentText() == "Microsoft David"
 
     with qtbot.waitSignal(dialog.voiceSelected) as voice:
         dialog.voice_combo.setCurrentText("Microsoft David")
     assert voice.args == ["Microsoft David"]
+
+    dialog.set_voice_names(
+        ("Microsoft Zira", "Microsoft David", "Bob"),
+        "Microsoft Zira",
+        "Microsoft David",
+    )
+    with qtbot.waitSignal(dialog.secondaryVoiceSelected) as secondary_voice:
+        dialog.secondary_voice_combo.setCurrentText("Bob")
+    assert secondary_voice.args == ["Bob"]
 
     with qtbot.waitSignal(dialog.rateChanged) as rate:
         dialog.rate_slider.setValue(4)
@@ -113,6 +123,7 @@ def test_settings_distinguishes_default_voice_fallback_from_unavailable(qtbot):
     dialog.set_voice_names((), using_default_voice=True)
     assert "系统默认" in dialog.voice_combo.currentText()
     assert not dialog.voice_combo.isEnabled()
+    assert not dialog.secondary_voice_combo.isEnabled()
 
     dialog.set_voice_names((), using_default_voice=False)
     assert "不可用" in dialog.voice_combo.currentText()

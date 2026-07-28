@@ -20,6 +20,16 @@ from gre_vocab_app.domain import RelatedWord, RootFamily, StudyMode, WordEntry
 from .lookup_label import LookupLabel
 
 
+_CIRCLED_SENSE_NUMBERS = {
+    marker: str(index)
+    for index, marker in enumerate("①②③④⑤⑥⑦⑧⑨⑩", start=1)
+}
+_SENSE_PREFIX_RE = re.compile(
+    r"^\s*(?P<marker>\((?P<number>\d+)\)|"
+    r"(?P<circled>[①②③④⑤⑥⑦⑧⑨⑩]))\s*"
+)
+
+
 class WordDetail(QWidget):
     speechRequested = Signal(str)
     secondarySpeechRequested = Signal(str)
@@ -147,7 +157,7 @@ class WordDetail(QWidget):
         example_header.setContentsMargins(0, 0, 0, 0)
         example_header.addWidget(self.example_title)
         example_header.addStretch(1)
-        self.example_speech_button = QPushButton("朗读例句")
+        self.example_speech_button = QPushButton("音源 1")
         self.example_speech_button.setObjectName("compactButton")
         self.example_speech_button.setAccessibleName("朗读当前英文例句")
         self.example_speech_button.setToolTip("朗读完整英文例句")
@@ -398,18 +408,14 @@ class WordDetail(QWidget):
             text = choice
             style_name = ""
             if answered and index == valid_correct:
-                displayed_choice = (
-                    self._meaning_with_part_of_speech(
-                        choice,
-                        self._word.definition_en if self._word else "",
-                    )
-                    if valid_selected == valid_correct
-                    else choice
+                displayed_choice = self._meaning_with_parts_of_speech(
+                    choice,
+                    self._word.definition_en if self._word else "",
                 )
                 text = (
                     f"✓ 回答正确：{displayed_choice}"
                     if valid_selected == valid_correct
-                    else f"✓ 正确答案：{choice}"
+                    else f"✓ 正确答案：{displayed_choice}"
                 )
                 style_name = "primaryButton"
             elif answered and index == valid_selected:
@@ -462,19 +468,64 @@ class WordDetail(QWidget):
         self.meaning_panel.setVisible(visible and has_example)
 
     @classmethod
-    def _meaning_with_part_of_speech(
+    def _meaning_with_parts_of_speech(
         cls, meaning: str, definition: str
     ) -> str:
-        part_of_speech = cls._part_of_speech_text(definition)
-        if part_of_speech == "未标明":
-            return meaning
-        return f"{part_of_speech}{meaning}"
+        sense_labels: dict[str, str] = {}
+        for line in definition.splitlines():
+            match = _SENSE_PREFIX_RE.match(line)
+            if not match:
+                continue
+            sense_number = match.group("number") or _CIRCLED_SENSE_NUMBERS.get(
+                match.group("circled"), ""
+            )
+            label = cls._part_of_speech_text(line[match.end():])
+            if sense_number and label != "未标明":
+                sense_labels[sense_number] = label
+
+        fallback_label = cls._part_of_speech_text(definition)
+        meaning_lines = meaning.splitlines()
+        nonblank_count = sum(bool(line.strip()) for line in meaning_lines)
+        next_unnumbered_sense = 1
+        rendered: list[str] = []
+
+        for line in meaning_lines:
+            if not line.strip():
+                rendered.append(line)
+                continue
+
+            match = _SENSE_PREFIX_RE.match(line)
+            if match:
+                sense_number = (
+                    match.group("number")
+                    or _CIRCLED_SENSE_NUMBERS.get(match.group("circled"), "")
+                )
+                label = sense_labels.get(sense_number, "")
+                if not label and not sense_labels:
+                    label = fallback_label
+                content = line[match.end():].lstrip()
+                rendered.append(
+                    f"{match.group('marker')}{label}{content}"
+                    if label != "未标明"
+                    else line
+                )
+                continue
+
+            label = ""
+            if sense_labels and nonblank_count > 1:
+                label = sense_labels.get(str(next_unnumbered_sense), "")
+                next_unnumbered_sense += 1
+            elif fallback_label != "未标明":
+                label = fallback_label
+            rendered.append(f"{label}{line.lstrip()}" if label else line)
+
+        return "\n".join(rendered)
 
     @staticmethod
     def _part_of_speech_text(definition: str) -> str:
         matches = re.findall(
-            r"(?i)(?:^|[\s(])(?:\d+\))?"
-            r"(adj|adv|prep|conj|pron|interj|aux|n|v)\.",
+            r"(?i)(?:^|[\s(/,])(?:\d+\))?"
+            r"(adj|adv|prep|conj|pron|interj|aux|det|num|vt|vi|n|v)\.",
             definition,
         )
         labels: list[str] = []
@@ -482,7 +533,7 @@ class WordDetail(QWidget):
             label = f"{match.lower()}."
             if label not in labels:
                 labels.append(label)
-        return " / ".join(labels) if labels else "未标明"
+        return "/".join(labels) if labels else "未标明"
 
     @staticmethod
     def _set_button_style(button: QPushButton, object_name: str) -> None:

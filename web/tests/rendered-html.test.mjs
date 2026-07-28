@@ -51,7 +51,9 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(page, /到\{allStarsSelected \? " List" : "筛选"\}开头/);
   assert.match(page, /到\{allStarsSelected \? " List" : "筛选"\}结尾/);
   assert.match(page, /showCorrectQuizReview/);
-  assert.match(page, /meaningWithPartOfSpeech/);
+  assert.match(page, /meaningWithPartsOfSpeech/);
+  assert.match(page, /▶ 音源 1/);
+  assert.doesNotMatch(page, /▶ 朗读例句/);
   assert.doesNotMatch(page, /<span>词性<\/span>/);
   assert.match(page, /答错 \+1 星/);
   assert.match(page, /答对 −1 星/);

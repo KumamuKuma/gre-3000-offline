@@ -54,6 +54,7 @@ def test_reading_shows_full_content_and_brief_hides_optional_sections(
     assert detail.synonyms_label.isVisible()
     assert detail.example_en_label.isVisible()
     assert detail.example_zh_label.isVisible()
+    assert detail.example_speech_button.text() == "音源 1"
     assert detail.example_speech_button.isVisible()
     assert detail.example_speech_button.isEnabled()
     assert detail.secondary_speech_button.isEnabled()
@@ -111,6 +112,7 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
     assert choice_spy.at(0) == [1]
     assert detail.quiz_buttons[1].text().startswith("✗ 你的选择")
     assert detail.quiz_buttons[2].text().startswith("✓ 正确答案")
+    assert "adj." + choices[2] in detail.quiz_buttons[2].text()
     assert "回答错误" in detail.quiz_feedback_label.text()
 
     detail.set_word(
@@ -123,6 +125,7 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
     assert detail.quiz_buttons[1].text().startswith("✗ 你的选择")
     assert detail.quiz_buttons[1].objectName() == "dangerButton"
     assert detail.quiz_buttons[2].text().startswith("✓ 正确答案")
+    assert "adj." + choices[2] in detail.quiz_buttons[2].text()
     assert detail.quiz_buttons[2].objectName() == "primaryButton"
     assert "回答错误" in detail.quiz_feedback_label.text()
     assert detail.meaning_panel.isHidden()
@@ -145,8 +148,12 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
     assert detail.example_en_label.isVisible()
     assert detail.example_en_label.text() == sample_word.example_en
     assert detail.definition_label.isHidden()
-    assert detail._meaning_with_part_of_speech("快乐的", "adj. happy") == "adj.快乐的"
-    assert detail._meaning_with_part_of_speech("快乐", "happiness") == "快乐"
+    assert detail._meaning_with_parts_of_speech("快乐的", "adj. happy") == "adj.快乐的"
+    assert detail._meaning_with_parts_of_speech("快乐", "happiness") == "快乐"
+    assert detail._meaning_with_parts_of_speech(
+        "(1) 快乐的\n\n(2) 使快乐",
+        "(1)adj. happy\n(2)v. to make happy",
+    ) == "(1)adj.快乐的\n\n(2)v.使快乐"
 
 
 def test_word_detail_clears_stale_optional_fields_and_supports_long_text(

@@ -192,14 +192,51 @@ function starFilterSetting(ratings: number[]) {
 }
 
 function partOfSpeech(definition: string) {
-  const matches = [...definition.matchAll(/(?:^|[\s(])(?:\d+\))?(adj|adv|prep|conj|pron|interj|aux|n|v)\./gi)];
+  const matches = [...definition.matchAll(/(?:^|[\s(/,])(?:\d+\))?(adj|adv|prep|conj|pron|interj|aux|det|num|vt|vi|n|v)\./gi)];
   const labels = [...new Set(matches.map((match) => `${match[1].toLowerCase()}.`))];
-  return labels.join(" / ") || "未标明";
+  return labels.join("/") || "未标明";
 }
 
-function meaningWithPartOfSpeech(meaning: string, definition: string) {
-  const label = partOfSpeech(definition);
-  return label === "未标明" ? meaning : `${label}${meaning}`;
+const circledSenseNumbers: Record<string, string> = Object.fromEntries(
+  [..."①②③④⑤⑥⑦⑧⑨⑩"].map((marker, index) => [marker, String(index + 1)]),
+);
+const sensePrefix = /^\s*(\((\d+)\)|([①②③④⑤⑥⑦⑧⑨⑩]))\s*/;
+
+function meaningWithPartsOfSpeech(meaning: string, definition: string) {
+  const senseLabels = new Map<string, string>();
+  for (const line of definition.split("\n")) {
+    const match = line.match(sensePrefix);
+    if (!match) continue;
+    const senseNumber = match[2] || circledSenseNumbers[match[3]];
+    const label = partOfSpeech(line.slice(match[0].length));
+    if (senseNumber && label !== "未标明") senseLabels.set(senseNumber, label);
+  }
+
+  const fallbackLabel = partOfSpeech(definition);
+  const lines = meaning.split("\n");
+  const nonblankCount = lines.filter((line) => line.trim()).length;
+  let nextUnnumberedSense = 1;
+
+  return lines.map((line) => {
+    if (!line.trim()) return line;
+    const match = line.match(sensePrefix);
+    if (match) {
+      const senseNumber = match[2] || circledSenseNumbers[match[3]];
+      const label = senseLabels.get(senseNumber) || (senseLabels.size ? "" : fallbackLabel);
+      return label && label !== "未标明"
+        ? `${match[1]}${label}${line.slice(match[0].length).trimStart()}`
+        : line;
+    }
+
+    let label = "";
+    if (senseLabels.size && nonblankCount > 1) {
+      label = senseLabels.get(String(nextUnnumberedSense)) || "";
+      nextUnnumberedSense += 1;
+    } else if (fallbackLabel !== "未标明") {
+      label = fallbackLabel;
+    }
+    return label ? `${label}${line.trimStart()}` : line;
+  }).join("\n");
 }
 
 function defaultProgress(data: ContentPayload): Progress {
@@ -1101,8 +1138,8 @@ export default function Home() {
                       {quiz.choices.map((choice, index) => {
                         const answered = quizSelected !== null;
                         const className = answered && index === quiz.correct ? "quiz-option correct" : answered && index === quizSelected ? "quiz-option wrong" : "quiz-option";
-                        const displayedChoice = answered && index === quiz.correct && quizSelected === quiz.correct
-                          ? meaningWithPartOfSpeech(choice, activeWord.definition_en)
+                        const displayedChoice = answered && index === quiz.correct
+                          ? meaningWithPartsOfSpeech(choice, activeWord.definition_en)
                           : choice;
                         return <button className={className} key={choice} onClick={() => answerQuiz(index)}><span>{String.fromCharCode(65 + index)}</span>{displayedChoice}</button>;
                       })}
@@ -1112,7 +1149,7 @@ export default function Home() {
 
             {showCorrectQuizReview && (
               <div className="answer-block quiz-review">
-                {activeWord.example_en && <div className="example"><div className="example-heading"><span>例句</span><button onClick={() => speak(activeWord.example_en)} aria-label="朗读完整英文例句">▶ 朗读例句</button></div><p><LookupText text={activeWord.example_en} onLookup={openLookup} /></p><small>{activeWord.example_zh}</small></div>}
+                {activeWord.example_en && <div className="example"><div className="example-heading"><span>例句</span><button onClick={() => speak(activeWord.example_en)} aria-label="朗读完整英文例句">▶ 音源 1</button></div><p><LookupText text={activeWord.example_en} onLookup={openLookup} /></p><small>{activeWord.example_zh}</small></div>}
               </div>
             )}
 
@@ -1121,7 +1158,7 @@ export default function Home() {
                 <p className="definition-en"><LookupText text={activeWord.definition_en} onLookup={openLookup} /></p>
                 <p className="definition-zh">{activeWord.definition_zh}</p>
                 {mode === "reading" && activeWord.synonyms && <div className="detail-line"><span>近义词</span><p><LookupText text={activeWord.synonyms} onLookup={openLookup} /></p></div>}
-                {mode === "reading" && activeWord.example_en && <div className="example"><div className="example-heading"><span>例句</span><button onClick={() => speak(activeWord.example_en)} aria-label="朗读完整英文例句">▶ 朗读例句</button></div><p><LookupText text={activeWord.example_en} onLookup={openLookup} /></p><small>{activeWord.example_zh}</small></div>}
+                {mode === "reading" && activeWord.example_en && <div className="example"><div className="example-heading"><span>例句</span><button onClick={() => speak(activeWord.example_en)} aria-label="朗读完整英文例句">▶ 音源 1</button></div><p><LookupText text={activeWord.example_en} onLookup={openLookup} /></p><small>{activeWord.example_zh}</small></div>}
               </div>
             )}
 

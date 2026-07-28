@@ -131,13 +131,6 @@ class WordDetail(QWidget):
         meaning_layout.setContentsMargins(26, 21, 26, 23)
         meaning_layout.setSpacing(9)
 
-        self.quiz_pos_title = self._section_title("词性")
-        self.quiz_pos_label = self._label()
-        self.quiz_pos_title.hide()
-        self.quiz_pos_label.hide()
-        meaning_layout.addWidget(self.quiz_pos_title)
-        meaning_layout.addWidget(self.quiz_pos_label)
-
         self.definition_label = self._lookup_label(object_name="definition")
         self.definition_zh_label = self._label()
         meaning_layout.addWidget(self.definition_label)
@@ -276,9 +269,6 @@ class WordDetail(QWidget):
         self.phonetic_label.setText(word.phonetic)
         self.definition_label.set_lookup_text(word.definition_en)
         self.definition_zh_label.setText(word.definition_zh)
-        self.quiz_pos_label.setText(
-            self._part_of_speech_text(word.definition_en)
-        )
         self.synonyms_label.set_lookup_text(word.synonyms)
         self.example_en_label.set_lookup_text(word.example_en)
         self.example_zh_label.setText(word.example_zh)
@@ -359,8 +349,6 @@ class WordDetail(QWidget):
             self.set_revealed(answer_visible if recall else True)
 
     def _clear_quiz(self) -> None:
-        self.quiz_pos_title.hide()
-        self.quiz_pos_label.hide()
         self._quiz_choices = ()
         self._quiz_correct_index = None
         self._quiz_selected_index = None
@@ -410,8 +398,16 @@ class WordDetail(QWidget):
             text = choice
             style_name = ""
             if answered and index == valid_correct:
+                displayed_choice = (
+                    self._meaning_with_part_of_speech(
+                        choice,
+                        self._word.definition_en if self._word else "",
+                    )
+                    if valid_selected == valid_correct
+                    else choice
+                )
                 text = (
-                    f"✓ 回答正确：{choice}"
+                    f"✓ 回答正确：{displayed_choice}"
                     if valid_selected == valid_correct
                     else f"✓ 正确答案：{choice}"
                 )
@@ -441,12 +437,9 @@ class WordDetail(QWidget):
         self._update_relation_visibility()
 
     def _set_quiz_review_visible(self, visible: bool) -> None:
-        has_pos = bool(self.quiz_pos_label.text())
         has_example = bool(
             self.example_en_label.text() or self.example_zh_label.text()
         )
-        self.quiz_pos_title.setVisible(visible and has_pos)
-        self.quiz_pos_label.setVisible(visible and has_pos)
         self.definition_label.hide()
         self.definition_zh_label.hide()
         self.synonyms_title.hide()
@@ -466,7 +459,16 @@ class WordDetail(QWidget):
             and self._secondary_speech_available
             and bool(self.example_en_label.text())
         )
-        self.meaning_panel.setVisible(visible and (has_pos or has_example))
+        self.meaning_panel.setVisible(visible and has_example)
+
+    @classmethod
+    def _meaning_with_part_of_speech(
+        cls, meaning: str, definition: str
+    ) -> str:
+        part_of_speech = cls._part_of_speech_text(definition)
+        if part_of_speech == "未标明":
+            return meaning
+        return f"{part_of_speech}{meaning}"
 
     @staticmethod
     def _part_of_speech_text(definition: str) -> str:

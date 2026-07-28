@@ -138,13 +138,15 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
         quiz_selected_index=2,
     )
     assert detail.quiz_buttons[2].text().startswith("✓ 回答正确")
+    assert "adj." + choices[2] in detail.quiz_buttons[2].text()
     assert detail.quiz_feedback_label.text() == "回答正确"
     assert detail.meaning_panel.isVisible()
-    assert detail.quiz_pos_label.isVisible()
-    assert detail.quiz_pos_label.text() == "adj."
+    assert not hasattr(detail, "quiz_pos_label")
     assert detail.example_en_label.isVisible()
     assert detail.example_en_label.text() == sample_word.example_en
     assert detail.definition_label.isHidden()
+    assert detail._meaning_with_part_of_speech("快乐的", "adj. happy") == "adj.快乐的"
+    assert detail._meaning_with_part_of_speech("快乐", "happiness") == "快乐"
 
 
 def test_word_detail_clears_stale_optional_fields_and_supports_long_text(

@@ -197,6 +197,11 @@ function partOfSpeech(definition: string) {
   return labels.join(" / ") || "未标明";
 }
 
+function meaningWithPartOfSpeech(meaning: string, definition: string) {
+  const label = partOfSpeech(definition);
+  return label === "未标明" ? meaning : `${label}${meaning}`;
+}
+
 function defaultProgress(data: ContentPayload): Progress {
   return {
     schema: "gre-vocab-progress",
@@ -1093,18 +1098,20 @@ export default function Home() {
                   <label><input type="checkbox" checked={progress.settings.quiz_correct_star_down === "1"} onChange={(event) => setSetting("quiz_correct_star_down", event.target.checked ? "1" : "0")} />答对 −1 星</label>
                 </div>
                 <div className="quiz-grid">
-                  {quiz.choices.map((choice, index) => {
-                    const answered = quizSelected !== null;
-                    const className = answered && index === quiz.correct ? "quiz-option correct" : answered && index === quizSelected ? "quiz-option wrong" : "quiz-option";
-                    return <button className={className} key={choice} onClick={() => answerQuiz(index)}><span>{String.fromCharCode(65 + index)}</span>{choice}</button>;
-                  })}
+                      {quiz.choices.map((choice, index) => {
+                        const answered = quizSelected !== null;
+                        const className = answered && index === quiz.correct ? "quiz-option correct" : answered && index === quizSelected ? "quiz-option wrong" : "quiz-option";
+                        const displayedChoice = answered && index === quiz.correct && quizSelected === quiz.correct
+                          ? meaningWithPartOfSpeech(choice, activeWord.definition_en)
+                          : choice;
+                        return <button className={className} key={choice} onClick={() => answerQuiz(index)}><span>{String.fromCharCode(65 + index)}</span>{displayedChoice}</button>;
+                      })}
                 </div>
               </>
             )}
 
             {showCorrectQuizReview && (
               <div className="answer-block quiz-review">
-                <div className="detail-line"><span>词性</span><p>{partOfSpeech(activeWord.definition_en)}</p></div>
                 {activeWord.example_en && <div className="example"><div className="example-heading"><span>例句</span><button onClick={() => speak(activeWord.example_en)} aria-label="朗读完整英文例句">▶ 朗读例句</button></div><p><LookupText text={activeWord.example_en} onLookup={openLookup} /></p><small>{activeWord.example_zh}</small></div>}
               </div>
             )}

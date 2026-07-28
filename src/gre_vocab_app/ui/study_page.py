@@ -194,7 +194,7 @@ class StudyPage(QWidget):
         self.position_label.setText(
             f"{prefix}{snapshot.index + 1:,} / {snapshot.total:,}"
         )
-        scope_label = "筛选" if snapshot.star_filter is not None else "List"
+        scope_label = "筛选" if snapshot.star_filters else "List"
         self.first_button.setText(f"到{scope_label}开头")
         self.first_button.setAccessibleName(f"回到当前{scope_label}的第一个单词")
         self.last_button.setText(f"到{scope_label}结尾")

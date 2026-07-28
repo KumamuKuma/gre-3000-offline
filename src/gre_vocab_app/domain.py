@@ -65,6 +65,7 @@ class SessionSnapshot:
     at_end: bool
     star_rating: int = 0
     star_filter: int | None = None
+    star_filters: tuple[int, ...] = ()
     list_key: str | None = None
     list_keys: tuple[str, ...] = ()
     list_label: str = ""

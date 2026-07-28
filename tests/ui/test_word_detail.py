@@ -125,6 +125,7 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
     assert detail.quiz_buttons[2].text().startswith("✓ 正确答案")
     assert detail.quiz_buttons[2].objectName() == "primaryButton"
     assert "回答错误" in detail.quiz_feedback_label.text()
+    assert detail.meaning_panel.isHidden()
     assert all(not button.isEnabled() for button in detail.quiz_buttons)
     detail.quiz_buttons[0].click()
     assert choice_spy.count() == 1
@@ -138,6 +139,12 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
     )
     assert detail.quiz_buttons[2].text().startswith("✓ 回答正确")
     assert detail.quiz_feedback_label.text() == "回答正确"
+    assert detail.meaning_panel.isVisible()
+    assert detail.quiz_pos_label.isVisible()
+    assert detail.quiz_pos_label.text() == "adj."
+    assert detail.example_en_label.isVisible()
+    assert detail.example_en_label.text() == sample_word.example_en
+    assert detail.definition_label.isHidden()
 
 
 def test_word_detail_clears_stale_optional_fields_and_supports_long_text(

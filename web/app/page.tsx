@@ -173,6 +173,30 @@ function starListKeys(value: string | undefined, data: ContentPayload) {
   return normalized === "all" ? allKeys : normalized.split(",");
 }
 
+function starRatings(value: string | undefined) {
+  if (!value || value === "all") return [0, 1, 2, 3];
+  const raw = value.startsWith("stars:")
+    ? value.slice("stars:".length).split(",")
+    : value.startsWith("star:")
+      ? [value.slice("star:".length)]
+      : [];
+  const selected = [...new Set(raw.map(Number).filter((rating) => Number.isInteger(rating) && rating >= 0 && rating <= 3))].sort();
+  return selected.length ? selected : [0, 1, 2, 3];
+}
+
+function starFilterSetting(ratings: number[]) {
+  const selected = [...new Set(ratings)].sort();
+  if (selected.length === 4) return "all";
+  if (selected.length === 1) return `star:${selected[0]}`;
+  return `stars:${selected.join(",")}`;
+}
+
+function partOfSpeech(definition: string) {
+  const matches = [...definition.matchAll(/(?:^|[\s(])(?:\d+\))?(adj|adv|prep|conj|pron|interj|aux|n|v)\./gi)];
+  const labels = [...new Set(matches.map((match) => `${match[1].toLowerCase()}.`))];
+  return labels.join(" / ") || "未标明";
+}
+
 function defaultProgress(data: ContentPayload): Progress {
   return {
     schema: "gre-vocab-progress",
@@ -186,6 +210,7 @@ function defaultProgress(data: ContentPayload): Progress {
     ),
     settings: {
       study_list: data.lists[0]?.key ?? "list1",
+      study_lists: "all",
       study_star_lists: "all",
       study_filter: "all",
       study_mode: "reading",
@@ -233,9 +258,13 @@ function normalizeProgress(value: unknown, data: ContentPayload): Progress {
 
   const settings = raw.settings && typeof raw.settings === "object" ? raw.settings : {};
   const list = validLists.has(settings.study_list) ? settings.study_list : data.lists[0]?.key ?? "list1";
-  const filter = /^(all|star:[0-3])$/.test(settings.study_filter ?? "") ? settings.study_filter : "all";
+  const parsedRatings = starRatings(settings.study_filter);
+  const filter = starFilterSetting(parsedRatings);
   const mode = MODES.some((item) => item.key === settings.study_mode) ? settings.study_mode : "reading";
-  const starScope = normalizeStarListScope(settings.study_star_lists, data);
+  const legacyScope = filter === "all"
+    ? settings.study_list ?? settings.study_star_lists
+    : settings.study_star_lists ?? settings.study_list;
+  const starScope = normalizeStarListScope(settings.study_lists ?? legacyScope, data);
   const rawStarWordId = Number(settings.study_star_current_word_id);
   const starWordSetting = (
     Number.isInteger(rawStarWordId) && validIds.has(rawStarWordId)
@@ -249,6 +278,7 @@ function normalizeProgress(value: unknown, data: ContentPayload): Progress {
     lists,
     settings: {
       study_list: list,
+      study_lists: starScope,
       study_star_lists: starScope,
       ...starWordSetting,
       study_filter: filter,
@@ -523,26 +553,24 @@ export default function Home() {
     () => new Map(data?.words.map((word) => [normalizeLookupQuery(word.word), word]) ?? []),
     [data],
   );
-  const selectedList = progress?.settings.study_list ?? data?.lists[0]?.key ?? "list1";
   const starFilter = progress?.settings.study_filter ?? "all";
+  const selectedStarRatings = useMemo(() => starRatings(starFilter), [starFilter]);
+  const allStarsSelected = selectedStarRatings.length === 4;
   const mode = (progress?.settings.study_mode ?? "reading") as StudyMode;
-  const selectedListMeta = data?.lists.find((item) => item.key === selectedList);
-  const listWords = useMemo(() => data?.words.filter((word) => word.list === selectedList) ?? [], [data, selectedList]);
-  const selectedStarListKeys = useMemo(
-    () => data ? starListKeys(progress?.settings.study_star_lists, data) : [],
-    [data, progress?.settings.study_star_lists],
+  const selectedListKeys = useMemo(
+    () => data ? starListKeys(progress?.settings.study_lists ?? progress?.settings.study_star_lists ?? progress?.settings.study_list, data) : [],
+    [data, progress?.settings.study_list, progress?.settings.study_lists, progress?.settings.study_star_lists],
   );
-  const selectedStarListSet = useMemo(() => new Set(selectedStarListKeys), [selectedStarListKeys]);
-  const scopeWords = useMemo(() => {
-    if (!data || starFilter === "all") return listWords;
-    return data.words.filter((word) => selectedStarListSet.has(word.list));
-  }, [data, listWords, selectedStarListSet, starFilter]);
+  const selectedListSet = useMemo(() => new Set(selectedListKeys), [selectedListKeys]);
+  const scopeWords = useMemo(
+    () => data?.words.filter((word) => selectedListSet.has(word.list)) ?? [],
+    [data, selectedListSet],
+  );
   const studyQueue = useMemo(() => {
     if (!progress) return [];
-    if (starFilter === "all") return scopeWords;
-    const rating = Number(starFilter.slice(-1));
-    return scopeWords.filter((word) => (progress.stars[String(word.id)] ?? 0) === rating);
-  }, [progress, scopeWords, starFilter]);
+    if (allStarsSelected) return scopeWords;
+    return scopeWords.filter((word) => selectedStarRatings.includes(progress.stars[String(word.id)] ?? 0));
+  }, [allStarsSelected, progress, scopeWords, selectedStarRatings]);
   const activeWord = activeWordId ? wordMap.get(activeWordId) ?? null : null;
   const activeQueueIndex = activeWord ? studyQueue.findIndex((word) => word.id === activeWord.id) : -1;
 
@@ -552,13 +580,13 @@ export default function Home() {
     return counts;
   }, [progress, scopeWords]);
   const studyScopeLabel = useMemo(() => {
-    if (!data || starFilter === "all") return selectedListMeta?.label ?? "本 List";
-    if (selectedStarListKeys.length === data.lists.length) return "全部 List";
-    if (selectedStarListKeys.length === 1) {
-      return data.lists.find((item) => item.key === selectedStarListKeys[0])?.label ?? "1 个 List";
+    if (!data) return "所选 List";
+    if (selectedListKeys.length === data.lists.length) return "全部 List";
+    if (selectedListKeys.length === 1) {
+      return data.lists.find((item) => item.key === selectedListKeys[0])?.label ?? "1 个 List";
     }
-    return `已选 ${selectedStarListKeys.length} 个 List`;
-  }, [data, selectedListMeta?.label, selectedStarListKeys, starFilter]);
+    return `已选 ${selectedListKeys.length} 个 List`;
+  }, [data, selectedListKeys]);
 
   const quiz = useMemo(() => {
     if (!data || !activeWord) return { choices: [] as string[], correct: -1 };
@@ -587,25 +615,52 @@ export default function Home() {
     updateProgress((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
   }
 
-  function setStarListScope(keys: string[]) {
+  function setListScope(keys: string[]) {
     if (!data || !keys.length) return;
     const selected = data.lists.map((item) => item.key).filter((key) => keys.includes(key));
     if (!selected.length) return;
-    setSetting("study_star_lists", selected.length === data.lists.length ? "all" : selected.join(","));
+    const value = selected.length === data.lists.length ? "all" : selected.join(",");
+    updateProgress((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        study_lists: value,
+        study_star_lists: value,
+        ...(selected.length === 1 ? { study_list: selected[0] } : {}),
+      },
+    }));
   }
 
-  function toggleStarList(key: string) {
-    const selected = new Set(selectedStarListKeys);
+  function toggleList(key: string) {
+    const selected = new Set(selectedListKeys);
     if (selected.has(key)) {
       if (selected.size === 1) {
-        setNotice("星级学习范围至少保留一个 List。");
+        setNotice("学习范围至少保留一个 List。");
         return;
       }
       selected.delete(key);
     } else {
       selected.add(key);
     }
-    setStarListScope([...selected]);
+    setListScope([...selected]);
+  }
+
+  function toggleStarRating(rating: number) {
+    if (allStarsSelected) {
+      setSetting("study_filter", `star:${rating}`);
+      return;
+    }
+    const selected = new Set(selectedStarRatings);
+    if (selected.has(rating)) {
+      if (selected.size === 1) {
+        setNotice("星级筛选至少保留一个星级。");
+        return;
+      }
+      selected.delete(rating);
+    } else {
+      selected.add(rating);
+    }
+    setSetting("study_filter", starFilterSetting([...selected]));
   }
 
   function startStudy() {
@@ -613,12 +668,13 @@ export default function Home() {
       setNotice("所选 List 范围中没有符合当前星级的单词。");
       return;
     }
-    const saved = starFilter === "all"
-      ? progress.lists[selectedList]?.current_word_id
+    const singleList = selectedListKeys.length === 1 ? selectedListKeys[0] : null;
+    const saved = allStarsSelected && singleList
+      ? progress.lists[singleList]?.current_word_id
       : Number(progress.settings.study_star_current_word_id);
     const candidate = studyQueue.find((word) => word.id === saved) ?? studyQueue[0];
     setActiveWordId(candidate.id);
-    if (starFilter !== "all") {
+    if (!allStarsSelected || !singleList) {
       setSetting("study_star_current_word_id", String(candidate.id));
     }
     setAnswerVisible(mode === "reading" || mode === "brief");
@@ -628,7 +684,7 @@ export default function Home() {
 
   function openWord(word: WordEntry) {
     setActiveWordId(word.id);
-    setSetting("study_list", word.list);
+    setListScope([word.list]);
     setAnswerVisible(mode === "reading" || mode === "brief");
     setQuizSelected(null);
     setScreen("study");
@@ -643,11 +699,11 @@ export default function Home() {
     setQuizSelected(null);
     updateProgress((current) => ({
       ...current,
-      ...(starFilter === "all"
+      ...(allStarsSelected && selectedListKeys.length === 1
         ? {
             lists: {
               ...current.lists,
-              [selectedList]: { ...current.lists[selectedList], current_word_id: next.id },
+              [selectedListKeys[0]]: { ...current.lists[selectedListKeys[0]], current_word_id: next.id },
             },
           }
         : {
@@ -836,15 +892,16 @@ export default function Home() {
   function completeRound() {
     updateProgress((current) => ({
       ...current,
-      lists: {
-        ...current.lists,
-        [selectedList]: {
-          ...current.lists[selectedList],
-          completed_count: (current.lists[selectedList]?.completed_count ?? 0) + 1,
-        },
-      },
+      lists: Object.fromEntries(
+        Object.entries(current.lists).map(([key, value]) => [
+          key,
+          selectedListSet.has(key)
+            ? { ...value, completed_count: value.completed_count + 1 }
+            : value,
+        ]),
+      ),
     }));
-    setNotice(`${selectedListMeta?.label ?? "本 List"} 已完成一轮。`);
+    setNotice(`${studyScopeLabel} 已完成一轮，所选 List 次数均已增加。`);
     setScreen("home");
   }
 
@@ -921,6 +978,7 @@ export default function Home() {
 
   const relationVisible = mode === "reading" || mode === "brief" || answerVisible || quizSelected !== null;
   const showAnswer = mode === "reading" || mode === "brief" || (mode === "recall" && answerVisible);
+  const showCorrectQuizReview = mode === "quiz" && quizSelected === quiz.correct;
   const filteredWords = query.trim()
     ? data.words.filter((word) => word.word.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 80)
     : data.words.slice(0, 80);
@@ -952,11 +1010,23 @@ export default function Home() {
           </div>
 
           <section className="study-card">
-            <div className="section-heading"><div><span>本次学习</span><h2>{studyScopeLabel}</h2></div><em>{starFilter === "all" ? scopeWords.length : studyQueue.length} 词</em></div>
-            <label className="field-label" htmlFor="list-select">选择 List</label>
-            <select id="list-select" value={selectedList} onChange={(event) => setSetting("study_list", event.target.value)}>
-              {data.lists.map((item) => <option value={item.key} key={item.key}>{item.label} · {item.count} 词</option>)}
-            </select>
+            <div className="section-heading"><div><span>本次学习</span><h2>{studyScopeLabel}</h2></div><em>{studyQueue.length} 词</em></div>
+            <span className="field-label">学习 List（可多选）</span>
+            <details className="list-scope-picker">
+              <summary><span>List 范围</span><strong>{studyScopeLabel}</strong></summary>
+              <div className="scope-toolbar">
+                <button type="button" onClick={() => setListScope(data.lists.map((item) => item.key))}>选择全部 List</button>
+                <span>已选 {selectedListKeys.length} / {data.lists.length}</span>
+              </div>
+              <div className="scope-list-grid">
+                {data.lists.map((item) => (
+                  <label className={selectedListSet.has(item.key) ? "scope-list active" : "scope-list"} key={item.key}>
+                    <input type="checkbox" checked={selectedListSet.has(item.key)} onChange={() => toggleList(item.key)} />
+                    <span><strong>{item.label}</strong><small>{item.count} 词</small></span>
+                  </label>
+                ))}
+              </div>
+            </details>
 
             <span className="field-label">学习模式</span>
             <div className="mode-grid">
@@ -967,37 +1037,20 @@ export default function Home() {
               ))}
             </div>
 
-            <span className="field-label">星级筛选</span>
+            <span className="field-label">星级筛选（可多选）</span>
             <div className="filter-row">
-              <button className={starFilter === "all" ? "filter active" : "filter"} onClick={() => setSetting("study_filter", "all")}>全部 <small>{listWords.length}</small></button>
+              <button className={allStarsSelected ? "filter active" : "filter"} onClick={() => setSetting("study_filter", "all")}>全部 <small>{scopeWords.length}</small></button>
               {[0, 1, 2, 3].map((rating) => (
-                <button className={starFilter === `star:${rating}` ? "filter active" : "filter"} onClick={() => setSetting("study_filter", `star:${rating}`)} key={rating}>
+                <button className={selectedStarRatings.includes(rating) && !allStarsSelected ? "filter active" : "filter"} onClick={() => toggleStarRating(rating)} key={rating}>
                   {rating ? "★".repeat(rating) : "0 星"} <small>{starCounts[rating]}</small>
                 </button>
               ))}
             </div>
-            {starFilter !== "all" && (
-              <details className="list-scope-picker">
-                <summary><span>星级学习包含的 List</span><strong>{studyScopeLabel}</strong></summary>
-                <div className="scope-toolbar">
-                  <button type="button" onClick={() => setStarListScope(data.lists.map((item) => item.key))}>选择全部 List</button>
-                  <span>已选 {selectedStarListKeys.length} / {data.lists.length}</span>
-                </div>
-                <div className="scope-list-grid">
-                  {data.lists.map((item) => (
-                    <label className={selectedStarListSet.has(item.key) ? "scope-list active" : "scope-list"} key={item.key}>
-                      <input type="checkbox" checked={selectedStarListSet.has(item.key)} onChange={() => toggleStarList(item.key)} />
-                      <span><strong>{item.label}</strong><small>{item.count} 词</small></span>
-                    </label>
-                  ))}
-                </div>
-              </details>
-            )}
             <button className="primary" onClick={startStudy} disabled={!studyQueue.length}>开始学习 <span>→</span></button>
             <p className="resume-note">
-              {starFilter === "all"
-                ? `已背 ${progress.lists[selectedList]?.completed_count ?? 0} 次 · 自动记住当前位置`
-                : `${studyScopeLabel} · ${studyQueue.length} 个符合星级的单词`}
+              {allStarsSelected && selectedListKeys.length === 1
+                ? `已背 ${progress.lists[selectedListKeys[0]]?.completed_count ?? 0} 次 · 自动记住当前位置`
+                : `${studyScopeLabel} · ${studyQueue.length} 个符合条件的单词`}
             </p>
           </section>
 
@@ -1049,6 +1102,13 @@ export default function Home() {
               </>
             )}
 
+            {showCorrectQuizReview && (
+              <div className="answer-block quiz-review">
+                <div className="detail-line"><span>词性</span><p>{partOfSpeech(activeWord.definition_en)}</p></div>
+                {activeWord.example_en && <div className="example"><div className="example-heading"><span>例句</span><button onClick={() => speak(activeWord.example_en)} aria-label="朗读完整英文例句">▶ 朗读例句</button></div><p><LookupText text={activeWord.example_en} onLookup={openLookup} /></p><small>{activeWord.example_zh}</small></div>}
+              </div>
+            )}
+
             {showAnswer && (
               <div className="answer-block">
                 <p className="definition-en"><LookupText text={activeWord.definition_en} onLookup={openLookup} /></p>
@@ -1068,13 +1128,13 @@ export default function Home() {
           </article>
 
           <div className="study-jumps">
-            <button onClick={() => jumpToQueueIndex(0)} disabled={activeQueueIndex === 0}>⇤ 到{starFilter === "all" ? " List" : "筛选"}开头</button>
-            <button onClick={() => jumpToQueueIndex(studyQueue.length - 1)} disabled={activeQueueIndex >= studyQueue.length - 1}>到{starFilter === "all" ? " List" : "筛选"}结尾 ⇥</button>
+            <button onClick={() => jumpToQueueIndex(0)} disabled={activeQueueIndex === 0}>⇤ 到{allStarsSelected ? " List" : "筛选"}开头</button>
+            <button onClick={() => jumpToQueueIndex(studyQueue.length - 1)} disabled={activeQueueIndex >= studyQueue.length - 1}>到{allStarsSelected ? " List" : "筛选"}结尾 ⇥</button>
           </div>
           <div className="study-actions">
             <button onClick={() => move(-1)} disabled={activeQueueIndex === 0}>← 上一词</button>
             {activeQueueIndex >= studyQueue.length - 1
-              ? starFilter === "all"
+              ? allStarsSelected
                 ? <button className="finish" onClick={completeRound}>完成本轮</button>
                 : <button className="finish" onClick={() => setScreen("home")}>完成筛选学习</button>
               : <button className="next" onClick={() => move(1)}>下一词 →</button>}

@@ -71,9 +71,8 @@ class ApplicationController:
 
         home.searchRequested.connect(self._search_home)
         home.listStudyRequested.connect(self._open_list_study)
-        home.listSelectionChanged.connect(self._select_list)
-        home.starFilterChanged.connect(self._select_star_filter)
-        home.starStudyScopeChanged.connect(self._select_star_lists)
+        home.listScopeChanged.connect(self._select_lists)
+        home.starFiltersChanged.connect(self._select_star_filters)
         home.listCompletionAdjustmentRequested.connect(
             self._adjust_list_completion
         )
@@ -170,9 +169,17 @@ class ApplicationController:
         self._refresh_stats()
         self.window.show_home()
 
-    def _saved_star_list_keys(self) -> tuple[str, ...]:
+    def _saved_list_keys(self) -> tuple[str, ...]:
         all_keys = tuple(item.key for item in self._source_lists)
-        saved = self.user.load_setting("study_star_lists")
+        saved = self.user.load_setting("study_lists")
+        if saved is None:
+            saved_filter = self.user.load_setting("study_filter") or "all"
+            saved = (
+                self.user.load_setting("study_star_lists")
+                if saved_filter != "all"
+                else self.user.load_setting("study_list")
+            )
+            saved = saved or self.user.load_setting("study_list")
         if not saved or saved == "all":
             return all_keys
         requested = tuple(
@@ -182,24 +189,34 @@ class ApplicationController:
         selected = tuple(key for key in all_keys if key in requested_set)
         return selected or all_keys
 
+    def _saved_star_ratings(self) -> tuple[int, ...]:
+        saved = self.user.load_setting("study_filter") or "all"
+        if saved == "all":
+            return (0, 1, 2, 3)
+        raw = (
+            saved.removeprefix("stars:")
+            if saved.startswith("stars:")
+            else saved.removeprefix("star:")
+        )
+        try:
+            requested = tuple(int(value) for value in raw.split(","))
+        except ValueError:
+            return (0, 1, 2, 3)
+        valid = tuple(
+            rating
+            for rating in range(4)
+            if rating in set(requested)
+        )
+        return valid or (0, 1, 2, 3)
+
     def _configure_home_scope(self) -> None:
         home = self.window.home_page
         home.set_source_lists(
             self._source_lists,
             self.user.list_completion_counts(),
-            selected_key=self.user.load_setting("study_list"),
-            selected_star_keys=self._saved_star_list_keys(),
+            selected_keys=self._saved_list_keys(),
+            selected_star_ratings=self._saved_star_ratings(),
         )
-        saved_filter = self.user.load_setting("study_filter") or "all"
-        rating: int | None = None
-        if saved_filter.startswith("star:"):
-            try:
-                candidate = int(saved_filter.removeprefix("star:"))
-            except ValueError:
-                candidate = -1
-            if 0 <= candidate <= 3:
-                rating = candidate
-        home.set_selected_star_filter(rating)
 
     def _configure_settings(self) -> None:
         names = tuple(self.speech.voice_names())
@@ -281,11 +298,9 @@ class ApplicationController:
 
     def _refresh_selected_list_counts(self, key: str | None = None) -> None:
         home = self.window.home_page
-        rating = home.selected_star_filter()
-        if rating is None:
-            selected_keys = (key or home.selected_list_key(),)
-        else:
-            selected_keys = home.selected_star_list_keys()
+        selected_keys = (
+            (str(key),) if key is not None else home.selected_list_keys()
+        )
         selected_keys = tuple(
             selected for selected in selected_keys if selected is not None
         )
@@ -303,21 +318,7 @@ class ApplicationController:
             return
         self.window.home_page.set_star_counts(self.user.star_counts(word_ids))
 
-    def _select_list(self, key: str) -> None:
-        self.user.save_setting("study_list", str(key))
-        self._refresh_selected_list_counts(str(key))
-        self._report_persistence_issue()
-
-    def _select_star_filter(self, star_rating: object) -> None:
-        rating = None if star_rating is None else int(star_rating)
-        self.user.save_setting(
-            "study_filter",
-            "all" if rating is None else f"star:{rating}",
-        )
-        self._refresh_selected_list_counts()
-        self._report_persistence_issue()
-
-    def _select_star_lists(self, source_sections: object) -> None:
+    def _select_lists(self, source_sections: object) -> None:
         if not isinstance(source_sections, Sequence) or isinstance(
             source_sections, (str, bytes)
         ):
@@ -329,8 +330,36 @@ class ApplicationController:
         if not selected:
             return
         value = "all" if selected == all_keys else ",".join(selected)
+        self.user.save_setting("study_lists", value)
         self.user.save_setting("study_star_lists", value)
+        if len(selected) == 1:
+            self.user.save_setting("study_list", selected[0])
         self._refresh_selected_list_counts()
+        self._report_persistence_issue()
+
+    def _select_star_filters(self, star_ratings: object) -> None:
+        if not isinstance(star_ratings, Sequence) or isinstance(
+            star_ratings, (str, bytes)
+        ):
+            return
+        requested = tuple(int(value) for value in star_ratings)
+        if (
+            not requested
+            or len(set(requested)) != len(requested)
+            or any(value not in range(4) for value in requested)
+        ):
+            return
+        canonical = tuple(value for value in range(4) if value in set(requested))
+        value = (
+            "all"
+            if canonical == (0, 1, 2, 3)
+            else (
+                f"star:{canonical[0]}"
+                if len(canonical) == 1
+                else f"stars:{','.join(str(item) for item in canonical)}"
+            )
+        )
+        self.user.save_setting("study_filter", value)
         self._report_persistence_issue()
 
     def _adjust_list_completion(self, key: str, delta: int) -> None:
@@ -380,12 +409,18 @@ class ApplicationController:
     def _search_home(self, query: str) -> None:
         self.window.home_page.set_results(self.search.search(query))
 
-    def _open_list_study(self, source_scope: object, star_rating: object) -> None:
-        rating = None if star_rating is None else int(star_rating)
-        self._open_study(source_scope, rating)
+    def _open_list_study(self, source_scope: object, star_ratings: object) -> None:
+        ratings = (
+            None
+            if star_ratings is None
+            else tuple(int(value) for value in star_ratings)
+        )
+        self._open_study(source_scope, ratings)
 
     def _open_study(
-        self, source_scope: object, star_rating: int | None = None
+        self,
+        source_scope: object,
+        star_ratings: Sequence[int] | None = None,
     ) -> None:
         if isinstance(source_scope, str):
             start_kwargs = {"source_section": source_scope}
@@ -401,14 +436,15 @@ class ApplicationController:
         try:
             snapshot = self.study.start(
                 BrowseOrder.SOURCE,
-                star_rating=star_rating,
+                star_ratings=star_ratings,
                 **start_kwargs,
             )
         except (KeyError, ValueError, RuntimeError) as error:
             LOGGER.exception("Unable to start study session")
-            if star_rating is not None and "no words match" in str(error):
+            if star_ratings is not None and "no words match" in str(error):
+                labels = "、".join(f"{rating} 星" for rating in star_ratings)
                 self._show_status(
-                    f"所选 List 范围中没有 {star_rating} 星单词。"
+                    f"所选 List 范围中没有 {labels}单词。"
                 )
             else:
                 self._show_status(f"无法开始学习：{error}")
@@ -560,7 +596,12 @@ class ApplicationController:
             return
         label = snapshot.list_label or snapshot.list_key or "所选 List"
         self._show_home()
-        self._show_status(f"{label} 已完整学习 {completed} 次。")
+        if isinstance(completed, dict):
+            self._show_status(
+                f"{label} 已完整学习一轮；所选 List 的完成次数均已增加。"
+            )
+        else:
+            self._show_status(f"{label} 已完整学习 {completed} 次。")
         self._report_persistence_issue()
 
     def _set_mode(self, mode: StudyMode) -> None:
@@ -796,9 +837,12 @@ class ApplicationController:
         self.user.reset_all_positions()
         self._show_status("学习位置已重置。")
         if active is not None and active.list_key is not None:
-            self._open_study(active.list_keys or active.list_key, active.star_filter)
+            self._open_study(
+                active.list_keys or active.list_key,
+                active.star_filters or None,
+            )
         elif active is not None and active.list_keys:
-            self._open_study(active.list_keys, active.star_filter)
+            self._open_study(active.list_keys, active.star_filters or None)
         self._report_persistence_issue()
 
     def _export_progress(self) -> None:

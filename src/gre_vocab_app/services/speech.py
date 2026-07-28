@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import ctypes
 from dataclasses import dataclass
 from pathlib import Path
 import tempfile
 from typing import Protocol
 
 import edge_tts
-from PySide6.QtCore import QObject, QThread, QTimer, QUrl, Signal, Slot
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
 from PySide6.QtTextToSpeech import QTextToSpeech, QVoice
 
 
@@ -180,6 +180,91 @@ class EdgeSpeechWorker(QObject):
         self.succeeded.emit(self._output_path)
 
 
+class WindowsMciPlayer(QObject):
+    """Play MP3 files through the native Windows multimedia subsystem."""
+
+    finished = Signal()
+    errorOccurred = Signal(str, str)
+
+    def __init__(self, parent: QObject | None = None):
+        super().__init__(parent)
+        self._alias = f"gre_tts_{id(self):x}"
+        self._opened = False
+        self._timer = QTimer(self)
+        self._timer.setInterval(200)
+        self._timer.timeout.connect(self._poll)
+
+    @staticmethod
+    def _send(command: str, *, response_size: int = 0) -> tuple[int, str]:
+        buffer = (
+            ctypes.create_unicode_buffer(response_size)
+            if response_size
+            else None
+        )
+        result = int(
+            ctypes.windll.winmm.mciSendStringW(
+                command,
+                buffer,
+                response_size,
+                None,
+            )
+        )
+        return result, buffer.value if buffer is not None else ""
+
+    @staticmethod
+    def _error_text(code: int) -> str:
+        buffer = ctypes.create_unicode_buffer(256)
+        if ctypes.windll.winmm.mciGetErrorStringW(code, buffer, len(buffer)):
+            return buffer.value
+        return f"MCI error {code}"
+
+    def play(self, path: str) -> bool:
+        self.stop()
+        code, _ = self._send(
+            f'open "{path}" type mpegvideo alias {self._alias}'
+        )
+        if code:
+            self._report(code, "open")
+            return False
+        self._opened = True
+        code, _ = self._send(f"play {self._alias}")
+        if code:
+            self._report(code, "play")
+            self.stop()
+            return False
+        self._timer.start()
+        return True
+
+    def stop(self) -> None:
+        self._timer.stop()
+        if self._opened:
+            self._send(f"stop {self._alias}")
+            self._send(f"close {self._alias}")
+            self._opened = False
+
+    def _poll(self) -> None:
+        if not self._opened:
+            self._timer.stop()
+            return
+        code, mode = self._send(
+            f"status {self._alias} mode",
+            response_size=64,
+        )
+        if code:
+            self._report(code, "status")
+            self.stop()
+            self.finished.emit()
+        elif mode.casefold() in {"stopped", "not ready"}:
+            self.stop()
+            self.finished.emit()
+
+    def _report(self, code: int, operation: str) -> None:
+        self.errorOccurred.emit(
+            "备用音源播放失败，请检查 Windows 音量和输出设备。",
+            f"MCI {operation} failed: {code} {self._error_text(code)}",
+        )
+
+
 class SpeechService(QObject):
     errorOccurred = Signal(str, str)
     availabilityChanged = Signal(bool)
@@ -200,12 +285,9 @@ class SpeechService(QObject):
         self._online_thread: QThread | None = None
         self._online_worker: EdgeSpeechWorker | None = None
         self._online_audio_path: str | None = None
-        self._audio_output = QAudioOutput(self)
-        self._online_player = QMediaPlayer(self)
-        self._online_player.setAudioOutput(self._audio_output)
-        self._online_player.mediaStatusChanged.connect(
-            self._online_media_status_changed
-        )
+        self._online_player = WindowsMciPlayer(self)
+        self._online_player.finished.connect(self._discard_online_audio)
+        self._online_player.errorOccurred.connect(self._queue_error)
         backend_error = getattr(self._backend, "errorOccurred", None)
         if backend_error is not None and hasattr(backend_error, "connect"):
             backend_error.connect(self._relay_error)
@@ -344,10 +426,11 @@ class SpeechService(QObject):
 
     @Slot(str)
     def _online_speech_ready(self, path: str) -> None:
+        self._online_player.stop()
         self._discard_online_audio()
         self._online_audio_path = path
-        self._online_player.setSource(QUrl.fromLocalFile(path))
-        self._online_player.play()
+        if not self._online_player.play(path):
+            self._discard_online_audio()
 
     @Slot(str, str)
     def _online_speech_failed(self, user_message: str, technical: str) -> None:
@@ -360,17 +443,6 @@ class SpeechService(QObject):
     def _online_thread_finished(self) -> None:
         self._online_thread = None
         self._online_worker = None
-
-    @Slot(object)
-    def _online_media_status_changed(
-        self, status: QMediaPlayer.MediaStatus
-    ) -> None:
-        if status in (
-            QMediaPlayer.MediaStatus.EndOfMedia,
-            QMediaPlayer.MediaStatus.InvalidMedia,
-        ):
-            self._online_player.setSource(QUrl())
-            self._discard_online_audio()
 
     def _discard_online_audio(self) -> None:
         path = self._online_audio_path

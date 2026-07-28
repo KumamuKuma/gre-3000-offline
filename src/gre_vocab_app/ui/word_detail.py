@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
@@ -128,6 +130,13 @@ class WordDetail(QWidget):
         meaning_layout = QVBoxLayout(self.meaning_panel)
         meaning_layout.setContentsMargins(26, 21, 26, 23)
         meaning_layout.setSpacing(9)
+
+        self.quiz_pos_title = self._section_title("词性")
+        self.quiz_pos_label = self._label()
+        self.quiz_pos_title.hide()
+        self.quiz_pos_label.hide()
+        meaning_layout.addWidget(self.quiz_pos_title)
+        meaning_layout.addWidget(self.quiz_pos_label)
 
         self.definition_label = self._lookup_label(object_name="definition")
         self.definition_zh_label = self._label()
@@ -267,6 +276,9 @@ class WordDetail(QWidget):
         self.phonetic_label.setText(word.phonetic)
         self.definition_label.set_lookup_text(word.definition_en)
         self.definition_zh_label.setText(word.definition_zh)
+        self.quiz_pos_label.setText(
+            self._part_of_speech_text(word.definition_en)
+        )
         self.synonyms_label.set_lookup_text(word.synonyms)
         self.example_en_label.set_lookup_text(word.example_en)
         self.example_zh_label.setText(word.example_zh)
@@ -347,6 +359,8 @@ class WordDetail(QWidget):
             self.set_revealed(answer_visible if recall else True)
 
     def _clear_quiz(self) -> None:
+        self.quiz_pos_title.hide()
+        self.quiz_pos_label.hide()
         self._quiz_choices = ()
         self._quiz_correct_index = None
         self._quiz_selected_index = None
@@ -419,10 +433,54 @@ class WordDetail(QWidget):
                 else "回答错误，正确答案已标出"
             )
             self.quiz_feedback_label.show()
+            self._set_quiz_review_visible(correct)
         else:
             self.quiz_feedback_label.clear()
             self.quiz_feedback_label.hide()
+            self._set_quiz_review_visible(False)
         self._update_relation_visibility()
+
+    def _set_quiz_review_visible(self, visible: bool) -> None:
+        has_pos = bool(self.quiz_pos_label.text())
+        has_example = bool(
+            self.example_en_label.text() or self.example_zh_label.text()
+        )
+        self.quiz_pos_title.setVisible(visible and has_pos)
+        self.quiz_pos_label.setVisible(visible and has_pos)
+        self.definition_label.hide()
+        self.definition_zh_label.hide()
+        self.synonyms_title.hide()
+        self.synonyms_label.hide()
+        self.example_title.setVisible(visible and has_example)
+        self.example_en_label.setVisible(
+            visible and bool(self.example_en_label.text())
+        )
+        self.example_zh_label.setVisible(
+            visible and bool(self.example_zh_label.text())
+        )
+        self.example_speech_button.setVisible(
+            visible and bool(self.example_en_label.text())
+        )
+        self.secondary_example_speech_button.setVisible(
+            visible
+            and self._secondary_speech_available
+            and bool(self.example_en_label.text())
+        )
+        self.meaning_panel.setVisible(visible and (has_pos or has_example))
+
+    @staticmethod
+    def _part_of_speech_text(definition: str) -> str:
+        matches = re.findall(
+            r"(?i)(?:^|[\s(])(?:\d+\))?"
+            r"(adj|adv|prep|conj|pron|interj|aux|n|v)\.",
+            definition,
+        )
+        labels: list[str] = []
+        for match in matches:
+            label = f"{match.lower()}."
+            if label not in labels:
+                labels.append(label)
+        return " / ".join(labels) if labels else "未标明"
 
     @staticmethod
     def _set_button_style(button: QPushButton, object_name: str) -> None:

@@ -5,7 +5,6 @@ from collections.abc import Mapping, Sequence
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFrame,
@@ -24,7 +23,7 @@ from gre_vocab_app.domain import SourceList, WordEntry
 
 
 class ListScopeDialog(QDialog):
-    """Compact checkbox picker for a star-filtered multi-List scope."""
+    """Compact checkbox picker for a multi-List study scope."""
 
     def __init__(
         self,
@@ -33,16 +32,16 @@ class ListScopeDialog(QDialog):
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
-        self.setWindowTitle("选择星级学习范围")
+        self.setWindowTitle("选择学习 List")
         self.setMinimumSize(440, 520)
         self._source_lists = tuple(source_lists)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(22, 20, 22, 18)
         root.setSpacing(12)
-        title = QLabel("选择要一起筛选的 List")
+        title = QLabel("选择要一起学习的 List")
         title.setObjectName("sectionTitle")
-        hint = QLabel("可任意多选；学习时会把所选 List 的同星级单词按原书顺序合并。")
+        hint = QLabel("可任意多选；学习时会把所选 List 按原书顺序合并。")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
         root.addWidget(title)
@@ -111,12 +110,88 @@ class ListScopeDialog(QDialog):
             ok_button.setEnabled(selected_count > 0)
 
 
+class StarScopeDialog(QDialog):
+    """Checkbox picker for one or more star ratings."""
+
+    def __init__(
+        self,
+        counts: Sequence[int],
+        selected_ratings: Sequence[int],
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("选择学习星级")
+        self.setMinimumWidth(420)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(22, 20, 22, 18)
+        root.setSpacing(12)
+        title = QLabel("选择要一起学习的星级")
+        title.setObjectName("sectionTitle")
+        hint = QLabel("可以同时选择多个星级，例如同时学习 1 星和 2 星单词。")
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        root.addWidget(title)
+        root.addWidget(hint)
+
+        self.all_checkbox = QCheckBox("全部星级")
+        root.addWidget(self.all_checkbox)
+        selected = {int(value) for value in selected_ratings}
+        self.checkboxes: list[QCheckBox] = []
+        values = tuple(int(value) for value in counts)
+        for rating in range(4):
+            label = (
+                f"0 星（未评级，{values[rating]:,} 词）"
+                if rating == 0
+                else f"{rating} 星（{values[rating]:,} 词）"
+            )
+            checkbox = QCheckBox(label)
+            checkbox.setProperty("rating", rating)
+            checkbox.setChecked(rating in selected)
+            checkbox.toggled.connect(self._sync_state)
+            self.checkboxes.append(checkbox)
+            root.addWidget(checkbox)
+
+        self.selection_label = QLabel()
+        self.selection_label.setObjectName("muted")
+        root.addWidget(self.selection_label)
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        root.addWidget(self.buttons)
+        self.all_checkbox.toggled.connect(self._set_all)
+        self._sync_state()
+
+    def selected_ratings(self) -> tuple[int, ...]:
+        return tuple(
+            rating
+            for rating, checkbox in enumerate(self.checkboxes)
+            if checkbox.isChecked()
+        )
+
+    def _set_all(self, checked: bool) -> None:
+        for checkbox in self.checkboxes:
+            with QSignalBlocker(checkbox):
+                checkbox.setChecked(checked)
+        self._sync_state()
+
+    def _sync_state(self, *_args: object) -> None:
+        selected = self.selected_ratings()
+        with QSignalBlocker(self.all_checkbox):
+            self.all_checkbox.setChecked(len(selected) == 4)
+        self.selection_label.setText(f"已选择 {len(selected)} / 4 个星级")
+        ok_button = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_button is not None:
+            ok_button.setEnabled(bool(selected))
+
+
 class HomePage(QWidget):
     searchRequested = Signal(str)
     listStudyRequested = Signal(object, object)
-    listSelectionChanged = Signal(str)
-    starFilterChanged = Signal(object)
-    starStudyScopeChanged = Signal(object)
+    listScopeChanged = Signal(object)
+    starFiltersChanged = Signal(object)
     listCompletionAdjustmentRequested = Signal(str, int)
     wordListRequested = Signal()
     wordSelected = Signal(object)
@@ -127,7 +202,8 @@ class HomePage(QWidget):
         self._lists: dict[str, SourceList] = {}
         self._completion_counts: dict[str, int] = {}
         self._star_counts = (0, 0, 0, 0)
-        self._star_list_keys: tuple[str, ...] = ()
+        self._selected_list_keys: tuple[str, ...] = ()
+        self._selected_star_ratings: tuple[int, ...] = (0, 1, 2, 3)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(38, 28, 38, 30)
@@ -202,12 +278,12 @@ class HomePage(QWidget):
         study_layout.addWidget(self.word_list_button, 0, 2)
 
         study_hint = QLabel(
-            "全部星级按单个 List 学习；选择具体星级后，可合并任意多个 List。"
+            "List 和星级都可以多选；所选单词始终按原书词序合并学习。"
         )
         study_hint.setObjectName("sectionHint")
         study_layout.addWidget(study_hint, 1, 0, 1, 3)
 
-        list_label = QLabel("单 List 学习")
+        list_label = QLabel("学习 List")
         list_label.setObjectName("fieldLabel")
         star_label = QLabel("星级筛选")
         star_label.setObjectName("fieldLabel")
@@ -217,38 +293,22 @@ class HomePage(QWidget):
         study_layout.addWidget(star_label, 2, 1)
         study_layout.addWidget(action_label, 2, 2)
 
-        self.list_combo = QComboBox()
-        self.list_combo.setAccessibleName("选择学习 List")
-        self.list_combo.setMinimumWidth(260)
-        self.list_combo.currentIndexChanged.connect(self._on_list_changed)
-        study_layout.addWidget(self.list_combo, 3, 0)
+        self.list_scope_button = self._action("选择学习 List")
+        self.list_scope_button.setObjectName("outlineButton")
+        self.list_scope_button.setAccessibleName("多选学习 List")
+        self.list_scope_button.clicked.connect(self._choose_lists)
+        study_layout.addWidget(self.list_scope_button, 3, 0)
 
-        self.star_combo = QComboBox()
-        self.star_combo.setAccessibleName("选择星级范围")
-        self.star_combo.setMinimumWidth(210)
-        self.star_combo.addItem("全部星级", None)
-        for rating in range(4):
-            self.star_combo.addItem("", rating)
-        self.star_combo.currentIndexChanged.connect(self._on_star_filter_changed)
-        study_layout.addWidget(self.star_combo, 3, 1)
+        self.star_scope_button = self._action("选择学习星级")
+        self.star_scope_button.setObjectName("outlineButton")
+        self.star_scope_button.setAccessibleName("多选学习星级")
+        self.star_scope_button.clicked.connect(self._choose_stars)
+        study_layout.addWidget(self.star_scope_button, 3, 1)
 
         self.start_button = self._action("开始 / 继续", primary=True)
         self.start_button.setMinimumWidth(142)
         self.start_button.clicked.connect(self._emit_list_study)
         study_layout.addWidget(self.start_button, 3, 2)
-
-        star_scope_label = QLabel("星级学习范围")
-        star_scope_label.setObjectName("fieldLabel")
-        study_layout.addWidget(star_scope_label, 4, 0)
-        self.star_list_button = self._action("选择多个 List")
-        self.star_list_button.setObjectName("outlineButton")
-        self.star_list_button.setAccessibleName("选择星级学习包含的多个 List")
-        self.star_list_button.clicked.connect(self._choose_star_lists)
-        study_layout.addWidget(self.star_list_button, 4, 1)
-        self.star_scope_hint = QLabel("选择 0–3 星后可设置")
-        self.star_scope_hint.setObjectName("muted")
-        self.star_scope_hint.setAlignment(Qt.AlignCenter)
-        study_layout.addWidget(self.star_scope_hint, 4, 2)
 
         progress_row = QHBoxLayout()
         self.list_meta_label = QLabel("请选择 List")
@@ -279,7 +339,7 @@ class HomePage(QWidget):
             lambda: self._emit_completion_adjustment(1)
         )
         progress_row.addWidget(self.increase_rounds_button)
-        study_layout.addLayout(progress_row, 5, 0, 1, 3)
+        study_layout.addLayout(progress_row, 4, 0, 1, 3)
         root.addWidget(study_card)
         self.set_star_counts({})
 
@@ -341,6 +401,8 @@ class HomePage(QWidget):
         *,
         selected_key: str | None = None,
         selected_star_keys: Sequence[str] | None = None,
+        selected_keys: Sequence[str] | None = None,
+        selected_star_ratings: Sequence[int] | None = None,
     ) -> None:
         lists = tuple(source_lists)
         if any(not isinstance(item, SourceList) for item in lists):
@@ -349,36 +411,36 @@ class HomePage(QWidget):
         self._completion_counts = {
             str(key): int(value) for key, value in completion_counts.items()
         }
-        previous = selected_key or self.selected_list_key()
-        requested_star_keys = (
-            tuple(str(key) for key in selected_star_keys)
-            if selected_star_keys is not None
-            else self._star_list_keys
+        requested = (
+            tuple(str(key) for key in selected_keys)
+            if selected_keys is not None
+            else (
+                tuple(str(key) for key in selected_star_keys)
+                if selected_star_keys is not None
+                else (
+                    (str(selected_key),)
+                    if selected_key is not None
+                    else self._selected_list_keys
+                )
+            )
         )
-        valid_star_keys = tuple(
-            item.key for item in lists if item.key in set(requested_star_keys)
+        requested_set = set(requested)
+        valid_keys = tuple(
+            item.key for item in lists if item.key in requested_set
         )
-        self._star_list_keys = valid_star_keys or tuple(item.key for item in lists)
-        with QSignalBlocker(self.list_combo):
-            self.list_combo.clear()
-            for item in lists:
-                self.list_combo.addItem(self._list_item_text(item), item.key)
-            index = self.list_combo.findData(previous)
-            self.list_combo.setCurrentIndex(index if index >= 0 else (0 if lists else -1))
+        self._selected_list_keys = valid_keys or (
+            (lists[0].key,) if lists else ()
+        )
+        if selected_star_ratings is not None:
+            self.set_selected_star_ratings(selected_star_ratings)
         self._update_list_meta()
-        self._update_star_scope_controls()
+        self._update_scope_controls()
         self._update_start_state()
 
     def set_list_completion_counts(self, counts: Mapping[str, int]) -> None:
         self._completion_counts = {
             str(key): int(value) for key, value in counts.items()
         }
-        with QSignalBlocker(self.list_combo):
-            for index in range(self.list_combo.count()):
-                key = str(self.list_combo.itemData(index))
-                source_list = self._lists.get(key)
-                if source_list is not None:
-                    self.list_combo.setItemText(index, self._list_item_text(source_list))
         self._update_list_meta()
 
     def _list_item_text(self, source_list: SourceList) -> str:
@@ -389,14 +451,31 @@ class HomePage(QWidget):
         )
 
     def selected_list_key(self) -> str | None:
-        value = self.list_combo.currentData()
-        return str(value) if value is not None else None
+        return (
+            self._selected_list_keys[0]
+            if len(self._selected_list_keys) == 1
+            else None
+        )
+
+    def selected_list_keys(self) -> tuple[str, ...]:
+        return self._selected_list_keys
 
     def set_selected_list(self, key: str) -> bool:
-        index = self.list_combo.findData(str(key))
-        if index < 0:
+        return self.set_selected_lists((str(key),))
+
+    def set_selected_lists(self, keys: Sequence[str]) -> bool:
+        requested = tuple(str(key) for key in keys)
+        if not requested or len(set(requested)) != len(requested):
             return False
-        self.list_combo.setCurrentIndex(index)
+        if any(key not in self._lists for key in requested):
+            return False
+        requested_set = set(requested)
+        self._selected_list_keys = tuple(
+            key for key in self._lists if key in requested_set
+        )
+        self._update_list_meta()
+        self._update_scope_controls()
+        self._update_start_state()
         return True
 
     def set_star_counts(
@@ -411,48 +490,44 @@ class HomePage(QWidget):
         if any(type(value) is not int or value < 0 for value in values):
             raise ValueError("star counts must be non-negative integers")
         self._star_counts = values
-        selected = self.star_combo.currentData()
-        with QSignalBlocker(self.star_combo):
-            self.star_combo.setItemText(0, f"全部星级（{sum(values):,} 词）")
-            for rating, count in enumerate(values):
-                text = (
-                    f"0 星（未评级，{count:,} 词）"
-                    if rating == 0
-                    else f"{rating} 星（{count:,} 词）"
-                )
-                self.star_combo.setItemText(rating + 1, text)
-            index = self.star_combo.findData(selected)
-            if index >= 0:
-                self.star_combo.setCurrentIndex(index)
+        self._update_scope_controls()
         self._update_start_state()
 
     def set_selected_star_filter(self, rating: int | None) -> bool:
-        index = self.star_combo.findData(rating)
-        if index < 0:
-            return False
-        self.star_combo.setCurrentIndex(index)
-        return True
+        return self.set_selected_star_ratings(
+            range(4) if rating is None else (int(rating),)
+        )
 
     def selected_star_filter(self) -> int | None:
-        value = self.star_combo.currentData()
-        return None if value is None else int(value)
+        return (
+            self._selected_star_ratings[0]
+            if len(self._selected_star_ratings) == 1
+            else None
+        )
 
-    def selected_star_list_keys(self) -> tuple[str, ...]:
-        return self._star_list_keys
+    def selected_star_ratings(self) -> tuple[int, ...]:
+        return self._selected_star_ratings
 
-    def set_selected_star_lists(self, keys: Sequence[str]) -> bool:
-        requested = tuple(str(key) for key in keys)
-        if not requested or len(set(requested)) != len(requested):
+    def set_selected_star_ratings(self, ratings: Sequence[int]) -> bool:
+        requested = tuple(int(rating) for rating in ratings)
+        if (
+            not requested
+            or len(set(requested)) != len(requested)
+            or any(rating not in range(4) for rating in requested)
+        ):
             return False
-        if any(key not in self._lists for key in requested):
-            return False
-        canonical = tuple(key for key in self._lists if key in set(requested))
-        if not canonical:
-            return False
-        self._star_list_keys = canonical
-        self._update_star_scope_controls()
+        self._selected_star_ratings = tuple(
+            rating for rating in range(4) if rating in set(requested)
+        )
+        self._update_scope_controls()
         self._update_start_state()
         return True
+
+    def selected_star_list_keys(self) -> tuple[str, ...]:
+        return self._selected_list_keys
+
+    def set_selected_star_lists(self, keys: Sequence[str]) -> bool:
+        return self.set_selected_lists(keys)
 
     def set_results(self, words: list[WordEntry]) -> None:
         self.results.clear()
@@ -479,48 +554,69 @@ class HomePage(QWidget):
     def focus_search(self) -> None:
         self.search_edit.setFocus(Qt.ShortcutFocusReason)
 
-    def _on_list_changed(self, _index: int) -> None:
-        self._update_list_meta()
-        key = self.selected_list_key()
-        if key is not None:
-            self.listSelectionChanged.emit(key)
-
-    def _on_star_filter_changed(self, _index: int) -> None:
-        self._update_star_scope_controls()
-        self._update_start_state()
-        self.starFilterChanged.emit(self.star_combo.currentData())
-
-    def _choose_star_lists(self) -> None:
+    def _choose_lists(self) -> None:
         dialog = ListScopeDialog(
             tuple(self._lists.values()),
-            self._star_list_keys,
+            self._selected_list_keys,
             self,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         selected = dialog.selected_keys()
-        if selected != self._star_list_keys and self.set_selected_star_lists(selected):
-            self.starStudyScopeChanged.emit(selected)
+        if selected != self._selected_list_keys and self.set_selected_lists(selected):
+            self.listScopeChanged.emit(selected)
 
-    def _update_star_scope_controls(self) -> None:
-        enabled = self.selected_star_filter() is not None and bool(self._lists)
-        self.star_list_button.setEnabled(enabled)
-        total = len(self._lists)
-        selected = len(self._star_list_keys)
-        if selected == total and total:
-            summary = f"全部 {total} 个 List"
-        else:
-            summary = f"已选 {selected} 个 List"
-        self.star_list_button.setText(summary if enabled else "选择具体星级后设置")
-        self.star_scope_hint.setText(
-            f"合并 {selected} 个 List" if enabled else "选择 0–3 星后可设置"
+    def _choose_stars(self) -> None:
+        dialog = StarScopeDialog(
+            self._star_counts,
+            self._selected_star_ratings,
+            self,
         )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        selected = dialog.selected_ratings()
+        if (
+            selected != self._selected_star_ratings
+            and self.set_selected_star_ratings(selected)
+        ):
+            self.starFiltersChanged.emit(selected)
+
+    def _update_scope_controls(self) -> None:
+        total = len(self._lists)
+        selected_lists = len(self._selected_list_keys)
+        if selected_lists == total and total:
+            list_summary = f"全部 {total} 个 List"
+        else:
+            list_summary = f"已选 {selected_lists} 个 List"
+        self.list_scope_button.setText(list_summary)
+
+        ratings = self._selected_star_ratings
+        if ratings == (0, 1, 2, 3):
+            star_summary = f"全部星级（{sum(self._star_counts):,} 词）"
+        else:
+            labels = "、".join(f"{rating} 星" for rating in ratings)
+            count = sum(self._star_counts[rating] for rating in ratings)
+            star_summary = f"{labels}（{count:,} 词）"
+        self.star_scope_button.setText(star_summary)
+        self.list_scope_button.setEnabled(bool(self._lists))
+        self.star_scope_button.setEnabled(bool(self._lists))
 
     def _update_list_meta(self) -> None:
         key = self.selected_list_key()
         source_list = self._lists.get(key or "")
         if source_list is None:
-            self.list_meta_label.setText("请选择 List")
+            selected = tuple(
+                self._lists[key]
+                for key in self._selected_list_keys
+                if key in self._lists
+            )
+            if selected:
+                word_count = sum(item.word_count for item in selected)
+                self.list_meta_label.setText(
+                    f"已合并 {len(selected)} 个 List · 共 {word_count:,} 词"
+                )
+            else:
+                self.list_meta_label.setText("请选择 List")
             self.rounds_value_label.setText("0")
             self.decrease_rounds_button.setEnabled(False)
             self.increase_rounds_button.setEnabled(False)
@@ -534,24 +630,23 @@ class HomePage(QWidget):
         self.increase_rounds_button.setEnabled(True)
 
     def _update_start_state(self, *_args: object) -> None:
-        rating = self.star_combo.currentData()
-        available = sum(self._star_counts) if rating is None else self._star_counts[int(rating)]
-        has_scope = (
-            self.selected_list_key() is not None
-            if rating is None
-            else bool(self._star_list_keys)
+        available = sum(
+            self._star_counts[rating]
+            for rating in self._selected_star_ratings
         )
-        self.start_button.setEnabled(has_scope and available > 0)
+        self.start_button.setEnabled(
+            bool(self._selected_list_keys)
+            and bool(self._selected_star_ratings)
+            and available > 0
+        )
 
     def _emit_list_study(self) -> None:
-        key = self.selected_list_key()
-        rating = self.star_combo.currentData()
         if not self.start_button.isEnabled():
             return
-        if rating is None and key is not None:
-            self.listStudyRequested.emit(key, None)
-        elif rating is not None and self._star_list_keys:
-            self.listStudyRequested.emit(self._star_list_keys, rating)
+        ratings: tuple[int, ...] | None = self._selected_star_ratings
+        if ratings == (0, 1, 2, 3):
+            ratings = None
+        self.listStudyRequested.emit(self._selected_list_keys, ratings)
 
     def _emit_completion_adjustment(self, delta: int) -> None:
         key = self.selected_list_key()

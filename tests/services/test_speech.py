@@ -1,6 +1,11 @@
 from PySide6.QtCore import QObject, Signal
 
-from gre_vocab_app.services.speech import EdgeSpeechWorker, SpeechService, VoiceOption
+from gre_vocab_app.services.speech import (
+    EdgeSpeechWorker,
+    SpeechService,
+    VoiceOption,
+    WindowsMciPlayer,
+)
 
 
 class FakeSpeechBackend:
@@ -87,6 +92,52 @@ def test_edge_speech_worker_saves_online_audio_without_blocking_ui(
         worker.run()
     assert succeeded.args == [str(output)]
     assert output.read_bytes() == b"fake-mp3"
+
+
+def test_windows_mci_player_opens_and_plays_mp3(qtbot, monkeypatch, tmp_path):
+    commands = []
+
+    def fake_send(command, *, response_size=0):
+        commands.append((command, response_size))
+        if command.startswith("status "):
+            return 0, "stopped"
+        return 0, ""
+
+    monkeypatch.setattr(WindowsMciPlayer, "_send", staticmethod(fake_send))
+    player = WindowsMciPlayer()
+    audio = tmp_path / "online voice.mp3"
+    audio.write_bytes(b"fake-mp3")
+
+    assert player.play(str(audio)) is True
+    assert commands[0][0].startswith(f'open "{audio}" type mpegvideo alias ')
+    assert commands[1][0].startswith("play gre_tts_")
+
+    with qtbot.waitSignal(player.finished):
+        player._poll()
+
+    assert any(command.startswith("stop gre_tts_") for command, _ in commands)
+    assert any(command.startswith("close gre_tts_") for command, _ in commands)
+
+
+def test_windows_mci_player_reports_native_playback_failure(qtbot, monkeypatch):
+    def fake_send(command, *, response_size=0):
+        if command.startswith("open "):
+            return 263, ""
+        return 0, ""
+
+    monkeypatch.setattr(WindowsMciPlayer, "_send", staticmethod(fake_send))
+    monkeypatch.setattr(
+        WindowsMciPlayer,
+        "_error_text",
+        staticmethod(lambda code: f"native error {code}"),
+    )
+    player = WindowsMciPlayer()
+
+    with qtbot.waitSignal(player.errorOccurred) as signal:
+        assert player.play("missing.mp3") is False
+
+    assert "备用音源" in signal.args[0]
+    assert "MCI open failed: 263 native error 263" == signal.args[1]
 
 
 def test_unavailable_engine_or_blank_text_does_not_raise():

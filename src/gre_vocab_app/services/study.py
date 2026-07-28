@@ -30,6 +30,7 @@ class StudySession:
         self._order = BrowseOrder.SOURCE
         self._queue_name = BrowseOrder.SOURCE.value
         self._star_filter: int | None = None
+        self._star_filters: tuple[int, ...] = ()
         self._list_key: str | None = None
         self._list_keys: tuple[str, ...] = ()
         self._list_label = ""
@@ -56,6 +57,29 @@ class StudySession:
         if type(star_rating) is not int or not 0 <= star_rating <= 3:
             raise ValueError("star rating filter must be an integer from 0 through 3")
         return star_rating
+
+    @classmethod
+    def _validate_star_filters(
+        cls,
+        star_rating: object,
+        star_ratings: Sequence[int] | None,
+    ) -> tuple[int, ...]:
+        if star_rating is not None and star_ratings is not None:
+            raise ValueError("choose either one star rating or multiple ratings")
+        if star_ratings is None:
+            single = cls._validate_star_filter(star_rating)
+            return () if single is None else (single,)
+        if isinstance(star_ratings, (str, bytes)):
+            raise ValueError("star ratings must be a sequence")
+        requested = tuple(star_ratings)
+        if (
+            not requested
+            or len(set(requested)) != len(requested)
+            or any(type(value) is not int or value not in range(4) for value in requested)
+        ):
+            raise ValueError("star ratings must contain unique integers from 0 through 3")
+        canonical = tuple(value for value in range(4) if value in set(requested))
+        return () if canonical == (0, 1, 2, 3) else canonical
 
     @classmethod
     def _position_after_filter_change(
@@ -99,7 +123,7 @@ class StudySession:
             seen_word_id=self._ids[self._position],
             event_id=uuid.uuid4().hex,
         )
-        if self._star_filter is not None:
+        if self._star_filters:
             self._user.save_setting(
                 "study_star_current_word_id",
                 str(self._ids[self._position]),
@@ -198,6 +222,7 @@ class StudySession:
         source_section: str | None = None,
         source_sections: Sequence[str] | None = None,
         star_rating: int | None = None,
+        star_ratings: Sequence[int] | None = None,
     ) -> SessionSnapshot:
         try:
             parsed_order = BrowseOrder(order)
@@ -206,7 +231,8 @@ class StudySession:
         if parsed_order is not BrowseOrder.SOURCE:  # pragma: no cover - one-value enum
             raise ValueError("only source-order study is supported")
 
-        star_filter = self._validate_star_filter(star_rating)
+        star_filters = self._validate_star_filters(star_rating, star_ratings)
+        star_filter = star_filters[0] if len(star_filters) == 1 else None
         if source_section is not None and source_sections is not None:
             raise ValueError("choose either one source section or multiple sections")
         if source_sections is None:
@@ -241,9 +267,6 @@ class StudySession:
             item for item in available_lists if item.key in requested_set
         )
         selected_keys = tuple(item.key for item in selected_lists)
-        if len(selected_keys) > 1 and star_filter is None:
-            raise ValueError("multiple Lists require a star rating filter")
-
         try:
             content_ids = tuple(
                 word_id
@@ -264,7 +287,7 @@ class StudySession:
         else:
             scope_name = f"lists:{'+'.join(selected_keys)}"
             list_label = f"已选 {len(selected_keys)} 个 List"
-        if star_filter is None:
+        if not star_filters:
             ids = content_ids
             queue_name = f"source:{scope_name}:all"
             filter_setting = "all"
@@ -272,12 +295,22 @@ class StudySession:
             ids = tuple(
                 word_id
                 for word_id in content_ids
-                if self._user.star_rating(word_id) == star_filter
+                if self._user.star_rating(word_id) in star_filters
             )
-            queue_name = f"source:{scope_name}:star:{star_filter}"
-            filter_setting = f"star:{star_filter}"
+            if len(star_filters) == 1:
+                queue_name = f"source:{scope_name}:star:{star_filters[0]}"
+                filter_setting = f"star:{star_filters[0]}"
+            else:
+                joined = "+".join(str(value) for value in star_filters)
+                queue_name = f"source:{scope_name}:stars:{joined}"
+                filter_setting = (
+                    f"stars:{','.join(str(value) for value in star_filters)}"
+                )
         if not ids:
-            raise ValueError(f"no words match star rating {star_filter}")
+            raise ValueError(
+                "no words match star ratings "
+                + ",".join(str(value) for value in star_filters)
+            )
 
         saved = self._user.load_queue(queue_name)
         if (
@@ -286,7 +319,7 @@ class StudySession:
             and self._valid_position(saved.position, ids)
         ):
             position = int(saved.position)
-        elif star_filter is not None:
+        elif star_filters:
             position = self._position_after_filter_change(
                 saved,
                 ids,
@@ -312,6 +345,7 @@ class StudySession:
         self._seed = 0
         self._queue_name = queue_name
         self._star_filter = star_filter
+        self._star_filters = star_filters
         self._list_key = selected_keys[0] if len(selected_keys) == 1 else None
         self._list_keys = selected_keys
         self._list_label = list_label
@@ -320,9 +354,9 @@ class StudySession:
         self._user.save_setting("browse_order", self._order.value)
         if len(selected_keys) == 1:
             self._user.save_setting("study_list", selected_keys[0])
-        if star_filter is not None:
-            star_scope = "all" if selected_keys == all_keys else ",".join(selected_keys)
-            self._user.save_setting("study_star_lists", star_scope)
+        list_scope = "all" if selected_keys == all_keys else ",".join(selected_keys)
+        self._user.save_setting("study_lists", list_scope)
+        self._user.save_setting("study_star_lists", list_scope)
         self._user.save_setting("study_filter", filter_setting)
         self._prepare_quiz()
         self._save_navigation()
@@ -343,6 +377,7 @@ class StudySession:
         mode: StudyMode,
         answer_visible: bool,
         star_filter: int | None,
+        star_filters: tuple[int, ...] = (),
         quiz_choices: tuple[str, ...] = (),
         quiz_correct_index: int | None = None,
         quiz_selected_index: int | None = None,
@@ -383,11 +418,12 @@ class StudySession:
             at_end=at_end,
             star_rating=int(self._user.star_rating(word.id)),
             star_filter=star_filter,
+            star_filters=star_filters,
             list_key=list_key,
             list_keys=list_keys,
             list_label=list_label,
             can_complete_round=(
-                len(list_keys) == 1 and star_filter is None and at_end
+                not star_filters and bool(list_keys) and at_end
             ),
             root_families=root_families,
             lookalikes=lookalikes,
@@ -410,6 +446,7 @@ class StudySession:
             mode=self._mode,
             answer_visible=self._answer_visible,
             star_filter=self._star_filter,
+            star_filters=self._star_filters,
             quiz_choices=self._quiz_choices,
             quiz_correct_index=self._quiz_correct_index,
             quiz_selected_index=self._quiz_selected_index,
@@ -435,6 +472,7 @@ class StudySession:
             mode=parsed_mode,
             answer_visible=False,
             star_filter=None,
+            star_filters=(),
             quiz_choices=choices,
             quiz_correct_index=correct_index,
             list_key=None,
@@ -528,13 +566,18 @@ class StudySession:
         self._user.cycle_star_rating(self._ids[self._position])
         return self.current()
 
-    def complete_round(self) -> int:
+    def complete_round(self) -> int | dict[str, int]:
         self._require_started()
-        if self._list_key is None or self._star_filter is not None:
-            raise RuntimeError("only a complete unfiltered List can be finished")
+        if not self._list_keys or self._star_filters:
+            raise RuntimeError("only a complete unfiltered List scope can be finished")
         if self._position != len(self._ids) - 1:
-            raise RuntimeError("the current List has not reached its final word")
-        count = int(self._user.increment_list_completion(self._list_key))
+            raise RuntimeError("the current List scope has not reached its final word")
+        counts = {
+            key: int(self._user.increment_list_completion(key))
+            for key in self._list_keys
+        }
         self._user.reset_position(self._queue_name)
         self._position = 0
-        return count
+        if len(self._list_keys) == 1:
+            return counts[self._list_keys[0]]
+        return counts

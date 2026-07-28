@@ -291,10 +291,30 @@ def test_star_filter_can_merge_multiple_or_all_lists_in_source_order(user_repo):
     ).word.id == 8
 
 
-def test_multiple_lists_require_a_specific_star_filter(user_repo):
+def test_multiple_lists_can_be_studied_unfiltered_and_complete_together(user_repo):
     session = StudySession(FakeContent(10), user_repo, random.Random(1))
-    with pytest.raises(ValueError, match="require a star"):
-        session.start(source_sections=("list1", "list2"))
+    first = session.start(source_sections=("list1", "list2"))
+    assert first.total == 10
+    assert first.list_keys == ("list1", "list2")
+    assert session.last().can_complete_round
+    completed = session.complete_round()
+    assert completed == {"list1": 1, "list2": 1}
+
+
+def test_multiple_star_ratings_merge_in_source_order(user_repo):
+    user_repo.ratings.update({1: 1, 2: 2, 3: 3, 4: 2})
+    session = StudySession(FakeContent(10), user_repo, random.Random(1))
+    first = session.start(
+        source_sections=("list1", "list2"),
+        star_ratings=(1, 2),
+    )
+    assert first.star_filters == (1, 2)
+    assert first.star_filter is None
+    assert [first.word.id, session.next().word.id, session.next().word.id] == [
+        1,
+        2,
+        4,
+    ]
 
 
 def test_star_filter_membership_change_keeps_source_anchor(user_repo):

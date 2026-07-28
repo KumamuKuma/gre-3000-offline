@@ -5,7 +5,7 @@ from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QDialogButtonBox, QLabel
 
 from gre_vocab_app.domain import SourceList
-from gre_vocab_app.ui.home_page import HomePage, ListScopeDialog
+from gre_vocab_app.ui.home_page import HomePage, ListScopeDialog, StarScopeDialog
 
 
 LISTS = (
@@ -29,12 +29,10 @@ def test_home_search_stats_lists_and_star_counts_render(qtbot):
 
     page.set_source_lists(LISTS, {"list1": 2}, selected_key="list1")
     page.set_star_counts({0: 70, 1: 20, 2: 10, 3: 5})
-    assert "已完成 2 次" in page.list_combo.itemText(0)
+    assert page.list_scope_button.text() == "已选 1 个 List"
     assert page.rounds_value_label.text() == "2"
     assert page.decrease_rounds_button.isEnabled()
-    assert page.star_combo.itemText(0) == "全部星级（105 词）"
-    assert page.star_combo.itemText(1) == "0 星（未评级，70 词）"
-    assert page.star_combo.itemText(4) == "3 星（5 词）"
+    assert page.star_scope_button.text() == "全部星级（105 词）"
 
 
 def test_home_selects_list_and_emits_list_scoped_study(qtbot):
@@ -44,29 +42,25 @@ def test_home_selects_list_and_emits_list_scoped_study(qtbot):
     page.set_source_lists(LISTS, {})
     page.set_star_counts({0: 100, 1: 3, 2: 2, 3: 0})
 
-    with qtbot.waitSignal(page.listSelectionChanged) as selected:
-        page.list_combo.setCurrentIndex(1)
-    assert selected.args == ["list2"]
-
     page.set_star_counts({0: 90, 1: 10, 2: 4, 3: 1})
-    page.star_combo.setCurrentIndex(3)
-    assert page.star_list_button.isEnabled()
-    assert page.star_list_button.text() == "全部 2 个 List"
+    assert page.set_selected_lists(("list1", "list2"))
+    assert page.set_selected_star_ratings((1, 2))
+    assert page.list_scope_button.text() == "全部 2 个 List"
+    assert "1 星、2 星" in page.star_scope_button.text()
     with qtbot.waitSignal(page.listStudyRequested) as requested:
         page.start_button.click()
-    assert requested.args == [("list1", "list2"), 2]
+    assert requested.args == [("list1", "list2"), (1, 2)]
 
-    assert page.set_selected_star_lists(("list2",))
-    assert page.star_list_button.text() == "已选 1 个 List"
+    assert page.set_selected_lists(("list2",))
+    assert page.list_scope_button.text() == "已选 1 个 List"
     with qtbot.waitSignal(page.listStudyRequested) as narrowed:
         page.start_button.click()
-    assert narrowed.args == [("list2",), 2]
+    assert narrowed.args == [("list2",), (1, 2)]
 
-    page.star_combo.setCurrentIndex(0)
-    assert not page.star_list_button.isEnabled()
+    assert page.set_selected_star_ratings((0, 1, 2, 3))
     with qtbot.waitSignal(page.listStudyRequested) as all_words:
         page.start_button.click()
-    assert all_words.args == ["list2", None]
+    assert all_words.args == [("list2",), None]
     assert not hasattr(page, "source_button")
     assert not hasattr(page, "favorites_button")
 
@@ -103,6 +97,18 @@ def test_multi_list_scope_dialog_supports_select_all_and_requires_one(qtbot):
     assert dialog.selected_keys() == ()
     ok_button = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
     assert not ok_button.isEnabled()
+
+
+def test_multi_star_scope_dialog_supports_combined_ratings(qtbot):
+    dialog = StarScopeDialog((70, 20, 10, 5), (1, 2))
+    qtbot.addWidget(dialog)
+    assert dialog.selected_ratings() == (1, 2)
+    assert not dialog.all_checkbox.isChecked()
+
+    dialog.all_checkbox.click()
+    assert dialog.selected_ratings() == (0, 1, 2, 3)
+    dialog.checkboxes[0].click()
+    assert dialog.selected_ratings() == (1, 2, 3)
 
 
 def test_home_word_list_and_result_selection_emit_domain_values(qtbot, sample_word):

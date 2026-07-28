@@ -44,7 +44,9 @@ def test_progress_round_trip_preserves_stars_lists_positions_and_settings(
         seed=0,
     )
     source.save_setting("study_list", list_key)
+    source.save_setting("study_lists", "list1,list2")
     source.save_setting("study_star_lists", "list1,list2")
+    source.save_setting("study_filter", "stars:1,3")
     source.save_setting("study_star_current_word_id", "4")
     source.save_setting("study_mode", "recall")
     source.save_setting("quiz_wrong_star_up", "1")
@@ -60,7 +62,9 @@ def test_progress_round_trip_preserves_stars_lists_positions_and_settings(
     assert target.list_completion_count(list_key) == 4
     assert target.load_queue(f"source:list:{list_key}:all").position == 2
     assert target.load_setting("study_mode") == "recall"
+    assert target.load_setting("study_lists") == "list1,list2"
     assert target.load_setting("study_star_lists") == "list1,list2"
+    assert target.load_setting("study_filter") == "stars:1,3"
     assert target.load_setting("study_star_current_word_id") == "4"
     assert target.load_setting("quiz_wrong_star_up") == "1"
     assert target.load_setting("quiz_correct_star_down") == "1"
@@ -89,6 +93,8 @@ def test_progress_import_validates_everything_before_mutating(
 @pytest.mark.parametrize(
     ("key", "value", "message"),
     [
+        ("study_lists", "list1,missing", "List 范围"),
+        ("study_lists", "list1,list1", "List 范围"),
         ("study_star_lists", "list1,missing", "List 范围"),
         ("study_star_lists", "list1,list1", "List 范围"),
         ("study_star_current_word_id", "999", "当前位置"),
@@ -104,4 +110,15 @@ def test_progress_import_rejects_invalid_multi_list_scope_settings(
     payload["settings"][key] = value
 
     with pytest.raises(ProgressFormatError, match=message):
+        import_progress(user, content_repository, payload)
+
+
+@pytest.mark.parametrize("value", ["stars:1,1", "stars:0,4", "stars:2", "stars:x,2"])
+def test_progress_import_rejects_invalid_multi_star_filter(tmp_path, value):
+    content_repository = FakeContent()
+    user = UserRepository(tmp_path / "invalid-star-filter.db")
+    payload = export_progress(user, content_repository)
+    payload["settings"]["study_filter"] = value
+
+    with pytest.raises(ProgressFormatError, match="星级筛选"):
         import_progress(user, content_repository, payload)

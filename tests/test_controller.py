@@ -192,6 +192,29 @@ class FakeUser:
         self.completions.clear()
 
 
+def test_controller_migrates_old_list_scopes_without_changing_normal_study():
+    controller = ApplicationController.__new__(ApplicationController)
+    controller.user = FakeUser()
+    controller._source_lists = (
+        SourceList("list1", "List 1", 3, 1, 3),
+        SourceList("list2", "List 2", 2, 4, 5),
+    )
+    controller.user.settings.update(
+        {
+            "study_list": "list1",
+            "study_star_lists": "all",
+            "study_filter": "all",
+        }
+    )
+    assert controller._saved_list_keys() == ("list1",)
+
+    controller.user.settings["study_filter"] = "star:2"
+    assert controller._saved_list_keys() == ("list1", "list2")
+
+    controller.user.settings["study_lists"] = "list2"
+    assert controller._saved_list_keys() == ("list2",)
+
+
 class FakeSpeech(QObject):
     errorOccurred = Signal(str, str)
     availabilityChanged = Signal(bool)
@@ -303,9 +326,9 @@ def test_controller_cycles_stars_studies_a_rating_in_source_order_and_quizzes(
 
     window.study_page.back_button.click()
     controller._refresh_stats()
-    index = window.home_page.star_combo.findData(2)
-    window.home_page.star_combo.setCurrentIndex(index)
-    assert "2 词" in window.home_page.star_combo.currentText()
+    assert window.home_page.set_selected_star_ratings((2,))
+    window.home_page.starFiltersChanged.emit((2,))
+    assert "2 星" in window.home_page.star_scope_button.text()
     window.home_page.start_button.click()
 
     assert window.study_page.snapshot.star_filter == 2

@@ -84,7 +84,7 @@ Get-FileHash -Algorithm SHA256 ".\GRE-3000-Vocabulary-Trainer-Windows.exe"
 
 ## iPhone / iPad：安装到主屏幕
 
-Windows EXE 不能直接安装到 iPhone。iPhone 使用的是功能同步的 PWA 网页版：
+Windows EXE 不能直接安装到 iPhone。iPhone 使用的是配套的 PWA 网页版：
 
 **正式网址：<https://gre-3000-offline.cbg206.chatgpt.site>**
 

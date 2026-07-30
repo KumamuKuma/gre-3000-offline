@@ -35,6 +35,7 @@ class WordDetail(QWidget):
     secondarySpeechRequested = Signal(str)
     revealRequested = Signal()
     quizChoiceRequested = Signal(int)
+    quizRetryRequested = Signal()
     relatedWordRequested = Signal(int)
     lookupRequested = Signal(str)
     selectionTranslationRequested = Signal(str)
@@ -132,6 +133,14 @@ class WordDetail(QWidget):
         self.quiz_feedback_label = self._label(object_name="sectionTitle")
         self.quiz_feedback_label.setAccessibleName("答题结果")
         quiz_layout.addWidget(self.quiz_feedback_label)
+        self.quiz_retry_button = QPushButton("重新作答")
+        self.quiz_retry_button.setObjectName("outlineButton")
+        self.quiz_retry_button.setMinimumHeight(42)
+        self.quiz_retry_button.setAccessibleName("清除本题错误答案并重新作答")
+        self.quiz_retry_button.setToolTip("保留当前单词，重新选择本题答案")
+        self.quiz_retry_button.clicked.connect(self._request_quiz_retry)
+        self.quiz_retry_button.hide()
+        quiz_layout.addWidget(self.quiz_retry_button)
         self.quiz_panel.hide()
         root.addWidget(self.quiz_panel)
 
@@ -364,6 +373,8 @@ class WordDetail(QWidget):
         self._quiz_selected_index = None
         self.quiz_feedback_label.clear()
         self.quiz_feedback_label.hide()
+        self.quiz_retry_button.hide()
+        self.quiz_retry_button.setEnabled(False)
         for button in self.quiz_buttons:
             button.setText("")
             button.hide()
@@ -435,10 +446,14 @@ class WordDetail(QWidget):
                 else "回答错误，正确答案已标出"
             )
             self.quiz_feedback_label.show()
+            self.quiz_retry_button.setVisible(not correct)
+            self.quiz_retry_button.setEnabled(not correct)
             self._set_quiz_review_visible(correct)
         else:
             self.quiz_feedback_label.clear()
             self.quiz_feedback_label.hide()
+            self.quiz_retry_button.hide()
+            self.quiz_retry_button.setEnabled(False)
             self._set_quiz_review_visible(False)
         self._update_relation_visibility()
 
@@ -556,6 +571,20 @@ class WordDetail(QWidget):
                 selected_index=index,
             )
             self.quizChoiceRequested.emit(index)
+
+    def _request_quiz_retry(self) -> None:
+        if (
+            self._mode is StudyMode.QUIZ
+            and self._quiz_selected_index is not None
+            and self._quiz_correct_index is not None
+            and self._quiz_selected_index != self._quiz_correct_index
+        ):
+            self._render_quiz(
+                self._quiz_choices,
+                correct_index=self._quiz_correct_index,
+                selected_index=None,
+            )
+            self.quizRetryRequested.emit()
 
     def set_revealed(self, revealed: bool) -> None:
         self._revealed = bool(revealed)

@@ -90,6 +90,7 @@ class ApplicationController:
         study_page.secondarySpeechRequested.connect(self._speak_secondary)
         study_page.starRatingRequested.connect(self._set_star_rating)
         study_page.quizChoiceRequested.connect(self._answer_quiz)
+        study_page.quizRetryRequested.connect(self._retry_quiz)
         study_page.quizWrongStarUpChanged.connect(
             self._set_quiz_wrong_star_up
         )
@@ -685,10 +686,19 @@ class ApplicationController:
 
         next_rating = before.star_rating
         adjustment = ""
-        if is_correct and self._quiz_correct_star_down_enabled:
+        first_attempt = before.quiz_attempt_count == 0
+        if (
+            first_attempt
+            and is_correct
+            and self._quiz_correct_star_down_enabled
+        ):
             next_rating = max(0, before.star_rating - 1)
             adjustment = "答对"
-        elif not is_correct and self._quiz_wrong_star_up_enabled:
+        elif (
+            first_attempt
+            and not is_correct
+            and self._quiz_wrong_star_up_enabled
+        ):
             next_rating = min(3, before.star_rating + 1)
             adjustment = "答错"
         if adjustment:
@@ -710,9 +720,31 @@ class ApplicationController:
                 self._show_status(
                     f"{adjustment}，已自动{direction}为 {next_rating} 星。"
                 )
+        elif not first_attempt:
+            self._show_status(
+                "重新作答正确。"
+                if is_correct
+                else "仍未答对，可以再次重新作答。"
+            )
         self.window.study_page.render(snapshot)
         self._refresh_stats()
         self._report_persistence_issue()
+
+    def _retry_quiz(self) -> None:
+        try:
+            if self._detail_snapshot is not None:
+                self._detail_snapshot = self.study.retry_detail_quiz(
+                    self._detail_snapshot
+                )
+                snapshot = self._detail_snapshot
+            else:
+                snapshot = self.study.retry_quiz()
+        except (TypeError, ValueError, RuntimeError) as error:
+            LOGGER.exception("Unable to retry quiz answer")
+            self._show_status(f"无法重新作答：{error}")
+            return
+        self.window.study_page.render(snapshot)
+        self._show_status("请重新选择答案。")
 
     def _set_word_list_star(self, word_id: int, star_rating: int) -> None:
         word_id = int(word_id)

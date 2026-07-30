@@ -59,6 +59,10 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(page, /答对 −1 星/);
   assert.match(page, /quiz_wrong_star_up/);
   assert.match(page, /quiz_correct_star_down/);
+  assert.match(page, /quizAttemptCount/);
+  assert.match(page, /retryQuiz/);
+  assert.match(page, /重新作答/);
+  assert.match(styles, /\.quiz-retry/);
   assert.match(worker, /data\/words\.json/);
   assert.match(worker, /data\/click_dictionary\.json/);
   assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);

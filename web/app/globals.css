@@ -147,6 +147,9 @@ button { color: inherit; }
 .quiz-option span { flex: 0 0 auto; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); background: white; font-size: 10px; font-weight: 800; }
 .quiz-option.correct { border-color: #7eb5a7; background: #edf7f3; }
 .quiz-option.wrong { border-color: #e7a88c; background: #fff1ea; }
+.quiz-option:disabled { color: inherit; cursor: default; opacity: 1; }
+.quiz-retry { width: 100%; margin-top: 12px; padding: 12px 16px; color: var(--orange); border: 1px solid #e8ad8b; border-radius: 13px; background: var(--orange-soft); font-weight: 800; cursor: pointer; }
+.quiz-retry:hover { background: #ffe8da; }
 .relations { margin-top: 15px; }
 .relation-block { padding: 17px 0; border-top: 1px solid var(--line); }
 .relation-block > div { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }

@@ -38,6 +38,7 @@ class StudySession:
         self._quiz_choices: tuple[str, ...] = ()
         self._quiz_correct_index: int | None = None
         self._quiz_selected_index: int | None = None
+        self._quiz_attempt_count = 0
         self._started = False
 
     @staticmethod
@@ -208,6 +209,7 @@ class StudySession:
         self._quiz_choices = ()
         self._quiz_correct_index = None
         self._quiz_selected_index = None
+        self._quiz_attempt_count = 0
         if self._mode is StudyMode.QUIZ:
             word = self._content.get(self._ids[self._position])
             (
@@ -381,6 +383,7 @@ class StudySession:
         quiz_choices: tuple[str, ...] = (),
         quiz_correct_index: int | None = None,
         quiz_selected_index: int | None = None,
+        quiz_attempt_count: int = 0,
         list_key: str | None = None,
         list_keys: tuple[str, ...] = (),
         list_label: str = "",
@@ -432,6 +435,7 @@ class StudySession:
             quiz_choices=quiz_choices,
             quiz_correct_index=quiz_correct_index,
             quiz_selected_index=quiz_selected_index,
+            quiz_attempt_count=quiz_attempt_count,
         )
 
     def current(self) -> SessionSnapshot:
@@ -450,6 +454,7 @@ class StudySession:
             quiz_choices=self._quiz_choices,
             quiz_correct_index=self._quiz_correct_index,
             quiz_selected_index=self._quiz_selected_index,
+            quiz_attempt_count=self._quiz_attempt_count,
             list_key=self._list_key,
             list_keys=self._list_keys,
             list_label=self._list_label,
@@ -489,7 +494,23 @@ class StudySession:
             raise ValueError("quiz choice index is out of range")
         if snapshot.quiz_selected_index is not None:
             return snapshot
-        return replace(snapshot, quiz_selected_index=index)
+        return replace(
+            snapshot,
+            quiz_selected_index=index,
+            quiz_attempt_count=snapshot.quiz_attempt_count + 1,
+        )
+
+    @staticmethod
+    def retry_detail_quiz(snapshot: SessionSnapshot) -> SessionSnapshot:
+        if snapshot.mode is not StudyMode.QUIZ:
+            raise ValueError("detail snapshot is not in quiz mode")
+        if (
+            snapshot.quiz_selected_index is None
+            or snapshot.quiz_correct_index is None
+            or snapshot.quiz_selected_index == snapshot.quiz_correct_index
+        ):
+            return snapshot
+        return replace(snapshot, quiz_selected_index=None)
 
     def _move(self, position: int) -> SessionSnapshot:
         self._position = position
@@ -554,6 +575,20 @@ class StudySession:
         if self._quiz_selected_index is not None:
             return self.current()
         self._quiz_selected_index = index
+        self._quiz_attempt_count += 1
+        return self.current()
+
+    def retry_quiz(self) -> SessionSnapshot:
+        self._require_started()
+        if self._mode is not StudyMode.QUIZ:
+            raise ValueError("study session is not in quiz mode")
+        if (
+            self._quiz_selected_index is None
+            or self._quiz_correct_index is None
+            or self._quiz_selected_index == self._quiz_correct_index
+        ):
+            return self.current()
+        self._quiz_selected_index = None
         return self.current()
 
     def set_star_rating(self, star_rating: int) -> SessionSnapshot:

@@ -343,16 +343,33 @@ def test_empty_star_filter_fails_without_creating_queue_or_seen_event(user_repo)
     assert user_repo.seen == []
 
 
-def test_quiz_has_four_unique_choices_and_locks_first_answer(session):
+def test_quiz_has_four_unique_choices_and_retries_wrong_answer(session):
     first = start(session)
     quiz = session.set_mode(StudyMode.QUIZ)
     assert len(quiz.quiz_choices) == 4
     assert len(set(quiz.quiz_choices)) == 4
     assert quiz.quiz_choices[quiz.quiz_correct_index] == first.word.definition_zh
-    answered = session.answer_quiz(quiz.quiz_correct_index)
+    wrong_index = next(
+        index
+        for index in range(len(quiz.quiz_choices))
+        if index != quiz.quiz_correct_index
+    )
+    answered = session.answer_quiz(wrong_index)
+    assert answered.quiz_attempt_count == 1
     assert session.set_mode(StudyMode.QUIZ) == answered
-    assert session.answer_quiz((quiz.quiz_correct_index + 1) % 4) == answered
-    assert session.next().quiz_selected_index is None
+    assert session.answer_quiz(quiz.quiz_correct_index) == answered
+
+    retried = session.retry_quiz()
+    assert retried.quiz_selected_index is None
+    assert retried.quiz_attempt_count == 1
+    corrected = session.answer_quiz(quiz.quiz_correct_index)
+    assert corrected.quiz_selected_index == quiz.quiz_correct_index
+    assert corrected.quiz_attempt_count == 2
+    assert session.retry_quiz() == corrected
+
+    next_word = session.next()
+    assert next_word.quiz_selected_index is None
+    assert next_word.quiz_attempt_count == 0
 
 
 def test_quiz_falls_back_to_english_when_chinese_choices_duplicate():
@@ -376,8 +393,22 @@ def test_detail_snapshot_includes_star_and_word_relations(user_repo):
     assert snapshot.equivalents[0].word_id == 4
     assert snapshot.in_machine7 is True
     assert snapshot.quiz_choices[snapshot.quiz_correct_index] == "中文释义1"
-    answered = session.answer_detail_quiz(snapshot, 0)
+    wrong_index = next(
+        index
+        for index in range(len(snapshot.quiz_choices))
+        if index != snapshot.quiz_correct_index
+    )
+    answered = session.answer_detail_quiz(snapshot, wrong_index)
+    assert answered.quiz_attempt_count == 1
     assert session.answer_detail_quiz(answered, 1) == answered
+    retried = session.retry_detail_quiz(answered)
+    assert retried.quiz_selected_index is None
+    assert retried.quiz_attempt_count == 1
+    corrected = session.answer_detail_quiz(
+        retried, snapshot.quiz_correct_index
+    )
+    assert corrected.quiz_attempt_count == 2
+    assert session.retry_detail_quiz(corrected) == corrected
 
 
 def test_star_cycle_is_zero_through_three(session):

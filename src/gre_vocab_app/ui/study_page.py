@@ -38,6 +38,7 @@ class StudyPage(QWidget):
     secondarySpeechRequested = Signal(str)
     starRatingRequested = Signal(int)
     quizChoiceRequested = Signal(int)
+    quizRetryRequested = Signal()
     quizWrongStarUpChanged = Signal(bool)
     quizCorrectStarDownChanged = Signal(bool)
     relatedWordRequested = Signal(int)
@@ -164,6 +165,9 @@ class StudyPage(QWidget):
         self.word_detail.revealRequested.connect(self.answerToggleRequested.emit)
         self.word_detail.quizChoiceRequested.connect(
             self.quizChoiceRequested.emit
+        )
+        self.word_detail.quizRetryRequested.connect(
+            self.quizRetryRequested.emit
         )
         self.word_detail.relatedWordRequested.connect(
             self.relatedWordRequested.emit

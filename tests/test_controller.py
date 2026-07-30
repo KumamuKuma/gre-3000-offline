@@ -374,12 +374,25 @@ def test_controller_quiz_auto_star_adjustments_are_independent_and_persisted(
     window.study_page.word_detail.quiz_buttons[wrong_index].click()
     assert user.stars[first_quiz.word.id] == 1
     assert window.study_page.snapshot.star_rating == 1
+    assert window.study_page.snapshot.quiz_attempt_count == 1
+    assert not window.study_page.word_detail.quiz_retry_button.isHidden()
+
+    window.study_page.quiz_correct_star_down_checkbox.setChecked(True)
+    assert user.settings["quiz_correct_star_down"] == "1"
+    window.study_page.word_detail.quiz_retry_button.click()
+    assert window.study_page.snapshot.quiz_selected_index is None
+    assert window.study_page.snapshot.quiz_attempt_count == 1
+    window.study_page.word_detail.quiz_buttons[
+        first_quiz.quiz_correct_index
+    ].click()
+    assert window.study_page.snapshot.quiz_attempt_count == 2
+    assert user.stars[first_quiz.word.id] == 1
+    assert window.study_page.snapshot.star_rating == 1
 
     window.study_page.next_button.click()
     second_quiz = window.study_page.snapshot
     user.set_star_rating(second_quiz.word.id, 2)
     window.study_page.render(_controller.study.current())
-    window.study_page.quiz_correct_star_down_checkbox.setChecked(True)
     assert user.settings["quiz_correct_star_down"] == "1"
     window.study_page.word_detail.quiz_buttons[
         second_quiz.quiz_correct_index

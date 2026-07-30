@@ -427,6 +427,7 @@ export default function Home() {
   const [activeWordId, setActiveWordId] = useState<number | null>(null);
   const [answerVisible, setAnswerVisible] = useState(false);
   const [quizSelected, setQuizSelected] = useState<number | null>(null);
+  const [quizAttemptCount, setQuizAttemptCount] = useState(0);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const [cloud, setCloud] = useState<CloudState>({ status: "disconnected" });
@@ -657,6 +658,13 @@ export default function Home() {
     updateProgress((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
   }
 
+  function selectMode(nextMode: StudyMode) {
+    setSetting("study_mode", nextMode);
+    setAnswerVisible(nextMode === "reading" || nextMode === "brief");
+    setQuizSelected(null);
+    setQuizAttemptCount(0);
+  }
+
   function setListScope(keys: string[]) {
     if (!data || !keys.length) return;
     const selected = data.lists.map((item) => item.key).filter((key) => keys.includes(key));
@@ -721,6 +729,7 @@ export default function Home() {
     }
     setAnswerVisible(mode === "reading" || mode === "brief");
     setQuizSelected(null);
+    setQuizAttemptCount(0);
     setScreen("study");
   }
 
@@ -729,6 +738,7 @@ export default function Home() {
     setListScope([word.list]);
     setAnswerVisible(mode === "reading" || mode === "brief");
     setQuizSelected(null);
+    setQuizAttemptCount(0);
     setScreen("study");
   }
 
@@ -739,6 +749,7 @@ export default function Home() {
     setActiveWordId(next.id);
     setAnswerVisible(mode === "reading" || mode === "brief");
     setQuizSelected(null);
+    setQuizAttemptCount(0);
     updateProgress((current) => ({
       ...current,
       ...(allStarsSelected && selectedListKeys.length === 1
@@ -817,7 +828,13 @@ export default function Home() {
   function answerQuiz(choiceIndex: number) {
     if (!activeWord || quizSelected !== null) return;
     const isCorrect = choiceIndex === quiz.correct;
+    const firstAttempt = quizAttemptCount === 0;
     setQuizSelected(choiceIndex);
+    setQuizAttemptCount((current) => current + 1);
+    if (!firstAttempt) {
+      setNotice(isCorrect ? "重新作答正确。" : "仍未答对，可以再次重新作答。");
+      return;
+    }
     const shouldAdjust = isCorrect
       ? progress.settings.quiz_correct_star_down === "1"
       : progress.settings.quiz_wrong_star_up === "1";
@@ -835,6 +852,12 @@ export default function Home() {
     } else {
       setNotice(isCorrect ? `回答正确，已自动减为 ${next} 星。` : `回答错误，已自动加为 ${next} 星。`);
     }
+  }
+
+  function retryQuiz() {
+    if (quizSelected === null || quizSelected === quiz.correct) return;
+    setQuizSelected(null);
+    setNotice("请重新选择答案。");
   }
 
   function openLookup(queryText: string) {
@@ -1073,7 +1096,7 @@ export default function Home() {
             <span className="field-label">学习模式</span>
             <div className="mode-grid">
               {MODES.map((item) => (
-                <button className={mode === item.key ? "mode active" : "mode"} key={item.key} onClick={() => setSetting("study_mode", item.key)}>
+                <button className={mode === item.key ? "mode active" : "mode"} key={item.key} onClick={() => selectMode(item.key)}>
                   <strong>{item.label}</strong><small>{item.hint}</small>
                 </button>
               ))}
@@ -1141,9 +1164,12 @@ export default function Home() {
                         const displayedChoice = answered && index === quiz.correct
                           ? meaningWithPartsOfSpeech(choice, activeWord.definition_en)
                           : choice;
-                        return <button className={className} key={choice} onClick={() => answerQuiz(index)}><span>{String.fromCharCode(65 + index)}</span>{displayedChoice}</button>;
+                        return <button className={className} key={choice} disabled={answered} onClick={() => answerQuiz(index)}><span>{String.fromCharCode(65 + index)}</span>{displayedChoice}</button>;
                       })}
                 </div>
+                {quizSelected !== null && quizSelected !== quiz.correct && (
+                  <button className="quiz-retry" onClick={retryQuiz}>重新作答</button>
+                )}
               </>
             )}
 

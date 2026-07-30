@@ -68,3 +68,4 @@ def test_session_snapshot_annotation_and_quiz_fields_default_safely():
     assert snapshot.quiz_choices == ()
     assert snapshot.quiz_correct_index is None
     assert snapshot.quiz_selected_index is None
+    assert snapshot.quiz_attempt_count == 0

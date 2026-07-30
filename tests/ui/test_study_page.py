@@ -167,6 +167,10 @@ def test_quiz_and_related_word_signals_are_forwarded(qtbot, sample_word):
     with qtbot.waitSignal(page.quizChoiceRequested) as answer:
         page.word_detail.quiz_buttons[0].click()
     assert answer.args == [0]
+    assert page.word_detail.quiz_retry_button.isVisible()
+    with qtbot.waitSignal(page.quizRetryRequested):
+        page.word_detail.quiz_retry_button.click()
+    assert page.word_detail.quiz_retry_button.isHidden()
 
     with qtbot.waitSignal(page.relatedWordRequested) as related:
         page.word_detail.relatedWordRequested.emit(17)

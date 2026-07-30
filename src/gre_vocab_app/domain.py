@@ -77,3 +77,4 @@ class SessionSnapshot:
     quiz_choices: tuple[str, ...] = ()
     quiz_correct_index: int | None = None
     quiz_selected_index: int | None = None
+    quiz_attempt_count: int = 0

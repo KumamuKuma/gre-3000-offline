@@ -114,6 +114,13 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
     assert detail.quiz_buttons[2].text().startswith("✓ 正确答案")
     assert "adj." + choices[2] in detail.quiz_buttons[2].text()
     assert "回答错误" in detail.quiz_feedback_label.text()
+    assert detail.quiz_retry_button.isVisible()
+    retry_spy = QSignalSpy(detail.quizRetryRequested)
+    detail.quiz_retry_button.click()
+    assert retry_spy.count() == 1
+    assert detail.quiz_retry_button.isHidden()
+    assert detail.quiz_feedback_label.isHidden()
+    assert all(button.isEnabled() for button in detail.quiz_buttons)
 
     detail.set_word(
         sample_word,
@@ -128,6 +135,7 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
     assert "adj." + choices[2] in detail.quiz_buttons[2].text()
     assert detail.quiz_buttons[2].objectName() == "primaryButton"
     assert "回答错误" in detail.quiz_feedback_label.text()
+    assert detail.quiz_retry_button.isVisible()
     assert detail.meaning_panel.isHidden()
     assert all(not button.isEnabled() for button in detail.quiz_buttons)
     detail.quiz_buttons[0].click()
@@ -143,6 +151,7 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
     assert detail.quiz_buttons[2].text().startswith("✓ 回答正确")
     assert "adj." + choices[2] in detail.quiz_buttons[2].text()
     assert detail.quiz_feedback_label.text() == "回答正确"
+    assert detail.quiz_retry_button.isHidden()
     assert detail.meaning_panel.isVisible()
     assert not hasattr(detail, "quiz_pos_label")
     assert detail.example_en_label.isVisible()

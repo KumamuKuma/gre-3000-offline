@@ -1,4 +1,4 @@
-# GRE 3000 PWA
+# GRE 3000 Vocabulary Trainer PWA
 
 适配 iPhone、iPad 和桌面浏览器的 GRE 3000 可安装网页应用。
 
@@ -7,7 +7,7 @@
 - Service Worker 离线缓存；
 - JSON 进度文件与 Windows 桌面版双向导入/导出；
 - 无需账号的同步码自动云同步；
-- AES-256-GCM 设备端加密，D1 仅保存密文。
+- AES-256-GCM 设备端加密；D1 不保存明文进度，只保存加密进度及同步所需的技术元数据。
 
 ```powershell
 npm install

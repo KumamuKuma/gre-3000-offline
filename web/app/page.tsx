@@ -1053,7 +1053,7 @@ export default function Home() {
       <header className="topbar">
         <button className="brand" onClick={() => setScreen("home")} aria-label="返回首页">
           <span className="brand-mark">G</span>
-          <span><strong>GRE 3000</strong><small>原书词序 · 离线学习</small></span>
+          <span><strong>GRE 3000 Vocabulary Trainer</strong><small>原书词序 · 离线可用</small></span>
         </button>
         <span className="offline-pill">可离线</span>
       </header>

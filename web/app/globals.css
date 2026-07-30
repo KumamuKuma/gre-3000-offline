@@ -22,8 +22,9 @@ button { color: inherit; }
 .topbar { height: 76px; display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; position: sticky; top: 0; z-index: 20; background: rgba(245, 242, 234, .86); backdrop-filter: blur(18px); border-bottom: 1px solid rgba(228, 222, 210, .8); }
 .brand { display: flex; align-items: center; gap: 11px; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
 .brand-mark { width: 42px; height: 42px; display: grid; place-items: center; color: white; font-family: Georgia, serif; font-size: 24px; font-weight: 700; background: var(--ink); border-radius: 13px 13px 13px 4px; box-shadow: 0 8px 18px rgba(24, 34, 56, .18); }
+.brand > span:last-child { min-width: 0; }
 .brand strong, .brand small { display: block; }
-.brand strong { font-size: 15px; letter-spacing: .02em; }
+.brand strong { font-size: 15px; letter-spacing: .02em; white-space: nowrap; }
 .brand small { color: var(--muted); font-size: 10px; margin-top: 2px; letter-spacing: .04em; }
 .offline-pill { color: var(--green); font-size: 11px; font-weight: 700; border: 1px solid #b7d6ce; background: #eff8f4; border-radius: 99px; padding: 7px 10px; }
 .offline-pill::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--green); }
@@ -223,6 +224,15 @@ button.signout { padding: 0; border: 0; background: transparent; cursor: pointer
   .lookup-sheet { max-height: min(86vh, 760px); border-radius: 25px; padding-bottom: 20px; }
   .lookup-actions { bottom: -20px; }
   .swipe-hint { display: none; }
+}
+
+@media (max-width: 420px) {
+  .topbar { padding-inline: 15px; }
+  .brand { gap: 8px; }
+  .brand-mark { width: 38px; height: 38px; font-size: 22px; }
+  .brand strong { font-size: 12px; }
+  .brand small { font-size: 9px; }
+  .offline-pill { padding: 6px 8px; font-size: 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }

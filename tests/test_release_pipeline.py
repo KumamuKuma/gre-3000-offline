@@ -53,7 +53,7 @@ def test_release_script_enforces_the_exact_three_file_output_allowlist():
     script = (ROOT / "scripts" / "build_release.ps1").read_text(encoding="utf-8-sig")
 
     assert "$ExpectedOutputNames = @(" in script
-    assert '"GRE 3000 词离线版.exe"' in script
+    assert '"GRE 3000 Vocabulary Trainer.exe"' in script
     assert '"使用说明.txt"' in script
     assert '"词库导入审计报告.html"' in script
     assert script.count("Assert-ReleaseOutputAllowlist") >= 3

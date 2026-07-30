@@ -94,7 +94,7 @@ $LauncherBuild = Join-Path $RepoRoot "build\launcher"
 $LauncherExe = Join-Path $LauncherBuild "GRELauncher.exe"
 $DeploymentDirectory = Join-Path $RepoRoot "deployment"
 $ReleaseCandidateDirectory = Join-Path $RepoRoot "build\release-candidate"
-$ReleaseCandidate = Join-Path $ReleaseCandidateDirectory "GRE 3000 词离线版.exe"
+$ReleaseCandidate = Join-Path $ReleaseCandidateDirectory "GRE 3000 Vocabulary Trainer.exe"
 $StagedInstructions = Join-Path $ReleaseCandidateDirectory "使用说明.txt"
 $OutputsDirectory = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     Join-Path $RepoRoot "outputs"
@@ -102,16 +102,16 @@ $OutputsDirectory = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 else {
     [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $OutputDirectory))
 }
-$OutputExe = Join-Path $OutputsDirectory "GRE 3000 词离线版.exe"
+$OutputExe = Join-Path $OutputsDirectory "GRE 3000 Vocabulary Trainer.exe"
 $OutputAuditHtml = Join-Path $OutputsDirectory "词库导入审计报告.html"
 $OutputInstructions = Join-Path $OutputsDirectory "使用说明.txt"
 $ExpectedOutputNames = @(
-    "GRE 3000 词离线版.exe",
+    "GRE 3000 Vocabulary Trainer.exe",
     "使用说明.txt",
     "词库导入审计报告.html"
 )
 $SmokeProfile = Join-Path $RepoRoot "build\smoke-profile"
-$ExpectedTitle = "GRE 3000 词离线版"
+$ExpectedTitle = "GRE 3000 Vocabulary Trainer"
 $Amd64Machine = "0x8664"
 $WindowsGuiSubsystem = "2"
 

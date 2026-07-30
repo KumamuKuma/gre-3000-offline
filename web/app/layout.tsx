@@ -8,10 +8,10 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = incoming.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const ogImage = `${protocol}://${host}/og.png`;
   return {
-    title: "GRE 3000 · 原书词序离线学习",
-    description: "可安装到 iPhone 主屏幕的 GRE 3000 词离线学习应用。",
+    title: "GRE 3000 Vocabulary Trainer · 原书词序",
+    description: "支持 Windows、iPhone 与离线使用的 GRE 3000 词汇学习应用。",
     manifest: "/manifest.webmanifest",
-    applicationName: "GRE 3000",
+    applicationName: "GRE 3000 Vocabulary Trainer",
     appleWebApp: {
       capable: true,
       statusBarStyle: "black-translucent",
@@ -23,14 +23,14 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     openGraph: {
       type: "website",
-      title: "GRE 3000",
-      description: "原书词序 · 离线学习",
-      images: [{ url: ogImage, width: 1200, height: 628 }],
+      title: "GRE 3000 Vocabulary Trainer",
+      description: "原书词序 · 多模式学习 · 离线可用",
+      images: [{ url: ogImage, width: 1729, height: 910 }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "GRE 3000",
-      description: "原书词序 · 离线学习",
+      title: "GRE 3000 Vocabulary Trainer",
+      description: "原书词序 · 多模式学习 · 离线可用",
       images: [ogImage],
     },
   };

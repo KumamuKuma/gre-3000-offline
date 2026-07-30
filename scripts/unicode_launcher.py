@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 RUNTIME_NAME = "GRE3000OfflineRuntime.exe"
-APP_TITLE = "GRE 3000 词离线版"
+APP_TITLE = "GRE 3000 Vocabulary Trainer"
 MB_OK = 0x00000000
 MB_ICONERROR = 0x00000010
 STARTUP_ERROR_REPORTED_EXIT_CODE = 20

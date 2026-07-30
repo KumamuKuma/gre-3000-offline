@@ -44,7 +44,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._close_guard_enabled = False
         self._close_guard_installed = False
-        self.setWindowTitle("GRE 3000 词离线版")
+        self.setWindowTitle("GRE 3000 Vocabulary Trainer")
         self.setMinimumSize(
             _PREFERRED_MINIMUM_WIDTH, _PREFERRED_MINIMUM_HEIGHT
         )
@@ -72,7 +72,7 @@ class MainWindow(QMainWindow):
         brand_layout.setSpacing(8)
         brand_mark = QLabel("GRE 3000")
         brand_mark.setObjectName("brandMark")
-        brand_tag = QLabel("OFFLINE")
+        brand_tag = QLabel("STUDY")
         brand_tag.setObjectName("brandTag")
         brand_layout.addWidget(brand_mark)
         brand_layout.addWidget(brand_tag)
@@ -104,7 +104,7 @@ class MainWindow(QMainWindow):
         self.settings_dialog = SettingsDialog(self)
         self.lookup_dialog = LookupDialog(self)
         self.settings_action.triggered.connect(self.show_settings)
-        self.statusBar().showMessage("离线运行 · 学习数据仅保存在本机")
+        self.statusBar().showMessage("离线运行 · 学习数据默认保存在本机")
 
     def show_home(self) -> None:
         self.stack.setCurrentWidget(self.home_page)

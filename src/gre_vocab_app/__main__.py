@@ -21,7 +21,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if application is None:
         application = QApplication(list(argv) if argv is not None else sys.argv)
     application.setOrganizationName("GRE Vocab Offline")
+    # Keep the legacy application name so existing users retain the same
+    # QStandardPaths data directory after the product-facing rename.
     application.setApplicationName("GRE 3000 词离线版")
+    application.setApplicationDisplayName("GRE 3000 Vocabulary Trainer")
     apply_theme(application)
 
     paths: AppPaths | None = None

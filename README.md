@@ -17,7 +17,9 @@
   <a href="https://gre-3000-offline.cbg206.chatgpt.site"><strong>打开网页版 / iPhone 版</strong></a>
 </p>
 
-![GRE 3000 Vocabulary Trainer 首页](docs/images/home.jpg)
+![GRE 3000 Vocabulary Trainer Windows 离线版首页](docs/images/windows-home.png)
+
+<p align="center"><sub>最新版 Windows 单文件 EXE 实机截图；学习记录默认保存在本机。</sub></p>
 
 ## 这是什么
 
@@ -31,25 +33,11 @@ GRE 3000 Vocabulary Trainer 是一款围绕原书词序设计的个人背词工�
 - **免账号同步码**，在设备端加密个人进度
 - **离线词典与点词查询**，例句、释义中的英文均可点击
 
-## 界面预览
+## Windows 离线版实机界面
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="docs/images/study-reading.jpg" alt="等价词与同词根词">
-      <br><sub>等价词与同词根词集中展示</sub>
-    </td>
-    <td width="50%">
-      <img src="docs/images/study-quiz-retry.jpg" alt="四选一答错后重新作答">
-      <br><sub>四选一答错后显示正确词性，并可重新作答</sub>
-    </td>
-  </tr>
-</table>
+![Windows 离线版 gregarious 阅读模式](docs/images/windows-study-reading.png)
 
-<p align="center">
-  <img src="docs/images/iphone-home.jpg" width="300" alt="iPhone 主屏幕界面">
-  <br><sub>iPhone 竖屏界面，可从 Safari 添加到主屏幕</sub>
-</p>
+<p align="center"><sub>本地 EXE 的阅读模式：同时展示例句、真经 GRE 等价词和同词根词。</sub></p>
 
 ## Windows：三步开始
 
@@ -94,6 +82,11 @@ Windows EXE 不能直接安装到 iPhone。iPhone 使用的是配套的 PWA 网�
 4. 选择“添加到主屏幕”。
 5. 以后从主屏幕图标打开，就可以像普通 App 一样使用。
 
+<p align="center">
+  <img src="docs/images/iphone-home.jpg" width="300" alt="iPhone 主屏幕界面">
+  <br><sub>iPhone 竖屏界面，可从 Safari 添加到主屏幕</sub>
+</p>
+
 首次完整加载需要联网。加载完成后，核心学习、词库和本地进度支持离线使用。为防止 Safari 清理网站数据，建议启用同步码或定期导出 JSON 进度文件。
 
 ## 四种学习模式
@@ -104,6 +97,8 @@ Windows EXE 不能直接安装到 iPhone。iPhone 使用的是配套的 PWA 网�
 | 简义模式 | 直接显示简约词义，无需点击揭晓 | 快速过词 |
 | 回忆 | 先隐藏释义，点击或按空格后揭晓 | 主动回忆 |
 | 四选一 | 从四个词义中选择正确答案 | 自测巩固 |
+
+网页版进入学习页后仍可直接切换四种模式，不需要先退出；切换时会保留当前单词并重置本题的揭晓或作答状态。上一词、下一词和答错后的“重新作答”位于单词卡片上方，当前 List 的开头、结尾按钮保留在卡片下方。
 
 四选一模式中：
 

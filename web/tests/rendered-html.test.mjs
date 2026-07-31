@@ -63,6 +63,19 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(page, /retryQuiz/);
   assert.match(page, /重新作答/);
   assert.match(styles, /\.quiz-retry/);
+  assert.match(page, /className="study-mode-switcher"/);
+  assert.match(page, /aria-label="学习模式"/);
+  assert.match(styles, /\.study-mode-switcher/);
+  const studyScreen = page.slice(
+    page.indexOf('{screen === "study"'),
+    page.indexOf('{screen === "words"'),
+  );
+  assert.match(studyScreen, /onClick=\{\(\) => selectMode\(item\.key\)\}/);
+  assert.ok(studyScreen.indexOf('className="study-mode-switcher"') < studyScreen.indexOf('className="word-card"'));
+  assert.ok(studyScreen.indexOf('className="study-actions"') < studyScreen.indexOf('className="word-card"'));
+  assert.ok(studyScreen.indexOf('className="quiz-retry study-retry"') < studyScreen.indexOf('className="word-card"'));
+  assert.ok(studyScreen.indexOf('className="study-jumps"') > studyScreen.indexOf('className="word-card"'));
+  assert.match(worker, /gre-3000-pwa-v14/);
   assert.match(worker, /data\/words\.json/);
   assert.match(worker, /data\/click_dictionary\.json/);
   assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);

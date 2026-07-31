@@ -49,3 +49,21 @@ def test_release_documentation_matches_the_current_study_features():
         assert "重新洗牌" not in text
         assert "生词本" not in text
         assert "手动增加或减少已背次数" not in text
+
+
+def test_readme_uses_real_windows_app_screenshots():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    screenshot_paths = (
+        "docs/images/windows-home.png",
+        "docs/images/windows-study-reading.png",
+    )
+
+    for relative_path in screenshot_paths:
+        assert relative_path in readme
+        screenshot = ROOT / relative_path
+        assert screenshot.is_file()
+        assert screenshot.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+    assert "docs/images/home.jpg" not in readme
+    assert "docs/images/study-reading.jpg" not in readme
+    assert "docs/images/study-quiz-retry.jpg" not in readme

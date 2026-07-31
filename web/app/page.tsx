@@ -1135,6 +1135,34 @@ export default function Home() {
           <div className="progress-track"><span style={{ width: `${Math.max(3, ((activeQueueIndex + 1) / Math.max(studyQueue.length, 1)) * 100)}%` }} /></div>
           <p className="swipe-hint">← 左右滑动切换单词 →</p>
 
+          <div className="study-mode-switcher">
+            <span>切换模式</span>
+            <div role="group" aria-label="学习模式">
+              {MODES.map((item) => (
+                <button
+                  className={mode === item.key ? "active" : ""}
+                  key={item.key}
+                  onClick={() => selectMode(item.key)}
+                  aria-pressed={mode === item.key}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="study-actions">
+            <button onClick={() => move(-1)} disabled={activeQueueIndex === 0}>← 上一词</button>
+            {activeQueueIndex >= studyQueue.length - 1
+              ? allStarsSelected
+                ? <button className="finish" onClick={completeRound}>完成本轮</button>
+                : <button className="finish" onClick={() => setScreen("home")}>完成筛选学习</button>
+              : <button className="next" onClick={() => move(1)}>下一词 →</button>}
+          </div>
+          {mode === "quiz" && quizSelected !== null && quizSelected !== quiz.correct && (
+            <button className="quiz-retry study-retry" onClick={retryQuiz}>重新作答</button>
+          )}
+
           <article
             className="word-card"
             onPointerDown={startStudySwipe}
@@ -1167,9 +1195,6 @@ export default function Home() {
                         return <button className={className} key={choice} disabled={answered} onClick={() => answerQuiz(index)}><span>{String.fromCharCode(65 + index)}</span>{displayedChoice}</button>;
                       })}
                 </div>
-                {quizSelected !== null && quizSelected !== quiz.correct && (
-                  <button className="quiz-retry" onClick={retryQuiz}>重新作答</button>
-                )}
               </>
             )}
 
@@ -1200,14 +1225,6 @@ export default function Home() {
           <div className="study-jumps">
             <button onClick={() => jumpToQueueIndex(0)} disabled={activeQueueIndex === 0}>⇤ 到{allStarsSelected ? " List" : "筛选"}开头</button>
             <button onClick={() => jumpToQueueIndex(studyQueue.length - 1)} disabled={activeQueueIndex >= studyQueue.length - 1}>到{allStarsSelected ? " List" : "筛选"}结尾 ⇥</button>
-          </div>
-          <div className="study-actions">
-            <button onClick={() => move(-1)} disabled={activeQueueIndex === 0}>← 上一词</button>
-            {activeQueueIndex >= studyQueue.length - 1
-              ? allStarsSelected
-                ? <button className="finish" onClick={completeRound}>完成本轮</button>
-                : <button className="finish" onClick={() => setScreen("home")}>完成筛选学习</button>
-              : <button className="next" onClick={() => move(1)}>下一词 →</button>}
           </div>
         </section>
       )}

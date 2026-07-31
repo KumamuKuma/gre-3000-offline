@@ -56,6 +56,7 @@ def test_readme_uses_real_windows_app_screenshots():
     screenshot_paths = (
         "docs/images/windows-home.png",
         "docs/images/windows-study-reading.png",
+        "docs/images/windows-study-quiz-retry.png",
     )
 
     for relative_path in screenshot_paths:

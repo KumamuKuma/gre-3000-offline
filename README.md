@@ -35,9 +35,13 @@ GRE 3000 Vocabulary Trainer 是一款围绕原书词序设计的个人背词工�
 
 ## Windows 离线版实机界面
 
-![Windows 离线版 gregarious 阅读模式](docs/images/windows-study-reading.png)
+![Windows 离线版阅读模式](docs/images/windows-study-reading.png)
 
-<p align="center"><sub>本地 EXE 的阅读模式：同时展示例句、真经 GRE 等价词和同词根词。</sub></p>
+<p align="center"><sub>本地 EXE 的阅读模式：上一词和下一词固定在单词卡上方，到 List 开头和结尾继续固定在下方。</sub></p>
+
+![Windows 离线版四选一答错后重新作答](docs/images/windows-study-quiz-retry.png)
+
+<p align="center"><sub>四选一答错后，“重新作答”会出现在上方两个翻词按钮之间，正确答案同时标出词性。</sub></p>
 
 ## Windows：三步开始
 

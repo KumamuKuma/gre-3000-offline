@@ -116,6 +116,7 @@ class WordDetail(QWidget):
         self.quiz_panel = QWidget(objectName="meaningPanel")
         self.quiz_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         quiz_layout = QVBoxLayout(self.quiz_panel)
+        self._quiz_layout = quiz_layout
         quiz_layout.setContentsMargins(24, 20, 24, 22)
         quiz_layout.setSpacing(9)
         self.quiz_title = self._section_title("请选择正确词义")
@@ -211,6 +212,11 @@ class WordDetail(QWidget):
         root.addStretch(1)
         self.scroll_area.setWidget(content)
         outer.addWidget(self.scroll_area)
+
+    def take_quiz_retry_button(self) -> QPushButton:
+        """Detach the retry control so StudyPage can place it above the detail."""
+        self._quiz_layout.removeWidget(self.quiz_retry_button)
+        return self.quiz_retry_button
 
     @staticmethod
     def _label(*, object_name: str = "") -> QLabel:

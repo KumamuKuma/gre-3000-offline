@@ -37,6 +37,23 @@ def test_study_render_modes_navigation_and_position_context(qtbot, sample_word):
     assert page.next_button.isEnabled()
     assert page.first_button.isEnabled()
     assert page.last_button.isEnabled()
+    layout = page.layout()
+    assert layout.indexOf(page.study_action_bar) < layout.indexOf(page.word_detail)
+    assert layout.indexOf(page.boundary_navigation_bar) > layout.indexOf(
+        page.word_detail
+    )
+    assert page.previous_button.parentWidget() is page.study_action_bar
+    assert page.quiz_retry_button.parentWidget() is page.study_action_bar
+    assert page.next_button.parentWidget() is page.study_action_bar
+    action_layout = page.study_action_bar.layout()
+    assert action_layout.indexOf(page.previous_button) < action_layout.indexOf(
+        page.quiz_retry_button
+    )
+    assert action_layout.indexOf(page.quiz_retry_button) < action_layout.indexOf(
+        page.next_button
+    )
+    assert page.first_button.parentWidget() is page.boundary_navigation_bar
+    assert page.last_button.parentWidget() is page.boundary_navigation_bar
 
     with qtbot.waitSignal(page.answerToggleRequested):
         page.word_detail.reveal_button.click()
@@ -109,6 +126,28 @@ def test_quiz_auto_star_switches_are_available_only_in_quiz_mode(
     assert not page.quiz_correct_star_down_checkbox.isChecked()
 
 
+def test_retry_is_hidden_in_reading_mode_and_after_correct_quiz_answer(
+    qtbot, sample_word
+):
+    page = StudyPage()
+    qtbot.addWidget(page)
+    page.show()
+
+    page.render(snapshot(sample_word, mode=StudyMode.READING))
+    assert page.quiz_retry_button.isHidden()
+
+    page.render(
+        snapshot(
+            sample_word,
+            mode=StudyMode.QUIZ,
+            quiz_choices=("甲", "乙", "丙", "丁"),
+            quiz_correct_index=2,
+            quiz_selected_index=2,
+        )
+    )
+    assert page.quiz_retry_button.isHidden()
+
+
 def test_star_rating_is_zero_through_three_and_no_favorite_control(qtbot, sample_word):
     page = StudyPage()
     qtbot.addWidget(page)
@@ -167,10 +206,10 @@ def test_quiz_and_related_word_signals_are_forwarded(qtbot, sample_word):
     with qtbot.waitSignal(page.quizChoiceRequested) as answer:
         page.word_detail.quiz_buttons[0].click()
     assert answer.args == [0]
-    assert page.word_detail.quiz_retry_button.isVisible()
+    assert page.quiz_retry_button.isVisible()
     with qtbot.waitSignal(page.quizRetryRequested):
-        page.word_detail.quiz_retry_button.click()
-    assert page.word_detail.quiz_retry_button.isHidden()
+        page.quiz_retry_button.click()
+    assert page.quiz_retry_button.isHidden()
 
     with qtbot.waitSignal(page.relatedWordRequested) as related:
         page.word_detail.relatedWordRequested.emit(17)

@@ -88,8 +88,10 @@ def test_release_bundles_the_offline_click_dictionary_and_license():
 
     assert '"resources\\click_dictionary.json"' in script
     assert '"resources\\ECDICT-LICENSE.txt"' in script
+    assert '"resources\\WORDNET-LICENSE.txt"' in script
     assert "resources/click_dictionary.json=gre_vocab_app/data/click_dictionary.json" in spec
     assert "resources/ECDICT-LICENSE.txt=gre_vocab_app/data/ECDICT-LICENSE.txt" in spec
+    assert "resources/WORDNET-LICENSE.txt=gre_vocab_app/data/WORDNET-LICENSE.txt" in spec
     assert "--include-module=PySide6.QtNetwork" in spec
 
 

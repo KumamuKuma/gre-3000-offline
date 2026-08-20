@@ -49,20 +49,49 @@ def test_home_selects_list_and_emits_list_scoped_study(qtbot):
     assert "1 星、2 星" in page.star_scope_button.text()
     with qtbot.waitSignal(page.listStudyRequested) as requested:
         page.start_button.click()
-    assert requested.args == [("list1", "list2"), (1, 2)]
+    assert requested.args == [("list1", "list2"), (1, 2), False]
 
     assert page.set_selected_lists(("list2",))
     assert page.list_scope_button.text() == "已选 1 个 List"
     with qtbot.waitSignal(page.listStudyRequested) as narrowed:
         page.start_button.click()
-    assert narrowed.args == [("list2",), (1, 2)]
+    assert narrowed.args == [("list2",), (1, 2), False]
 
     assert page.set_selected_star_ratings((0, 1, 2, 3))
     with qtbot.waitSignal(page.listStudyRequested) as all_words:
         page.start_button.click()
-    assert all_words.args == [("list2",), None]
+    assert all_words.args == [("list2",), None, False]
     assert not hasattr(page, "source_button")
     assert not hasattr(page, "favorites_button")
+
+
+def test_home_machine7_filter_combines_with_list_and_star_scope(qtbot):
+    page = HomePage()
+    qtbot.addWidget(page)
+    page.show()
+    page.set_source_lists(
+        LISTS,
+        {},
+        selected_keys=("list1", "list2"),
+        selected_star_ratings=(1, 2),
+    )
+    page.set_star_counts({0: 3, 1: 4, 2: 2, 3: 1})
+
+    with qtbot.waitSignal(page.machine7FilterChanged) as changed:
+        page.machine7_only_checkbox.click()
+    assert changed.args == [True]
+    assert page.machine7_only()
+
+    # The controller supplies counts narrowed to machine7 membership.
+    page.set_star_counts({0: 1, 1: 2, 2: 1, 3: 0})
+    assert "3 词" in page.star_scope_button.text()
+    assert "机经 7.0 共 4 词" in page.list_meta_label.text()
+    with qtbot.waitSignal(page.listStudyRequested) as requested:
+        page.start_button.click()
+    assert requested.args == [("list1", "list2"), (1, 2), True]
+
+    page.set_star_counts({0: 0, 1: 0, 2: 0, 3: 0})
+    assert not page.start_button.isEnabled()
 
 
 def test_home_allows_manual_list_completion_adjustment(qtbot):

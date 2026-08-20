@@ -28,6 +28,15 @@ def lookup_html(text: str) -> str:
     return "".join(pieces).replace("\n", "<br>")
 
 
+def lookup_query_html(text: str) -> str:
+    href = urllib.parse.quote(text, safe="")
+    rendered = html.escape(text).replace("\n", "<br>")
+    return (
+        f'<a href="lookup:{href}" style="color:#101828;'
+        f'text-decoration:none;">{rendered}</a>'
+    )
+
+
 class LookupLabel(QLabel):
     lookupRequested = Signal(str)
     selectionTranslationRequested = Signal(str)
@@ -47,6 +56,11 @@ class LookupLabel(QLabel):
     def set_lookup_text(self, text: str) -> None:
         self._plain_text = text
         super().setText(lookup_html(text))
+
+    def set_lookup_query(self, text: str) -> None:
+        """Render the full label as one lookup target, including phrases."""
+        self._plain_text = text
+        super().setText(lookup_query_html(text))
 
     def setText(self, text: str) -> None:
         self._plain_text = text

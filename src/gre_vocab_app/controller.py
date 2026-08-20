@@ -56,6 +56,9 @@ class ApplicationController:
         self._translation_request_id: int | None = None
         self._detail_snapshot: SessionSnapshot | None = None
         self._detail_origin = "home"
+        self._quiz_word_return_active = False
+        self._quiz_word_return_snapshot: SessionSnapshot | None = None
+        self._quiz_word_return_origin = "study"
         self._all_words: list[WordEntry] = []
         self._source_lists = ()
         self._auto_speak_enabled = False
@@ -73,6 +76,7 @@ class ApplicationController:
         home.listStudyRequested.connect(self._open_list_study)
         home.listScopeChanged.connect(self._select_lists)
         home.starFiltersChanged.connect(self._select_star_filters)
+        home.machine7FilterChanged.connect(self._select_machine7_filter)
         home.listCompletionAdjustmentRequested.connect(
             self._adjust_list_completion
         )
@@ -90,6 +94,7 @@ class ApplicationController:
         study_page.secondarySpeechRequested.connect(self._speak_secondary)
         study_page.starRatingRequested.connect(self._set_star_rating)
         study_page.quizChoiceRequested.connect(self._answer_quiz)
+        study_page.quizWordRequested.connect(self._open_quiz_word)
         study_page.quizRetryRequested.connect(self._retry_quiz)
         study_page.quizWrongStarUpChanged.connect(
             self._set_quiz_wrong_star_up
@@ -121,6 +126,9 @@ class ApplicationController:
             lambda word: self._open_detail(word, "word_list")
         )
         word_list.starRatingRequested.connect(self._set_word_list_star)
+        word_list.machine7FilterChanged.connect(
+            self._select_word_list_machine7_filter
+        )
 
         self.window.homeRequested.connect(self._show_home)
         self.window.wordListRequested.connect(self._open_word_list)
@@ -210,6 +218,9 @@ class ApplicationController:
         )
         return valid or (0, 1, 2, 3)
 
+    def _saved_machine7_only(self) -> bool:
+        return self.user.load_setting("study_machine7_only") == "1"
+
     def _configure_home_scope(self) -> None:
         home = self.window.home_page
         home.set_source_lists(
@@ -217,6 +228,7 @@ class ApplicationController:
             self.user.list_completion_counts(),
             selected_keys=self._saved_list_keys(),
             selected_star_ratings=self._saved_star_ratings(),
+            machine7_only=self._saved_machine7_only(),
         )
 
     def _configure_settings(self) -> None:
@@ -317,6 +329,17 @@ class ApplicationController:
         except KeyError:
             self.window.home_page.set_star_counts({})
             return
+        if home.machine7_only():
+            machine7_lookup = getattr(self.content, "in_machine7", None)
+            word_ids = (
+                tuple(
+                    word_id
+                    for word_id in word_ids
+                    if machine7_lookup(word_id)
+                )
+                if callable(machine7_lookup)
+                else ()
+            )
         self.window.home_page.set_star_counts(self.user.star_counts(word_ids))
 
     def _select_lists(self, source_sections: object) -> None:
@@ -363,6 +386,19 @@ class ApplicationController:
         self.user.save_setting("study_filter", value)
         self._report_persistence_issue()
 
+    def _select_machine7_filter(self, enabled: bool) -> None:
+        self.user.save_setting(
+            "study_machine7_only", "1" if bool(enabled) else "0"
+        )
+        self._refresh_selected_list_counts()
+        self._report_persistence_issue()
+
+    def _select_word_list_machine7_filter(self, enabled: bool) -> None:
+        self.user.save_setting(
+            "word_list_machine7_only", "1" if bool(enabled) else "0"
+        )
+        self._report_persistence_issue()
+
     def _adjust_list_completion(self, key: str, delta: int) -> None:
         try:
             completed = self.user.adjust_list_completion(str(key), int(delta))
@@ -391,14 +427,19 @@ class ApplicationController:
         ]
 
     def _refresh_word_list(self) -> None:
+        self.window.word_list_page.set_machine7_only(
+            self.user.load_setting("word_list_machine7_only") == "1"
+        )
         self.window.word_list_page.set_words(self._word_list_rows())
 
     def _show_home(self) -> None:
+        self._clear_quiz_word_return()
         self._detail_snapshot = None
         self._refresh_stats()
         self.window.show_home()
 
     def _open_word_list(self) -> None:
+        self._clear_quiz_word_return()
         self._detail_snapshot = None
         self._refresh_word_list()
         self.window.show_word_list()
@@ -410,18 +451,25 @@ class ApplicationController:
     def _search_home(self, query: str) -> None:
         self.window.home_page.set_results(self.search.search(query))
 
-    def _open_list_study(self, source_scope: object, star_ratings: object) -> None:
+    def _open_list_study(
+        self,
+        source_scope: object,
+        star_ratings: object,
+        machine7_only: bool,
+    ) -> None:
         ratings = (
             None
             if star_ratings is None
             else tuple(int(value) for value in star_ratings)
         )
-        self._open_study(source_scope, ratings)
+        self._open_study(source_scope, ratings, machine7_only=machine7_only)
 
     def _open_study(
         self,
         source_scope: object,
         star_ratings: Sequence[int] | None = None,
+        *,
+        machine7_only: bool = False,
     ) -> None:
         if isinstance(source_scope, str):
             start_kwargs = {"source_section": source_scope}
@@ -438,11 +486,25 @@ class ApplicationController:
             snapshot = self.study.start(
                 BrowseOrder.SOURCE,
                 star_ratings=star_ratings,
+                machine7_only=machine7_only,
                 **start_kwargs,
             )
         except (KeyError, ValueError, RuntimeError) as error:
             LOGGER.exception("Unable to start study session")
-            if star_ratings is not None and "no words match" in str(error):
+            if machine7_only and "no words match" in str(error):
+                if star_ratings is None:
+                    self._show_status(
+                        "所选 List 范围中没有机经 7.0 重点词。"
+                    )
+                else:
+                    labels = "、".join(
+                        f"{rating} 星" for rating in star_ratings
+                    )
+                    self._show_status(
+                        "所选 List 范围中没有同时符合机经 7.0 与"
+                        f" {labels}的单词。"
+                    )
+            elif star_ratings is not None and "no words match" in str(error):
                 labels = "、".join(f"{rating} 星" for rating in star_ratings)
                 self._show_status(
                     f"所选 List 范围中没有 {labels}单词。"
@@ -451,12 +513,15 @@ class ApplicationController:
                 self._show_status(f"无法开始学习：{error}")
             return
         self._detail_snapshot = None
+        self._clear_quiz_word_return()
         self.window.study_page.render(snapshot)
         self.window.show_study()
         self._refresh_stats()
         self._report_persistence_issue()
 
     def _open_detail(self, word: WordEntry, origin: str) -> None:
+        if origin != "quiz_word":
+            self._clear_quiz_word_return()
         raw_mode = self.user.load_setting("study_mode")
         try:
             mode = StudyMode(raw_mode) if raw_mode else StudyMode.READING
@@ -481,6 +546,33 @@ class ApplicationController:
             self._show_status(f"无法打开相关词：{error}")
             return
         self._open_detail(word, origin)
+
+    def _open_quiz_word(self, word_id: int) -> None:
+        try:
+            word = self.content.get(int(word_id))
+            snapshot = self.study.detail_snapshot(word, StudyMode.READING)
+        except (KeyError, TypeError, ValueError, RuntimeError) as error:
+            LOGGER.exception("Unable to open quiz choice vocabulary entry")
+            self._show_status(f"无法打开该释义对应的 GRE 词条：{error}")
+            return
+
+        if not self._quiz_word_return_active:
+            self._quiz_word_return_active = True
+            self._quiz_word_return_snapshot = self._detail_snapshot
+            self._quiz_word_return_origin = (
+                self._detail_origin
+                if self._detail_snapshot is not None
+                else "study"
+            )
+        self._detail_snapshot = snapshot
+        self._detail_origin = "quiz_word"
+        self.window.study_page.render(snapshot)
+        self.window.show_study()
+
+    def _clear_quiz_word_return(self) -> None:
+        self._quiz_word_return_active = False
+        self._quiz_word_return_snapshot = None
+        self._quiz_word_return_origin = "study"
 
     def _lookup_text(self, text: str) -> None:
         self._translation_request_id = None
@@ -522,7 +614,23 @@ class ApplicationController:
         )
 
     def _back_from_study(self) -> None:
-        if (
+        if self._quiz_word_return_active and self._detail_origin == "quiz_word":
+            previous = self._quiz_word_return_snapshot
+            origin = self._quiz_word_return_origin
+            self._clear_quiz_word_return()
+            self._detail_origin = origin
+            restored = (
+                replace(
+                    previous,
+                    star_rating=int(self.user.star_rating(previous.word.id)),
+                )
+                if previous is not None
+                else self.study.current()
+            )
+            self._detail_snapshot = restored if previous is not None else None
+            self.window.study_page.render(restored)
+            self.window.show_study()
+        elif (
             self._detail_snapshot is not None
             and self._detail_origin == "word_list"
         ):
@@ -872,9 +980,14 @@ class ApplicationController:
             self._open_study(
                 active.list_keys or active.list_key,
                 active.star_filters or None,
+                machine7_only=active.machine7_only,
             )
         elif active is not None and active.list_keys:
-            self._open_study(active.list_keys, active.star_filters or None)
+            self._open_study(
+                active.list_keys,
+                active.star_filters or None,
+                machine7_only=active.machine7_only,
+            )
         self._report_persistence_issue()
 
     def _export_progress(self) -> None:

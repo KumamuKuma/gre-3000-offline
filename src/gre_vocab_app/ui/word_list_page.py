@@ -7,6 +7,7 @@ from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -39,6 +40,7 @@ class WordListPage(QWidget):
     wordSelected = Signal(object)
     starRatingRequested = Signal(int, int)
     searchRequested = Signal(str)
+    machine7FilterChanged = Signal(bool)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -74,7 +76,16 @@ class WordListPage(QWidget):
         self.search_edit.setPlaceholderText("筛选单词、释义、List 或机经 7.0 重点词")
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.textChanged.connect(self._on_search_changed)
-        root.addWidget(self.search_edit)
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(12)
+        filter_row.addWidget(self.search_edit, 1)
+        self.machine7_only_checkbox = QCheckBox("仅显示机经 7.0 重点词")
+        self.machine7_only_checkbox.setObjectName("machine7FilterCheckbox")
+        self.machine7_only_checkbox.toggled.connect(
+            self._machine7_filter_toggled
+        )
+        filter_row.addWidget(self.machine7_only_checkbox)
+        root.addLayout(filter_row)
 
         self.empty_state = QLabel("词表为空。")
         self.empty_state.setObjectName("emptyState")
@@ -202,6 +213,14 @@ class WordListPage(QWidget):
             return True
         return False
 
+    def machine7_only(self) -> bool:
+        return self.machine7_only_checkbox.isChecked()
+
+    def set_machine7_only(self, enabled: bool) -> None:
+        with QSignalBlocker(self.machine7_only_checkbox):
+            self.machine7_only_checkbox.setChecked(bool(enabled))
+        self._apply_filter()
+
     @staticmethod
     def _summary(word: WordEntry) -> str:
         value = word.definition_zh or word.definition_en
@@ -235,6 +254,10 @@ class WordListPage(QWidget):
         self.searchRequested.emit(query)
         self._apply_filter()
 
+    def _machine7_filter_toggled(self, checked: bool) -> None:
+        self._apply_filter()
+        self.machine7FilterChanged.emit(bool(checked))
+
     def _apply_filter(self) -> None:
         query = self.search_edit.text().strip().casefold()
         preferred_row = -1
@@ -251,7 +274,9 @@ class WordListPage(QWidget):
                     "机经7.0" if row.in_machine7 else "",
                 )
             ).casefold()
-            visible = not query or query in haystack
+            visible = (not query or query in haystack) and (
+                not self.machine7_only() or row.in_machine7
+            )
             self.words_table.setRowHidden(row_index, not visible)
             if visible:
                 visible_count += 1
@@ -264,13 +289,19 @@ class WordListPage(QWidget):
             self.words_table.clearSelection()
             self.words_table.setCurrentCell(-1, -1)
 
-        self.empty_state.setText(
-            "没有找到匹配的单词。" if query else "词表为空。"
-        )
+        if query and self.machine7_only():
+            empty_text = "没有同时符合搜索和机经 7.0 筛选的单词。"
+        elif query:
+            empty_text = "没有找到匹配的单词。"
+        elif self.machine7_only():
+            empty_text = "当前范围内没有机经 7.0 重点词。"
+        else:
+            empty_text = "词表为空。"
+        self.empty_state.setText(empty_text)
         self.empty_state.setVisible(visible_count == 0)
         self.count_label.setText(
             f"{visible_count:,} / {len(self._rows):,} 词"
-            if query
+            if query or self.machine7_only()
             else f"{len(self._rows):,} 词"
         )
         self._update_actions()

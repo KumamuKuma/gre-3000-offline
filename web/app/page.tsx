@@ -70,11 +70,24 @@ type DictionaryEntry = {
   definition: string;
   exchange: string;
   phrases: [string, string][];
+  senses?: DictionarySense[];
+};
+
+type DictionaryExample = {
+  text: string;
+  source?: string;
+};
+
+type DictionarySense = {
+  part_of_speech: string;
+  translation: string;
+  definition: string;
+  examples: DictionaryExample[];
 };
 
 type DictionaryPayload = {
   schema: "gre-click-dictionary";
-  version: 1;
+  version: 1 | 2;
   entries: Record<string, DictionaryEntry>;
 };
 
@@ -84,8 +97,13 @@ type LookupView = {
   source: string;
   headword: string;
   phonetic: string;
-  translation: string;
-  definition: string;
+  greTranslation: string;
+  greDefinition: string;
+  greExampleEn: string;
+  greExampleZh: string;
+  offlineTranslation: string;
+  offlineDefinition: string;
+  offlineSenses: DictionarySense[];
   exchange: string;
   phrases: [string, string][];
   greWordId?: number;
@@ -97,6 +115,7 @@ type LookupView = {
 const STORAGE_KEY = "gre-vocab-progress-v1";
 const SYNC_CODE_STORAGE_KEY = "gre-vocab-sync-code-v1";
 const SYNC_TIMEOUT_MS = 12_000;
+const WORD_LIST_BATCH_SIZE = 80;
 const MODES: { key: StudyMode; label: string; hint: string }[] = [
   { key: "reading", label: "阅读", hint: "完整释义" },
   { key: "brief", label: "简义", hint: "快速过词" },
@@ -113,6 +132,19 @@ function normalizeLookupQuery(value: string) {
     return text.replace(/^[\s.,;:!?"“”‘’()[\]{}]+|[\s.,;:!?"“”‘’()[\]{}]+$/g, "").toLowerCase();
   }
   return text.match(/[A-Za-z]+(?:['-][A-Za-z]+)*/)?.[0]?.toLowerCase() ?? "";
+}
+
+function phraseDictionarySenses(phrase: [string, string] | undefined): DictionarySense[] {
+  if (!phrase) return [];
+  return [{
+    part_of_speech: "",
+    translation: phrase[1],
+    definition: "",
+    examples: [{
+      text: `The phrase "${phrase[0]}" is used here with the meaning shown above.`,
+      source: "释义语境（非语料例句）",
+    }],
+  }];
 }
 
 function LookupText({ text, className, onLookup }: { text: string; className?: string; onLookup: (word: string) => void }) {
@@ -255,6 +287,8 @@ function defaultProgress(data: ContentPayload): Progress {
       study_lists: "all",
       study_star_lists: "all",
       study_filter: "all",
+      study_machine7_only: "0",
+      word_list_machine7_only: "0",
       study_mode: "reading",
       auto_speak: "0",
       quiz_wrong_star_up: "0",
@@ -270,6 +304,7 @@ function normalizeProgress(value: unknown, data: ContentPayload): Progress {
     throw new Error("进度文件格式或版本不受支持");
   }
   const validIds = new Set(data.words.map((word) => word.id));
+  const machine7Ids = new Set(data.words.filter((word) => word.machine7).map((word) => word.id));
   const validLists = new Map(data.lists.map((item) => [item.key, item]));
   const wordsByList = new Map<string, Set<number>>();
   data.lists.forEach((item) => wordsByList.set(item.key, new Set()));
@@ -313,6 +348,12 @@ function normalizeProgress(value: unknown, data: ContentPayload): Progress {
       ? { study_star_current_word_id: String(rawStarWordId) }
       : {}
   );
+  const rawMachine7WordId = Number(settings.study_machine7_current_word_id);
+  const machine7WordSetting = (
+    Number.isInteger(rawMachine7WordId) && machine7Ids.has(rawMachine7WordId)
+      ? { study_machine7_current_word_id: String(rawMachine7WordId) }
+      : {}
+  );
   return {
     schema: "gre-vocab-progress",
     version: 1,
@@ -323,7 +364,10 @@ function normalizeProgress(value: unknown, data: ContentPayload): Progress {
       study_lists: starScope,
       study_star_lists: starScope,
       ...starWordSetting,
+      ...machine7WordSetting,
       study_filter: filter,
+      study_machine7_only: settings.study_machine7_only === "1" ? "1" : "0",
+      word_list_machine7_only: settings.word_list_machine7_only === "1" ? "1" : "0",
       study_mode: mode,
       auto_speak: settings.auto_speak === "1" ? "1" : "0",
       quiz_wrong_star_up: settings.quiz_wrong_star_up === "1" ? "1" : "0",
@@ -425,6 +469,7 @@ export default function Home() {
   const [hydrated, setHydrated] = useState(false);
   const [screen, setScreen] = useState<Screen>("home");
   const [activeWordId, setActiveWordId] = useState<number | null>(null);
+  const [studySessionWordIds, setStudySessionWordIds] = useState<number[]>([]);
   const [answerVisible, setAnswerVisible] = useState(false);
   const [quizSelected, setQuizSelected] = useState<number | null>(null);
   const [quizAttemptCount, setQuizAttemptCount] = useState(0);
@@ -437,7 +482,9 @@ export default function Home() {
   const [dictionary, setDictionary] = useState<DictionaryPayload | null>(null);
   const [dictionaryStatus, setDictionaryStatus] = useState<"loading" | "ready" | "error">("loading");
   const [lookup, setLookup] = useState<LookupView | null>(null);
+  const [grePreviewWordId, setGrePreviewWordId] = useState<number | null>(null);
   const [selectionText, setSelectionText] = useState("");
+  const [wordListWindow, setWordListWindow] = useState({ key: "", limit: WORD_LIST_BATCH_SIZE });
   const importRef = useRef<HTMLInputElement>(null);
   const loadedSyncCode = useRef("");
   const firstCloudUploadNoticeShown = useRef(false);
@@ -482,18 +529,53 @@ export default function Home() {
       })
       .catch((error) => setNotice(`词库加载失败：${error.message}`));
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-    fetch("/data/click_dictionary.json")
+    fetch("/data/click_dictionary.json?v=2")
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
       })
       .then((payload: DictionaryPayload) => {
-        if (payload.schema !== "gre-click-dictionary" || payload.version !== 1) throw new Error("词典校验失败");
+        if (payload.schema !== "gre-click-dictionary" || payload.version !== 2) throw new Error("词典校验失败");
         setDictionary(payload);
         setDictionaryStatus("ready");
       })
       .catch(() => setDictionaryStatus("error"));
   }, []);
+
+  useEffect(() => {
+    if (!dictionary) return;
+    setLookup((current) => {
+      if (!current) return current;
+      const local = dictionary.entries[current.normalized];
+      let phrase: [string, string] | undefined;
+      if (!local && current.normalized.includes(" ")) {
+        phrase = dictionary.entries[current.normalized.split(" ")[0]]?.phrases.find(
+          ([value]) => normalizeLookupQuery(value) === current.normalized,
+        );
+      }
+      if (!local && !phrase) return current;
+      return {
+        ...current,
+        source: current.greWordId
+          ? "GRE 3000 + ECDICT 双词典"
+          : "ECDICT 离线英汉词典",
+        headword: current.greWordId ? current.headword : local?.word ?? phrase?.[0] ?? current.headword,
+        phonetic: current.phonetic || local?.phonetic || "",
+        offlineTranslation: local?.translation ?? phrase?.[1] ?? "",
+        offlineDefinition: local?.definition ?? "",
+        offlineSenses: local?.senses ?? phraseDictionarySenses(phrase),
+        exchange: local?.exchange ?? "",
+        phrases: local?.phrases ?? [],
+      };
+    });
+  }, [dictionary]);
+
+  useEffect(() => {
+    if (dictionaryStatus !== "error") return;
+    setLookup((current) => current?.source === "内置词典载入中"
+      ? { ...current, source: "内置词典载入失败" }
+      : current);
+  }, [dictionaryStatus]);
 
   useEffect(() => {
     let timer = 0;
@@ -599,6 +681,8 @@ export default function Home() {
   const starFilter = progress?.settings.study_filter ?? "all";
   const selectedStarRatings = useMemo(() => starRatings(starFilter), [starFilter]);
   const allStarsSelected = selectedStarRatings.length === 4;
+  const machine7Only = progress?.settings.study_machine7_only === "1";
+  const wordListMachine7Only = progress?.settings.word_list_machine7_only === "1";
   const mode = (progress?.settings.study_mode ?? "reading") as StudyMode;
   const selectedListKeys = useMemo(
     () => data ? starListKeys(progress?.settings.study_lists ?? progress?.settings.study_star_lists ?? progress?.settings.study_list, data) : [],
@@ -609,19 +693,53 @@ export default function Home() {
     () => data?.words.filter((word) => selectedListSet.has(word.list)) ?? [],
     [data, selectedListSet],
   );
-  const studyQueue = useMemo(() => {
+  const machine7Count = useMemo(
+    () => scopeWords.filter((word) => word.machine7).length,
+    [scopeWords],
+  );
+  const totalMachine7Count = useMemo(
+    () => data?.words.filter((word) => word.machine7).length ?? 0,
+    [data],
+  );
+  const studyBaseWords = useMemo(
+    () => machine7Only ? scopeWords.filter((word) => word.machine7) : scopeWords,
+    [machine7Only, scopeWords],
+  );
+  const eligibleStudyQueue = useMemo(() => {
     if (!progress) return [];
-    if (allStarsSelected) return scopeWords;
-    return scopeWords.filter((word) => selectedStarRatings.includes(progress.stars[String(word.id)] ?? 0));
-  }, [allStarsSelected, progress, scopeWords, selectedStarRatings]);
+    if (allStarsSelected) return studyBaseWords;
+    return studyBaseWords.filter((word) => selectedStarRatings.includes(progress.stars[String(word.id)] ?? 0));
+  }, [allStarsSelected, progress, selectedStarRatings, studyBaseWords]);
+  const studyQueue = useMemo(() => {
+    if (screen !== "study" || !studySessionWordIds.length) return eligibleStudyQueue;
+    return studySessionWordIds
+      .map((wordId) => wordMap.get(wordId))
+      .filter((word): word is WordEntry => Boolean(word));
+  }, [eligibleStudyQueue, screen, studySessionWordIds, wordMap]);
+  const isFullListStudy = allStarsSelected && !machine7Only;
   const activeWord = activeWordId ? wordMap.get(activeWordId) ?? null : null;
+  const grePreviewWord = grePreviewWordId ? wordMap.get(grePreviewWordId) ?? null : null;
   const activeQueueIndex = activeWord ? studyQueue.findIndex((word) => word.id === activeWord.id) : -1;
 
   const starCounts = useMemo(() => {
     const counts = [0, 0, 0, 0];
-    for (const word of scopeWords) counts[progress?.stars[String(word.id)] ?? 0] += 1;
+    for (const word of studyBaseWords) counts[progress?.stars[String(word.id)] ?? 0] += 1;
     return counts;
-  }, [progress, scopeWords]);
+  }, [progress, studyBaseWords]);
+  const listMachine7Counts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const word of data?.words ?? []) {
+      if (word.machine7) counts.set(word.list, (counts.get(word.list) ?? 0) + 1);
+    }
+    return counts;
+  }, [data]);
+  const firstWordIdByList = useMemo(() => {
+    const firstIds = new Map<string, number>();
+    for (const word of data?.words ?? []) {
+      if (!firstIds.has(word.list)) firstIds.set(word.list, word.id);
+    }
+    return firstIds;
+  }, [data]);
   const studyScopeLabel = useMemo(() => {
     if (!data) return "所选 List";
     if (selectedListKeys.length === data.lists.length) return "全部 List";
@@ -630,20 +748,26 @@ export default function Home() {
     }
     return `已选 ${selectedListKeys.length} 个 List`;
   }, [data, selectedListKeys]);
+  const studySelectionLabel = machine7Only
+    ? `${studyScopeLabel} · 机经 7.0 重点`
+    : studyScopeLabel;
 
   const quiz = useMemo(() => {
-    if (!data || !activeWord) return { choices: [] as string[], correct: -1 };
-    const choices = [activeWord.definition_zh || activeWord.definition_en];
+    if (!data || !activeWord) return { choices: [] as { wordId: number; text: string }[], correct: -1 };
+    const correctChoice = { wordId: activeWord.id, text: activeWord.definition_zh || activeWord.definition_en };
+    const choices = [correctChoice];
     let cursor = (activeWord.id * 97) % data.words.length;
     while (choices.length < 4) {
       const candidate = data.words[cursor % data.words.length];
       const meaning = candidate.definition_zh || candidate.definition_en;
-      if (candidate.id !== activeWord.id && meaning && !choices.includes(meaning)) choices.push(meaning);
+      if (candidate.id !== activeWord.id && meaning && !choices.some((choice) => choice.text === meaning)) {
+        choices.push({ wordId: candidate.id, text: meaning });
+      }
       cursor += 173;
     }
     const shift = activeWord.id % 4;
     const rotated = choices.slice(shift).concat(choices.slice(0, shift));
-    return { choices: rotated, correct: rotated.indexOf(choices[0]) };
+    return { choices: rotated, correct: rotated.findIndex((choice) => choice.wordId === activeWord.id) };
   }, [activeWord, data]);
 
   function updateProgress(mutator: (current: Progress) => Progress) {
@@ -714,17 +838,22 @@ export default function Home() {
   }
 
   function startStudy() {
-    if (!progress || !studyQueue.length) {
-      setNotice("所选 List 范围中没有符合当前星级的单词。");
+    if (!progress || !eligibleStudyQueue.length) {
+      setNotice("所选 List、机经重点和星级条件下没有可学习的单词。");
       return;
     }
     const singleList = selectedListKeys.length === 1 ? selectedListKeys[0] : null;
-    const saved = allStarsSelected && singleList
-      ? progress.lists[singleList]?.current_word_id
-      : Number(progress.settings.study_star_current_word_id);
-    const candidate = studyQueue.find((word) => word.id === saved) ?? studyQueue[0];
+    const saved = machine7Only
+      ? Number(progress.settings.study_machine7_current_word_id)
+      : isFullListStudy && singleList
+        ? progress.lists[singleList]?.current_word_id
+        : Number(progress.settings.study_star_current_word_id);
+    const candidate = eligibleStudyQueue.find((word) => word.id === saved) ?? eligibleStudyQueue[0];
+    setStudySessionWordIds(eligibleStudyQueue.map((word) => word.id));
     setActiveWordId(candidate.id);
-    if (!allStarsSelected || !singleList) {
+    if (machine7Only) {
+      setSetting("study_machine7_current_word_id", String(candidate.id));
+    } else if (!isFullListStudy || !singleList) {
       setSetting("study_star_current_word_id", String(candidate.id));
     }
     setAnswerVisible(mode === "reading" || mode === "brief");
@@ -734,6 +863,9 @@ export default function Home() {
   }
 
   function openWord(word: WordEntry) {
+    setStudySessionWordIds(
+      (data?.words ?? []).filter((candidate) => candidate.list === word.list).map((candidate) => candidate.id),
+    );
     setActiveWordId(word.id);
     setListScope([word.list]);
     setAnswerVisible(mode === "reading" || mode === "brief");
@@ -752,7 +884,7 @@ export default function Home() {
     setQuizAttemptCount(0);
     updateProgress((current) => ({
       ...current,
-      ...(allStarsSelected && selectedListKeys.length === 1
+      ...(isFullListStudy && selectedListKeys.length === 1
         ? {
             lists: {
               ...current.lists,
@@ -762,7 +894,7 @@ export default function Home() {
         : {
             settings: {
               ...current.settings,
-              study_star_current_word_id: String(next.id),
+              [machine7Only ? "study_machine7_current_word_id" : "study_star_current_word_id"]: String(next.id),
             },
           }),
     }));
@@ -866,15 +998,17 @@ export default function Home() {
     const greWord = wordByHeadword.get(normalized);
     const local = dictionary?.entries[normalized];
     let phrase: [string, string] | undefined;
-    if (!greWord && !local && normalized.includes(" ")) {
+    if (!local && normalized.includes(" ")) {
       const first = dictionary?.entries[normalized.split(" ")[0]];
       phrase = first?.phrases.find(([value]) => normalizeLookupQuery(value) === normalized);
     }
     setLookup({
       query: queryText.trim(),
       normalized,
-      source: greWord
-        ? "GRE 3000 已审核词库"
+      source: greWord && (local || phrase)
+        ? "GRE 3000 + ECDICT 双词典"
+        : greWord
+          ? "GRE 3000 已审核词库"
         : local || phrase
           ? "ECDICT 离线英汉词典"
           : dictionaryStatus === "loading"
@@ -884,8 +1018,13 @@ export default function Home() {
               : "本地词典",
       headword: greWord?.word ?? local?.word ?? phrase?.[0] ?? queryText.trim(),
       phonetic: greWord?.phonetic ?? local?.phonetic ?? "",
-      translation: greWord?.definition_zh ?? local?.translation ?? phrase?.[1] ?? "",
-      definition: greWord?.definition_en ?? local?.definition ?? "",
+      greTranslation: greWord?.definition_zh ?? "",
+      greDefinition: greWord?.definition_en ?? "",
+      greExampleEn: greWord?.example_en ?? "",
+      greExampleZh: greWord?.example_zh ?? "",
+      offlineTranslation: local?.translation ?? phrase?.[1] ?? "",
+      offlineDefinition: local?.definition ?? "",
+      offlineSenses: local?.senses ?? phraseDictionarySenses(phrase),
       exchange: local?.exchange ?? "",
       phrases: local?.phrases ?? [],
       greWordId: greWord?.id,
@@ -955,16 +1094,27 @@ export default function Home() {
   }
 
   function completeRound() {
+    const firstScopeWordId = studyQueue[0]?.id;
     updateProgress((current) => ({
       ...current,
       lists: Object.fromEntries(
         Object.entries(current.lists).map(([key, value]) => [
           key,
           selectedListSet.has(key)
-            ? { ...value, completed_count: value.completed_count + 1 }
+            ? {
+                ...value,
+                completed_count: value.completed_count + 1,
+                current_word_id: firstWordIdByList.get(key) ?? value.current_word_id,
+              }
             : value,
         ]),
       ),
+      settings: firstScopeWordId === undefined
+        ? current.settings
+        : {
+            ...current.settings,
+            study_star_current_word_id: String(firstScopeWordId),
+          },
     }));
     setNotice(`${studyScopeLabel} 已完成一轮，所选 List 次数均已增加。`);
     setScreen("home");
@@ -1044,9 +1194,19 @@ export default function Home() {
   const relationVisible = mode === "reading" || mode === "brief" || answerVisible || quizSelected !== null;
   const showAnswer = mode === "reading" || mode === "brief" || (mode === "recall" && answerVisible);
   const showCorrectQuizReview = mode === "quiz" && quizSelected === quiz.correct;
-  const filteredWords = query.trim()
-    ? data.words.filter((word) => word.word.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 80)
-    : data.words.slice(0, 80);
+  const wordListCandidates = wordListMachine7Only
+    ? data.words.filter((word) => word.machine7)
+    : data.words;
+  const normalizedWordQuery = query.trim().toLowerCase();
+  const wordListMatches = normalizedWordQuery
+    ? wordListCandidates.filter((word) => word.word.toLowerCase().includes(normalizedWordQuery))
+    : wordListCandidates;
+  const wordListViewKey = `${wordListMachine7Only ? "machine7" : "all"}:${normalizedWordQuery}`;
+  const wordListLimit = wordListWindow.key === wordListViewKey
+    ? wordListWindow.limit
+    : WORD_LIST_BATCH_SIZE;
+  const filteredWords = wordListMatches.slice(0, wordListLimit);
+  const canLoadMoreWords = filteredWords.length < wordListMatches.length;
 
   return (
     <main className="app-shell">
@@ -1075,7 +1235,7 @@ export default function Home() {
           </div>
 
           <section className="study-card">
-            <div className="section-heading"><div><span>本次学习</span><h2>{studyScopeLabel}</h2></div><em>{studyQueue.length} 词</em></div>
+            <div className="section-heading"><div><span>本次学习</span><h2>{studySelectionLabel}</h2></div><em>{studyQueue.length} 词</em></div>
             <span className="field-label">学习 List（可多选）</span>
             <details className="list-scope-picker">
               <summary><span>List 范围</span><strong>{studyScopeLabel}</strong></summary>
@@ -1087,11 +1247,17 @@ export default function Home() {
                 {data.lists.map((item) => (
                   <label className={selectedListSet.has(item.key) ? "scope-list active" : "scope-list"} key={item.key}>
                     <input type="checkbox" checked={selectedListSet.has(item.key)} onChange={() => toggleList(item.key)} />
-                    <span><strong>{item.label}</strong><small>{item.count} 词</small></span>
+                    <span><strong>{item.label}</strong><small>{machine7Only ? `${listMachine7Counts.get(item.key) ?? 0} 个重点词` : `${item.count} 词`}</small></span>
                   </label>
                 ))}
               </div>
             </details>
+
+            <span className="field-label">词库范围</span>
+            <div className="filter-row priority-filter" role="group" aria-label="机经 7.0 重点词筛选">
+              <button className={!machine7Only ? "filter active" : "filter"} aria-pressed={!machine7Only} onClick={() => setSetting("study_machine7_only", "0")}>全部单词 <small>{scopeWords.length}</small></button>
+              <button className={machine7Only ? "filter active" : "filter"} aria-pressed={machine7Only} onClick={() => setSetting("study_machine7_only", "1")}>仅机经 7.0 重点词 <small>{machine7Count}</small></button>
+            </div>
 
             <span className="field-label">学习模式</span>
             <div className="mode-grid">
@@ -1104,7 +1270,7 @@ export default function Home() {
 
             <span className="field-label">星级筛选（可多选）</span>
             <div className="filter-row">
-              <button className={allStarsSelected ? "filter active" : "filter"} onClick={() => setSetting("study_filter", "all")}>全部 <small>{scopeWords.length}</small></button>
+              <button className={allStarsSelected ? "filter active" : "filter"} onClick={() => setSetting("study_filter", "all")}>全部 <small>{studyBaseWords.length}</small></button>
               {[0, 1, 2, 3].map((rating) => (
                 <button className={selectedStarRatings.includes(rating) && !allStarsSelected ? "filter active" : "filter"} onClick={() => toggleStarRating(rating)} key={rating}>
                   {rating ? "★".repeat(rating) : "0 星"} <small>{starCounts[rating]}</small>
@@ -1112,10 +1278,11 @@ export default function Home() {
               ))}
             </div>
             <button className="primary" onClick={startStudy} disabled={!studyQueue.length}>开始学习 <span>→</span></button>
+            {!studyQueue.length && <p className="empty-filter-note" role="status">当前组合下没有单词，请更换 List、关闭“仅机经 7.0 重点词”或调整星级。</p>}
             <p className="resume-note">
-              {allStarsSelected && selectedListKeys.length === 1
+              {isFullListStudy && selectedListKeys.length === 1
                 ? `已背 ${progress.lists[selectedListKeys[0]]?.completed_count ?? 0} 次 · 自动记住当前位置`
-                : `${studyScopeLabel} · ${studyQueue.length} 个符合条件的单词`}
+                : `${studySelectionLabel} · ${studyQueue.length} 个符合条件的单词`}
             </p>
           </section>
 
@@ -1130,7 +1297,7 @@ export default function Home() {
         <section className="page study-page">
           <div className="study-meta">
             <button onClick={() => setScreen("home")}>← 退出</button>
-            <span>{studyScopeLabel} · {Math.max(activeQueueIndex + 1, 1)} / {studyQueue.length}</span>
+            <span>{studySelectionLabel} · {Math.max(activeQueueIndex + 1, 1)} / {studyQueue.length}</span>
           </div>
           <div className="progress-track"><span style={{ width: `${Math.max(3, ((activeQueueIndex + 1) / Math.max(studyQueue.length, 1)) * 100)}%` }} /></div>
           <p className="swipe-hint">← 左右滑动切换单词 →</p>
@@ -1154,9 +1321,9 @@ export default function Home() {
           <div className="study-actions">
             <button onClick={() => move(-1)} disabled={activeQueueIndex === 0}>← 上一词</button>
             {activeQueueIndex >= studyQueue.length - 1
-              ? allStarsSelected
+              ? isFullListStudy
                 ? <button className="finish" onClick={completeRound}>完成本轮</button>
-                : <button className="finish" onClick={() => setScreen("home")}>完成筛选学习</button>
+                : <button className="finish" onClick={() => { setNotice(`${studySelectionLabel} 的筛选学习已完成。`); setScreen("home"); }}>完成筛选学习</button>
               : <button className="next" onClick={() => move(1)}>下一词 →</button>}
           </div>
           {mode === "quiz" && quizSelected !== null && quizSelected !== quiz.correct && (
@@ -1174,7 +1341,7 @@ export default function Home() {
               {activeWord.machine7 && <em>机经 7.0 重点</em>}
               <button className="star-button" onClick={() => cycleStar(activeWord)} aria-label="修改星级">{starText(progress.stars[String(activeWord.id)] ?? 0)}</button>
             </div>
-            <div className="word-title-row"><div><h1><LookupText text={activeWord.word} onLookup={openLookup} /></h1><p>{activeWord.phonetic}</p></div><button className="speak" onClick={() => speak(activeWord.word)} aria-label="朗读单词">▶</button></div>
+            <div className="word-title-row"><div><h1><LookupQuery text={activeWord.word} onLookup={openLookup} /></h1><p>{activeWord.phonetic}</p></div><button className="speak" onClick={() => speak(activeWord.word)} aria-label="朗读单词">▶</button></div>
 
             {mode === "recall" && !answerVisible && <button className="reveal" onClick={() => setAnswerVisible(true)}>想一想，然后点击揭晓</button>}
 
@@ -1189,10 +1356,25 @@ export default function Home() {
                       {quiz.choices.map((choice, index) => {
                         const answered = quizSelected !== null;
                         const className = answered && index === quiz.correct ? "quiz-option correct" : answered && index === quizSelected ? "quiz-option wrong" : "quiz-option";
+                        const choiceWord = wordMap.get(choice.wordId);
                         const displayedChoice = answered && index === quiz.correct
-                          ? meaningWithPartsOfSpeech(choice, activeWord.definition_en)
-                          : choice;
-                        return <button className={className} key={choice} disabled={answered} onClick={() => answerQuiz(index)}><span>{String.fromCharCode(65 + index)}</span>{displayedChoice}</button>;
+                          ? meaningWithPartsOfSpeech(choice.text, choiceWord?.definition_en ?? "")
+                          : choice.text;
+                        return (
+                          <div className="quiz-choice-row" key={choice.wordId}>
+                            <button className={className} disabled={answered} onClick={() => answerQuiz(index)}>
+                              <span>{String.fromCharCode(65 + index)}</span>
+                              <b>{displayedChoice}</b>
+                            </button>
+                            <button
+                              className="quiz-entry"
+                              onClick={() => setGrePreviewWordId(choice.wordId)}
+                              aria-label={`查看选项 ${String.fromCharCode(65 + index)} 对应的 GRE 词条`}
+                            >
+                              查看 GRE 词条
+                            </button>
+                          </div>
+                        );
                       })}
                 </div>
               </>
@@ -1215,16 +1397,16 @@ export default function Home() {
 
             {relationVisible && (
               <div className="relations">
-                {activeWord.equivalents.length > 0 && <Relation title="真经等价词" ids={activeWord.equivalents} wordMap={wordMap} onOpen={(id) => openWord(wordMap.get(id)!)} onLookup={openLookup} />}
-                {activeWord.roots.map((family) => <Relation key={family.root} title={`词根 ${family.root}`} ids={family.words} wordMap={wordMap} onOpen={(id) => openWord(wordMap.get(id)!)} onLookup={openLookup} />)}
-                {activeWord.lookalikes.length > 0 && <Relation title="近形异义词" ids={activeWord.lookalikes} wordMap={wordMap} onOpen={(id) => openWord(wordMap.get(id)!)} onLookup={openLookup} />}
+                {activeWord.equivalents.length > 0 && <Relation title="真经等价词" ids={activeWord.equivalents} wordMap={wordMap} onOpen={setGrePreviewWordId} onLookup={openLookup} />}
+                {activeWord.roots.map((family) => <Relation key={family.root} title={`词根 ${family.root}`} ids={family.words} wordMap={wordMap} onOpen={setGrePreviewWordId} onLookup={openLookup} />)}
+                {activeWord.lookalikes.length > 0 && <Relation title="近形异义词" ids={activeWord.lookalikes} wordMap={wordMap} onOpen={setGrePreviewWordId} onLookup={openLookup} />}
               </div>
             )}
           </article>
 
           <div className="study-jumps">
-            <button onClick={() => jumpToQueueIndex(0)} disabled={activeQueueIndex === 0}>⇤ 到{allStarsSelected ? " List" : "筛选"}开头</button>
-            <button onClick={() => jumpToQueueIndex(studyQueue.length - 1)} disabled={activeQueueIndex >= studyQueue.length - 1}>到{allStarsSelected ? " List" : "筛选"}结尾 ⇥</button>
+            <button onClick={() => jumpToQueueIndex(0)} disabled={activeQueueIndex === 0}>⇤ 到{isFullListStudy ? " List" : "筛选"}开头</button>
+            <button onClick={() => jumpToQueueIndex(studyQueue.length - 1)} disabled={activeQueueIndex >= studyQueue.length - 1}>到{isFullListStudy ? " List" : "筛选"}结尾 ⇥</button>
           </div>
         </section>
       )}
@@ -1233,19 +1415,40 @@ export default function Home() {
         <section className="page words-page">
           <div className="page-title"><p className="eyebrow">WORD INDEX</p><h1>完整词表</h1><span>共 {data.record_count.toLocaleString()} 词，按原书词序</span></div>
           <input className="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索单词，例如 proselytize" autoCapitalize="none" />
+          <button
+            className={wordListMachine7Only ? "index-priority-filter active" : "index-priority-filter"}
+            aria-pressed={wordListMachine7Only}
+            onClick={() => setSetting("word_list_machine7_only", wordListMachine7Only ? "0" : "1")}
+          >
+            <span>仅显示机经 7.0 重点词</span><small>{wordListMachine7Only ? "已开启" : `共 ${totalMachine7Count.toLocaleString()} 词`}</small>
+          </button>
           <div className="word-list" onPointerUp={captureSelection}>
             {filteredWords.map((word) => (
               <button key={word.id} onClick={() => {
                 if (!window.getSelection()?.toString().trim()) openWord(word);
               }}>
                 <span className="word-order">{word.order}</span>
-                <span className="word-main"><strong><LookupText text={word.word} onLookup={openLookup} /></strong><small>{word.definition_zh || <LookupText text={word.definition_en} onLookup={openLookup} />}</small></span>
+                <span className="word-main"><strong><LookupQuery text={word.word} onLookup={openLookup} /></strong><small>{word.definition_zh || <LookupText text={word.definition_en} onLookup={openLookup} />}</small></span>
                 {word.machine7 && <em>重点</em>}
                 <span className="word-star">{starText(progress.stars[String(word.id)] ?? 0)}</span>
               </button>
             ))}
           </div>
-          {!query && <p className="list-hint">输入关键词可检索全部 3,292 个词。</p>}
+          {!filteredWords.length && <p className="word-list-empty" role="status">没有符合当前搜索和重点词条件的单词。</p>}
+          {canLoadMoreWords && (
+            <button
+              className="word-list-more"
+              onClick={() => setWordListWindow({ key: wordListViewKey, limit: wordListLimit + WORD_LIST_BATCH_SIZE })}
+            >
+              加载更多 <small>已显示 {filteredWords.length.toLocaleString()} / {wordListMatches.length.toLocaleString()}</small>
+            </button>
+          )}
+          {!!wordListMatches.length && (
+            <p className="list-hint">
+              已显示 {filteredWords.length.toLocaleString()} / {wordListMatches.length.toLocaleString()} 词
+              {wordListMachine7Only ? " · 仅机经 7.0 重点词，按原书词序" : !query ? " · 输入关键词可检索全部词库" : ""}
+            </p>
+          )}
         </section>
       )}
 
@@ -1312,16 +1515,61 @@ export default function Home() {
               <button onClick={() => setLookup(null)} aria-label="关闭词典">×</button>
             </header>
             <span className="lookup-source">{lookup.source}</span>
-            <div className={lookup.translation ? "lookup-meaning" : "lookup-meaning missing"}>
-              {lookup.translation || (
+            {lookup.greTranslation && (
+              <section className="lookup-dictionary-section lookup-gre">
+                <h3>GRE 3000 已审核释义</h3>
+                <div className="lookup-meaning">{lookup.greTranslation}</div>
+                {lookup.greDefinition && <div className="lookup-definition"><LookupText text={lookup.greDefinition} onLookup={openLookup} /></div>}
+                {lookup.greExampleEn && (
+                  <div className="lookup-sense-example">
+                    <span>原书例句</span>
+                    <p><LookupText text={lookup.greExampleEn} onLookup={openLookup} /></p>
+                    {lookup.greExampleZh && <small>{lookup.greExampleZh}</small>}
+                  </div>
+                )}
+              </section>
+            )}
+            {(lookup.offlineTranslation || lookup.offlineSenses.length > 0) && (
+              <section className="lookup-dictionary-section lookup-offline">
+                <h3>ECDICT 离线词典 · 全部义项</h3>
+                {lookup.offlineTranslation && <div className="lookup-meaning">{lookup.offlineTranslation}</div>}
+                {lookup.offlineSenses.length > 0 && (
+                  <div className="lookup-senses">
+                    {lookup.offlineSenses.map((sense, senseIndex) => (
+                      <article key={`${sense.part_of_speech}-${senseIndex}`}>
+                        <div className="lookup-sense-title">
+                          <span>义项 {senseIndex + 1}</span>
+                          {sense.part_of_speech && <em>{sense.part_of_speech}</em>}
+                        </div>
+                        <strong>{sense.translation}</strong>
+                        {sense.definition && <p className="lookup-sense-definition"><LookupText text={sense.definition} onLookup={openLookup} /></p>}
+                        {sense.examples.map((example, exampleIndex) => {
+                          const contextOnly = example.source.startsWith("释义语境");
+                          return (
+                            <div className="lookup-sense-example" key={`${example.text}-${exampleIndex}`}>
+                              <span>{contextOnly ? "释义语境提示" : `例句 ${exampleIndex + 1}`} · {example.source}</span>
+                              <p><LookupText text={example.text} onLookup={openLookup} /></p>
+                            </div>
+                          );
+                        })}
+                      </article>
+                    ))}
+                  </div>
+                )}
+                {lookup.offlineDefinition && !lookup.offlineSenses.length && <div className="lookup-definition"><LookupText text={lookup.offlineDefinition} onLookup={openLookup} /></div>}
+              </section>
+            )}
+            {!lookup.greTranslation && !lookup.offlineTranslation && !lookup.offlineSenses.length && (
+              <div className="lookup-meaning missing">
+                {(
                 lookup.source === "内置词典载入中"
                   ? "离线词典正在载入，请稍候再点一次。"
                   : lookup.source === "内置词典载入失败"
                     ? "离线词典载入失败；GRE 主词表仍可查询，也可使用联网翻译。"
                     : "内置词典暂未收录，可使用联网翻译。"
-              )}
-            </div>
-            {lookup.definition && <div className="lookup-definition"><LookupText text={lookup.definition} onLookup={openLookup} /></div>}
+                )}
+              </div>
+            )}
             {lookup.exchange && <p className="lookup-exchange">词形变化：{lookup.exchange}</p>}
             {lookup.phrases.length > 0 && <div className="lookup-phrases"><h3>常用词组</h3>{lookup.phrases.map(([phrase, translation]) => <div key={phrase}><strong><LookupText text={phrase} onLookup={openLookup} /></strong><span>{translation}</span></div>)}</div>}
             {lookup.onlineStatus !== "idle" && (
@@ -1332,14 +1580,39 @@ export default function Home() {
                 {lookup.onlineStatus === "error" && <p>翻译失败：{lookup.onlineError}</p>}
               </div>
             )}
-            <p className="lookup-privacy">点词释义来自本地；只有点击联网翻译时，当前文字才会发送给第三方 MyMemory。本站后端限流时，浏览器会直接连接该服务重试。</p>
+            <p className="lookup-privacy">
+              点词释义来自本地；只有点击联网翻译时，当前文字才会发送给第三方 MyMemory。本站后端限流时，浏览器会直接连接该服务重试。
+              <br /><a href="/ECDICT-LICENSE.txt" target="_blank" rel="noreferrer">ECDICT 许可</a> · <a href="/WORDNET-LICENSE.txt" target="_blank" rel="noreferrer">WordNet 3.0 许可</a>
+            </p>
             <div className="lookup-actions">
-              {lookup.greWordId && <button onClick={() => { openWord(wordMap.get(lookup.greWordId!)!); setLookup(null); }}>打开 GRE 词条</button>}
-              <button onClick={() => navigator.clipboard?.writeText([lookup.headword, lookup.translation, lookup.onlineTranslation].filter(Boolean).join("\n"))}>复制</button>
+              {lookup.greWordId && <button onClick={() => { setGrePreviewWordId(lookup.greWordId!); setLookup(null); }}>打开 GRE 词条</button>}
+              <button onClick={() => navigator.clipboard?.writeText([
+                lookup.headword,
+                lookup.greTranslation,
+                lookup.greDefinition,
+                lookup.offlineTranslation,
+                ...lookup.offlineSenses.flatMap((sense) => [sense.translation, sense.definition, ...sense.examples.map((example) => example.text)]),
+                lookup.onlineTranslation,
+              ].filter(Boolean).join("\n"))}>复制</button>
               <button className="translate" disabled={lookup.onlineStatus === "loading"} onClick={() => void translateLookup(lookup.query)}>{lookup.onlineStatus === "loading" ? "翻译中…" : "联网翻译"}</button>
             </div>
           </section>
         </div>
+      )}
+
+      {grePreviewWord && (
+        <GreWordPreview
+          word={grePreviewWord}
+          wordMap={wordMap}
+          closeLabel={screen === "study" && mode === "quiz" ? "返回原题" : "关闭词条"}
+          onClose={() => setGrePreviewWordId(null)}
+          onOpen={(wordId) => setGrePreviewWordId(wordId)}
+          onLookup={(queryText) => {
+            setGrePreviewWordId(null);
+            openLookup(queryText);
+          }}
+          onSpeak={speak}
+        />
       )}
 
       <nav className="bottom-nav" aria-label="主导航">
@@ -1355,6 +1628,71 @@ function Relation({ title, ids, wordMap, onOpen, onLookup }: { title: string; id
   const unique = [...new Set(ids)].filter((id) => wordMap.has(id));
   if (!unique.length) return null;
   return (
-    <div className="relation-block"><span>{title}</span><div>{unique.map((id) => { const word = wordMap.get(id)!; return <button key={id} onClick={() => { if (!window.getSelection()?.toString().trim()) onOpen(id); }}><strong><LookupText text={word.word} onLookup={onLookup} /></strong><small>{word.definition_zh || <LookupText text={word.definition_en} onLookup={onLookup} />}</small></button>; })}</div></div>
+    <div className="relation-block"><span>{title}</span><div>{unique.map((id) => { const word = wordMap.get(id)!; return <button key={id} onClick={() => { if (!window.getSelection()?.toString().trim()) onOpen(id); }}><strong><LookupQuery text={word.word} onLookup={onLookup} /></strong><small>{word.definition_zh || <LookupText text={word.definition_en} onLookup={onLookup} />}</small></button>; })}</div></div>
+  );
+}
+
+function GreWordPreview({ word, wordMap, closeLabel, onClose, onOpen, onLookup, onSpeak }: { word: WordEntry; wordMap: Map<number, WordEntry>; closeLabel: string; onClose: () => void; onOpen: (id: number) => void; onLookup: (word: string) => void; onSpeak: (text: string) => void }) {
+  return (
+    <div className="lookup-backdrop gre-preview-backdrop" onClick={onClose}>
+      <section className="lookup-sheet gre-preview" role="dialog" aria-modal="true" aria-label={`${word.word} 的 GRE 词条`} onClick={(event) => event.stopPropagation()}>
+        <div className="lookup-handle" />
+        <header>
+          <div>
+            <span className="lookup-source">GRE 词条页 · #{word.order}</span>
+            <h2><LookupQuery text={word.word} onLookup={onLookup} /></h2>
+            {word.phonetic && <p>{word.phonetic}</p>}
+          </div>
+          <button onClick={onClose} aria-label={closeLabel}>×</button>
+        </header>
+        {word.machine7 && <div className="gre-preview-priority">机经 7.0 重点词</div>}
+        <div className="lookup-meaning">{word.definition_zh}</div>
+        <div className="lookup-definition"><LookupText text={word.definition_en} onLookup={onLookup} /></div>
+        {word.synonyms && <div className="detail-line"><span>近义词</span><p><LookupText text={word.synonyms} onLookup={onLookup} /></p></div>}
+        {word.example_en && (
+          <div className="example">
+            <div className="example-heading"><span>例句</span><button onClick={() => onSpeak(word.example_en)}>▶ 音源 1</button></div>
+            <p><LookupText text={word.example_en} onLookup={onLookup} /></p>
+            {word.example_zh && <small>{word.example_zh}</small>}
+          </div>
+        )}
+        <div className="relations">
+          {word.equivalents.length > 0 && <Relation title="真经等价词" ids={word.equivalents} wordMap={wordMap} onOpen={onOpen} onLookup={onLookup} />}
+          {word.roots.map((family) => <Relation key={family.root} title={`词根 ${family.root}`} ids={family.words} wordMap={wordMap} onOpen={onOpen} onLookup={onLookup} />)}
+          {word.lookalikes.length > 0 && <Relation title="近形异义词" ids={word.lookalikes} wordMap={wordMap} onOpen={onOpen} onLookup={onLookup} />}
+        </div>
+        <div className="lookup-actions"><button onClick={onClose}>{closeLabel}</button></div>
+      </section>
+    </div>
+  );
+}
+
+function LookupQuery({ text, className, onLookup }: { text: string; className?: string; onLookup: (query: string) => void }) {
+  return (
+    <span
+      className={`lookup-token${className ? ` ${className}` : ""}`}
+      data-lookup-scope
+      onClick={(event) => {
+        event.stopPropagation();
+        if (window.getSelection()?.toString().trim()) return;
+        if (lookupClickTimer) window.clearTimeout(lookupClickTimer);
+        lookupClickTimer = window.setTimeout(() => {
+          lookupClickTimer = null;
+          onLookup(text);
+        }, 180);
+      }}
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        if (lookupClickTimer) {
+          window.clearTimeout(lookupClickTimer);
+          lookupClickTimer = null;
+        }
+        const range = document.createRange();
+        range.selectNodeContents(event.currentTarget);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }}
+    >{text}</span>
   );
 }

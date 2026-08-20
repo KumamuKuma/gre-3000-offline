@@ -44,7 +44,12 @@ def test_release_documentation_matches_the_current_study_features():
         assert "拼写相近" in text
         assert "真经 GRE 等价词" in text
         assert "机经 7.0" in text
+        assert "仅机经 7.0 重点词" in text or "仅显示机经 7.0 重点词" in text
+        assert "1,410" in text
         assert "自动朗读一次" in text
+        assert "查看 GRE 词条" in text or "完整 GRE 词条" in text
+        assert "ECDICT" in text
+        assert "WordNet 3.0" in text
         assert "随机学习" not in text
         assert "重新洗牌" not in text
         assert "生词本" not in text

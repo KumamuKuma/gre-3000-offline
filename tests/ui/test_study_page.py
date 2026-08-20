@@ -1,7 +1,12 @@
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QSignalSpy
 
-from gre_vocab_app.domain import BrowseOrder, SessionSnapshot, StudyMode
+from gre_vocab_app.domain import (
+    BrowseOrder,
+    QuizChoice,
+    SessionSnapshot,
+    StudyMode,
+)
 from gre_vocab_app.ui.study_page import StudyPage
 
 
@@ -23,6 +28,13 @@ def snapshot(sample_word, **changes):
     )
     values.update(changes)
     return SessionSnapshot(**values)
+
+
+def quiz_choices(*texts: str) -> tuple[QuizChoice, ...]:
+    return tuple(
+        QuizChoice(index + 1, text, "n. sample")
+        for index, text in enumerate(texts)
+    )
 
 
 def test_study_render_modes_navigation_and_position_context(qtbot, sample_word):
@@ -83,7 +95,7 @@ def test_clicking_active_quiz_mode_does_not_emit_or_reset_answer(qtbot, sample_w
     answered = snapshot(
         sample_word,
         mode=StudyMode.QUIZ,
-        quiz_choices=("甲", "乙", "丙", "丁"),
+        quiz_choices=quiz_choices("甲", "乙", "丙", "丁"),
         quiz_correct_index=2,
         quiz_selected_index=0,
     )
@@ -107,7 +119,7 @@ def test_quiz_auto_star_switches_are_available_only_in_quiz_mode(
         snapshot(
             sample_word,
             mode=StudyMode.QUIZ,
-            quiz_choices=("甲", "乙", "丙", "丁"),
+            quiz_choices=quiz_choices("甲", "乙", "丙", "丁"),
             quiz_correct_index=2,
         )
     )
@@ -140,7 +152,7 @@ def test_retry_is_hidden_in_reading_mode_and_after_correct_quiz_answer(
         snapshot(
             sample_word,
             mode=StudyMode.QUIZ,
-            quiz_choices=("甲", "乙", "丙", "丁"),
+            quiz_choices=quiz_choices("甲", "乙", "丙", "丁"),
             quiz_correct_index=2,
             quiz_selected_index=2,
         )
@@ -190,6 +202,20 @@ def test_end_of_full_list_becomes_explicit_finish_action(qtbot, sample_word):
     assert page.next_button.text() == "下一词"
     assert not page.next_button.isEnabled()
 
+    page.render(
+        snapshot(
+            sample_word,
+            total=1,
+            at_end=True,
+            machine7_only=True,
+            can_complete_round=False,
+        )
+    )
+    assert page.first_button.text() == "到筛选开头"
+    assert page.last_button.text() == "到筛选结尾"
+    assert page.next_button.text() == "下一词"
+    assert not page.next_button.isEnabled()
+
 
 def test_quiz_and_related_word_signals_are_forwarded(qtbot, sample_word):
     page = StudyPage()
@@ -199,13 +225,16 @@ def test_quiz_and_related_word_signals_are_forwarded(qtbot, sample_word):
         snapshot(
             sample_word,
             mode=StudyMode.QUIZ,
-            quiz_choices=("甲", "乙", "丙", "丁"),
+            quiz_choices=quiz_choices("甲", "乙", "丙", "丁"),
             quiz_correct_index=1,
         )
     )
     with qtbot.waitSignal(page.quizChoiceRequested) as answer:
         page.word_detail.quiz_buttons[0].click()
     assert answer.args == [0]
+    with qtbot.waitSignal(page.quizWordRequested) as quiz_word:
+        page.word_detail.quiz_word_buttons[2].click()
+    assert quiz_word.args == [3]
     assert page.quiz_retry_button.isVisible()
     with qtbot.waitSignal(page.quizRetryRequested):
         page.quiz_retry_button.click()

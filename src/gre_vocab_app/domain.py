@@ -54,6 +54,13 @@ class RootFamily:
 
 
 @dataclass(frozen=True, slots=True)
+class QuizChoice:
+    word_id: int
+    text: str
+    definition_en: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class SessionSnapshot:
     word: WordEntry
     index: int
@@ -69,12 +76,13 @@ class SessionSnapshot:
     list_key: str | None = None
     list_keys: tuple[str, ...] = ()
     list_label: str = ""
+    machine7_only: bool = False
     can_complete_round: bool = False
     root_families: tuple[RootFamily, ...] = ()
     lookalikes: tuple[RelatedWord, ...] = ()
     equivalents: tuple[RelatedWord, ...] = ()
     in_machine7: bool = False
-    quiz_choices: tuple[str, ...] = ()
+    quiz_choices: tuple[QuizChoice, ...] = ()
     quiz_correct_index: int | None = None
     quiz_selected_index: int | None = None
     quiz_attempt_count: int = 0

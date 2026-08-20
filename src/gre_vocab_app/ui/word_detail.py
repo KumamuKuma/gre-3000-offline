@@ -15,7 +15,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gre_vocab_app.domain import RelatedWord, RootFamily, StudyMode, WordEntry
+from gre_vocab_app.domain import (
+    QuizChoice,
+    RelatedWord,
+    RootFamily,
+    StudyMode,
+    WordEntry,
+)
 
 from .lookup_label import LookupLabel
 
@@ -35,6 +41,7 @@ class WordDetail(QWidget):
     secondarySpeechRequested = Signal(str)
     revealRequested = Signal()
     quizChoiceRequested = Signal(int)
+    quizWordRequested = Signal(int)
     quizRetryRequested = Signal()
     relatedWordRequested = Signal(int)
     lookupRequested = Signal(str)
@@ -47,7 +54,7 @@ class WordDetail(QWidget):
         self._revealed = True
         self._speech_available = True
         self._secondary_speech_available = False
-        self._quiz_choices: tuple[str, ...] = ()
+        self._quiz_choices: tuple[QuizChoice, ...] = ()
         self._quiz_correct_index: int | None = None
         self._quiz_selected_index: int | None = None
         self._root_families: tuple[RootFamily, ...] = ()
@@ -122,7 +129,11 @@ class WordDetail(QWidget):
         self.quiz_title = self._section_title("请选择正确词义")
         quiz_layout.addWidget(self.quiz_title)
         self.quiz_buttons: list[QPushButton] = []
+        self.quiz_word_buttons: list[QPushButton] = []
         for index in range(4):
+            choice_row = QHBoxLayout()
+            choice_row.setContentsMargins(0, 0, 0, 0)
+            choice_row.setSpacing(8)
             button = QPushButton()
             button.setFocusPolicy(Qt.StrongFocus)
             button.setAccessibleName(f"词义选项 {index + 1}")
@@ -130,7 +141,21 @@ class WordDetail(QWidget):
                 lambda _checked=False, choice=index: self._request_quiz_choice(choice)
             )
             self.quiz_buttons.append(button)
-            quiz_layout.addWidget(button)
+            choice_row.addWidget(button, 1)
+            word_button = QPushButton("查看 GRE 词条")
+            word_button.setObjectName("outlineButton")
+            word_button.setMinimumHeight(40)
+            word_button.setFocusPolicy(Qt.StrongFocus)
+            word_button.setCursor(Qt.PointingHandCursor)
+            word_button.setAccessibleName(
+                f"查看词义选项 {index + 1} 对应的 GRE 词条"
+            )
+            word_button.clicked.connect(
+                lambda _checked=False, choice=index: self._request_quiz_word(choice)
+            )
+            self.quiz_word_buttons.append(word_button)
+            choice_row.addWidget(word_button)
+            quiz_layout.addLayout(choice_row)
         self.quiz_feedback_label = self._label(object_name="sectionTitle")
         self.quiz_feedback_label.setAccessibleName("答题结果")
         quiz_layout.addWidget(self.quiz_feedback_label)
@@ -265,7 +290,7 @@ class WordDetail(QWidget):
         *,
         mode: StudyMode = StudyMode.READING,
         answer_visible: bool = False,
-        quiz_choices: tuple[str, ...] = (),
+        quiz_choices: tuple[QuizChoice, ...] = (),
         quiz_correct_index: int | None = None,
         quiz_selected_index: int | None = None,
         root_families: tuple[RootFamily, ...] = (),
@@ -289,7 +314,7 @@ class WordDetail(QWidget):
         ):
             label.clear()
 
-        self.headword_label.set_lookup_text(word.headword)
+        self.headword_label.set_lookup_query(word.headword)
         self.machine7_badge.setVisible(bool(in_machine7))
         self.phonetic_label.setText(word.phonetic)
         self.definition_label.set_lookup_text(word.definition_en)
@@ -338,7 +363,7 @@ class WordDetail(QWidget):
         self,
         *,
         answer_visible: bool,
-        quiz_choices: tuple[str, ...],
+        quiz_choices: tuple[QuizChoice, ...],
         quiz_correct_index: int | None,
         quiz_selected_index: int | None,
     ) -> None:
@@ -386,11 +411,14 @@ class WordDetail(QWidget):
             button.hide()
             button.setEnabled(False)
             self._set_button_style(button, "")
+        for button in self.quiz_word_buttons:
+            button.hide()
+            button.setEnabled(False)
         self._update_relation_visibility()
 
     def _render_quiz(
         self,
-        choices: tuple[str, ...],
+        choices: tuple[QuizChoice, ...],
         *,
         correct_index: int | None,
         selected_index: int | None,
@@ -419,15 +447,17 @@ class WordDetail(QWidget):
                 button.setText("")
                 button.hide()
                 button.setEnabled(False)
+                self.quiz_word_buttons[index].hide()
+                self.quiz_word_buttons[index].setEnabled(False)
                 self._set_button_style(button, "")
                 continue
             choice = self._quiz_choices[index]
-            text = choice
+            text = choice.text
             style_name = ""
             if answered and index == valid_correct:
                 displayed_choice = self._meaning_with_parts_of_speech(
-                    choice,
-                    self._word.definition_en if self._word else "",
+                    choice.text,
+                    choice.definition_en,
                 )
                 text = (
                     f"✓ 回答正确：{displayed_choice}"
@@ -436,12 +466,19 @@ class WordDetail(QWidget):
                 )
                 style_name = "primaryButton"
             elif answered and index == valid_selected:
-                text = f"✗ 你的选择：{choice}"
+                text = f"✗ 你的选择：{choice.text}"
                 style_name = "dangerButton"
             button.setText(text)
             button.setAccessibleName(f"词义选项 {index + 1}：{text}")
             button.setEnabled(not answered)
             button.show()
+            word_button = self.quiz_word_buttons[index]
+            word_button.setAccessibleName(
+                f"查看词义选项 {index + 1} 对应的 GRE 词条"
+            )
+            word_button.setToolTip("打开该释义来源单词的 GRE 完整词条")
+            word_button.setEnabled(True)
+            word_button.show()
             self._set_button_style(button, style_name)
 
         if answered and valid_selected is not None and valid_correct is not None:
@@ -591,6 +628,13 @@ class WordDetail(QWidget):
                 selected_index=None,
             )
             self.quizRetryRequested.emit()
+
+    def _request_quiz_word(self, index: int) -> None:
+        if (
+            self._mode is StudyMode.QUIZ
+            and 0 <= index < len(self._quiz_choices)
+        ):
+            self.quizWordRequested.emit(self._quiz_choices[index].word_id)
 
     def set_revealed(self, revealed: bool) -> None:
         self._revealed = bool(revealed)

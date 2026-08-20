@@ -1,4 +1,8 @@
-from gre_vocab_app.ui.lookup_label import LookupLabel, lookup_html
+from gre_vocab_app.ui.lookup_label import (
+    LookupLabel,
+    lookup_html,
+    lookup_query_html,
+)
 
 
 def test_lookup_html_preserves_punctuation_and_wraps_english_tokens():
@@ -18,3 +22,16 @@ def test_lookup_label_emits_decoded_word(qtbot):
         label._activate_link("lookup:don%27t")
 
     assert signal.args == ["don't"]
+
+
+def test_full_lookup_query_keeps_a_multiword_headword_in_one_link(qtbot):
+    rendered = lookup_query_html("ad hoc")
+    assert 'href="lookup:ad%20hoc"' in rendered
+    assert rendered.count("href=") == 1
+
+    label = LookupLabel()
+    qtbot.addWidget(label)
+    label.set_lookup_query("ad hoc")
+    with qtbot.waitSignal(label.lookupRequested) as signal:
+        label._activate_link("lookup:ad%20hoc")
+    assert signal.args == ["ad hoc"]

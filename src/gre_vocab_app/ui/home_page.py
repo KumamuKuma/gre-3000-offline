@@ -189,9 +189,10 @@ class StarScopeDialog(QDialog):
 
 class HomePage(QWidget):
     searchRequested = Signal(str)
-    listStudyRequested = Signal(object, object)
+    listStudyRequested = Signal(object, object, bool)
     listScopeChanged = Signal(object)
     starFiltersChanged = Signal(object)
+    machine7FilterChanged = Signal(bool)
     listCompletionAdjustmentRequested = Signal(str, int)
     wordListRequested = Signal()
     wordSelected = Signal(object)
@@ -204,6 +205,7 @@ class HomePage(QWidget):
         self._star_counts = (0, 0, 0, 0)
         self._selected_list_keys: tuple[str, ...] = ()
         self._selected_star_ratings: tuple[int, ...] = (0, 1, 2, 3)
+        self._machine7_only = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(38, 28, 38, 30)
@@ -278,7 +280,8 @@ class HomePage(QWidget):
         study_layout.addWidget(self.word_list_button, 0, 2)
 
         study_hint = QLabel(
-            "List 和星级都可以多选；所选单词始终按原书词序合并学习。"
+            "List 和星级都可以多选，并可仅学习机经 7.0 重点词；"
+            "所选单词始终按原书词序合并。"
         )
         study_hint.setObjectName("sectionHint")
         study_layout.addWidget(study_hint, 1, 0, 1, 3)
@@ -310,6 +313,17 @@ class HomePage(QWidget):
         self.start_button.clicked.connect(self._emit_list_study)
         study_layout.addWidget(self.start_button, 3, 2)
 
+        self.machine7_only_checkbox = QCheckBox("仅显示机经 7.0 重点词")
+        self.machine7_only_checkbox.setObjectName("machine7FilterCheckbox")
+        self.machine7_only_checkbox.setAccessibleName("仅学习机经 7.0 重点词")
+        self.machine7_only_checkbox.setToolTip(
+            "在所选 List 和星级范围内，只保留机经 7.0 重点词"
+        )
+        self.machine7_only_checkbox.toggled.connect(
+            self._machine7_filter_toggled
+        )
+        study_layout.addWidget(self.machine7_only_checkbox, 4, 0, 1, 3)
+
         progress_row = QHBoxLayout()
         self.list_meta_label = QLabel("请选择 List")
         self.list_meta_label.setObjectName("muted")
@@ -339,7 +353,7 @@ class HomePage(QWidget):
             lambda: self._emit_completion_adjustment(1)
         )
         progress_row.addWidget(self.increase_rounds_button)
-        study_layout.addLayout(progress_row, 4, 0, 1, 3)
+        study_layout.addLayout(progress_row, 5, 0, 1, 3)
         root.addWidget(study_card)
         self.set_star_counts({})
 
@@ -403,6 +417,7 @@ class HomePage(QWidget):
         selected_star_keys: Sequence[str] | None = None,
         selected_keys: Sequence[str] | None = None,
         selected_star_ratings: Sequence[int] | None = None,
+        machine7_only: bool | None = None,
     ) -> None:
         lists = tuple(source_lists)
         if any(not isinstance(item, SourceList) for item in lists):
@@ -433,6 +448,8 @@ class HomePage(QWidget):
         )
         if selected_star_ratings is not None:
             self.set_selected_star_ratings(selected_star_ratings)
+        if machine7_only is not None:
+            self.set_machine7_only(machine7_only)
         self._update_list_meta()
         self._update_scope_controls()
         self._update_start_state()
@@ -490,6 +507,7 @@ class HomePage(QWidget):
         if any(type(value) is not int or value < 0 for value in values):
             raise ValueError("star counts must be non-negative integers")
         self._star_counts = values
+        self._update_list_meta()
         self._update_scope_controls()
         self._update_start_state()
 
@@ -507,6 +525,17 @@ class HomePage(QWidget):
 
     def selected_star_ratings(self) -> tuple[int, ...]:
         return self._selected_star_ratings
+
+    def machine7_only(self) -> bool:
+        return self._machine7_only
+
+    def set_machine7_only(self, enabled: bool) -> None:
+        self._machine7_only = bool(enabled)
+        with QSignalBlocker(self.machine7_only_checkbox):
+            self.machine7_only_checkbox.setChecked(self._machine7_only)
+        self._update_list_meta()
+        self._update_scope_controls()
+        self._update_start_state()
 
     def set_selected_star_ratings(self, ratings: Sequence[int]) -> bool:
         requested = tuple(int(rating) for rating in ratings)
@@ -581,6 +610,13 @@ class HomePage(QWidget):
         ):
             self.starFiltersChanged.emit(selected)
 
+    def _machine7_filter_toggled(self, checked: bool) -> None:
+        self._machine7_only = bool(checked)
+        self._update_list_meta()
+        self._update_scope_controls()
+        self._update_start_state()
+        self.machine7FilterChanged.emit(self._machine7_only)
+
     def _update_scope_controls(self) -> None:
         total = len(self._lists)
         selected_lists = len(self._selected_list_keys)
@@ -611,10 +647,16 @@ class HomePage(QWidget):
                 if key in self._lists
             )
             if selected:
-                word_count = sum(item.word_count for item in selected)
-                self.list_meta_label.setText(
-                    f"已合并 {len(selected)} 个 List · 共 {word_count:,} 词"
-                )
+                if self._machine7_only:
+                    self.list_meta_label.setText(
+                        f"已合并 {len(selected)} 个 List · "
+                        f"机经 7.0 共 {sum(self._star_counts):,} 词"
+                    )
+                else:
+                    word_count = sum(item.word_count for item in selected)
+                    self.list_meta_label.setText(
+                        f"已合并 {len(selected)} 个 List · 共 {word_count:,} 词"
+                    )
             else:
                 self.list_meta_label.setText("请选择 List")
             self.rounds_value_label.setText("0")
@@ -622,8 +664,13 @@ class HomePage(QWidget):
             self.increase_rounds_button.setEnabled(False)
             return
         completed = self._completion_counts.get(source_list.key, 0)
+        suffix = (
+            f" · 机经 7.0 共 {sum(self._star_counts):,} 词"
+            if self._machine7_only
+            else ""
+        )
         self.list_meta_label.setText(
-            f"原书第 {source_list.first_order}–{source_list.last_order} 词"
+            f"原书第 {source_list.first_order}–{source_list.last_order} 词{suffix}"
         )
         self.rounds_value_label.setText(str(completed))
         self.decrease_rounds_button.setEnabled(completed > 0)
@@ -646,7 +693,11 @@ class HomePage(QWidget):
         ratings: tuple[int, ...] | None = self._selected_star_ratings
         if ratings == (0, 1, 2, 3):
             ratings = None
-        self.listStudyRequested.emit(self._selected_list_keys, ratings)
+        self.listStudyRequested.emit(
+            self._selected_list_keys,
+            ratings,
+            self._machine7_only,
+        )
 
     def _emit_completion_adjustment(self, delta: int) -> None:
         key = self.selected_list_key()

@@ -38,6 +38,7 @@ class StudyPage(QWidget):
     secondarySpeechRequested = Signal(str)
     starRatingRequested = Signal(int)
     quizChoiceRequested = Signal(int)
+    quizWordRequested = Signal(int)
     quizRetryRequested = Signal()
     quizWrongStarUpChanged = Signal(bool)
     quizCorrectStarDownChanged = Signal(bool)
@@ -181,6 +182,9 @@ class StudyPage(QWidget):
         self.word_detail.quizChoiceRequested.connect(
             self.quizChoiceRequested.emit
         )
+        self.word_detail.quizWordRequested.connect(
+            self.quizWordRequested.emit
+        )
         self.word_detail.quizRetryRequested.connect(
             self.quizRetryRequested.emit
         )
@@ -213,7 +217,9 @@ class StudyPage(QWidget):
         self.position_label.setText(
             f"{prefix}{snapshot.index + 1:,} / {snapshot.total:,}"
         )
-        scope_label = "筛选" if snapshot.star_filters else "List"
+        scope_label = (
+            "筛选" if snapshot.star_filters or snapshot.machine7_only else "List"
+        )
         self.first_button.setText(f"到{scope_label}开头")
         self.first_button.setAccessibleName(f"回到当前{scope_label}的第一个单词")
         self.last_button.setText(f"到{scope_label}结尾")

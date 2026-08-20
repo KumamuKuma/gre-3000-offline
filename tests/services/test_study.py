@@ -15,8 +15,15 @@ from gre_vocab_app.services.study import StudySession
 
 
 class FakeContent:
-    def __init__(self, count: int = 10, *, duplicate_chinese: bool = False):
+    def __init__(
+        self,
+        count: int = 10,
+        *,
+        duplicate_chinese: bool = False,
+        machine7_ids: set[int] | None = None,
+    ):
         split = max(1, count // 2)
+        self.machine7_ids = {1} if machine7_ids is None else set(machine7_ids)
         self.words = {
             word_id: WordEntry(
                 id=word_id,
@@ -90,7 +97,7 @@ class FakeContent:
         return (RelatedWord(4, related.headword, related.definition_zh),)
 
     def in_machine7(self, word_id):
-        return word_id == 1
+        return word_id in self.machine7_ids
 
 
 class FakeUser:
@@ -317,6 +324,124 @@ def test_multiple_star_ratings_merge_in_source_order(user_repo):
     ]
 
 
+def test_machine7_filter_combines_lists_and_stars_in_source_order_and_restores(
+    user_repo,
+):
+    content = FakeContent(10, machine7_ids={2, 5, 6, 9})
+    user_repo.ratings.update({2: 1, 3: 1, 5: 2, 6: 2, 9: 1})
+    user_repo.settings["study_star_current_word_id"] = "3"
+    session = StudySession(content, user_repo, random.Random(1))
+    first = session.start(
+        source_sections=("list2", "list1"),
+        star_ratings=(1, 2),
+        machine7_only=True,
+    )
+
+    assert first.word.id == 2
+    assert first.total == 4
+    assert first.list_keys == ("list1", "list2")
+    assert first.machine7_only
+    assert not first.can_complete_round
+    assert [session.next().word.id for _ in range(2)] == [5, 6]
+    queue_name = "source:lists:all:machine7:stars:1+2"
+    assert user_repo.load_queue(queue_name) == QueueState(
+        (2, 5, 6, 9), 2, 0
+    )
+    assert user_repo.settings["study_machine7_only"] == "1"
+    assert user_repo.settings["study_machine7_current_word_id"] == "6"
+    assert user_repo.settings["study_star_current_word_id"] == "3"
+
+    restored = StudySession(content, user_repo, random.Random(2))
+    assert restored.start(
+        source_sections=("list1", "list2"),
+        star_ratings=(1, 2),
+        machine7_only=True,
+    ).word.id == 6
+
+    user_repo.queues.clear()
+    restored_from_anchor = StudySession(content, user_repo, random.Random(3))
+    assert restored_from_anchor.start(
+        source_sections=("list1", "list2"),
+        star_ratings=(1, 2),
+        machine7_only=True,
+    ).word.id == 6
+
+
+def test_real_repository_uses_synced_anchor_when_filtered_queue_is_absent(
+    tmp_path,
+):
+    content = FakeContent(10, machine7_ids={1, 5})
+    repository = UserRepository(tmp_path / "user.db")
+    try:
+        machine_queue = "source:list:list1:machine7"
+        assert repository.load_queue(machine_queue).word_ids == ()
+        repository.save_setting("study_machine7_current_word_id", "5")
+
+        machine_session = StudySession(content, repository, random.Random(1))
+        machine_snapshot = start(machine_session, machine7_only=True)
+        assert machine_snapshot.word.id == 5
+        assert repository.load_queue(machine_queue) == QueueState((1, 5), 1, 0)
+
+        repository.set_star_rating(1, 2)
+        repository.set_star_rating(5, 2)
+        star_queue = "source:list:list1:star:2"
+        assert repository.load_queue(star_queue).word_ids == ()
+        repository.save_setting("study_star_current_word_id", "5")
+
+        star_session = StudySession(content, repository, random.Random(2))
+        star_snapshot = start(star_session, star_rating=2)
+        assert star_snapshot.word.id == 5
+        assert repository.load_queue(star_queue) == QueueState((1, 5), 1, 0)
+    finally:
+        assert repository.close()
+
+
+def test_machine7_filter_does_not_complete_a_full_list_round(user_repo):
+    session = StudySession(
+        FakeContent(10, machine7_ids={1, 5}),
+        user_repo,
+        random.Random(1),
+    )
+    first = start(session, machine7_only=True)
+    assert first.word.id == 1 and first.total == 2
+    assert session.last().word.id == 5
+    assert not session.current().can_complete_round
+    restored = StudySession(
+        FakeContent(10, machine7_ids={1, 5}),
+        user_repo,
+        random.Random(2),
+    )
+    assert start(restored, machine7_only=True).word.id == 5
+    user_repo.queues.clear()
+    restored_from_anchor = StudySession(
+        FakeContent(10, machine7_ids={1, 5}),
+        user_repo,
+        random.Random(3),
+    )
+    assert start(restored_from_anchor, machine7_only=True).word.id == 5
+    with pytest.raises(RuntimeError, match="unfiltered"):
+        session.complete_round()
+
+
+def test_empty_machine7_filter_fails_without_queue_or_seen_event(user_repo):
+    session = StudySession(
+        FakeContent(8, machine7_ids=set()),
+        user_repo,
+        random.Random(1),
+    )
+    with pytest.raises(ValueError, match="no words match selected filters"):
+        start(session, machine7_only=True)
+    assert user_repo.queues == {}
+    assert user_repo.seen == []
+
+
+@pytest.mark.parametrize("value", [0, 1, "1", None])
+def test_start_rejects_non_boolean_machine7_filter(value):
+    session = StudySession(FakeContent(), FakeUser(), random.Random(1))
+    with pytest.raises(ValueError, match="machine7 filter"):
+        session.start(source_section="list1", machine7_only=value)
+
+
 def test_star_filter_membership_change_keeps_source_anchor(user_repo):
     user_repo.ratings.update({1: 2, 3: 2, 5: 2})
     session = StudySession(FakeContent(10), user_repo, random.Random(1))
@@ -347,8 +472,16 @@ def test_quiz_has_four_unique_choices_and_retries_wrong_answer(session):
     first = start(session)
     quiz = session.set_mode(StudyMode.QUIZ)
     assert len(quiz.quiz_choices) == 4
-    assert len(set(quiz.quiz_choices)) == 4
-    assert quiz.quiz_choices[quiz.quiz_correct_index] == first.word.definition_zh
+    assert len({choice.text for choice in quiz.quiz_choices}) == 4
+    assert quiz.quiz_choices[quiz.quiz_correct_index].word_id == first.word.id
+    assert (
+        quiz.quiz_choices[quiz.quiz_correct_index].text
+        == first.word.definition_zh
+    )
+    for choice in quiz.quiz_choices:
+        source = session._content.get(choice.word_id)
+        assert choice.text in (source.definition_zh, source.definition_en)
+        assert choice.definition_en == source.definition_en
     wrong_index = next(
         index
         for index in range(len(quiz.quiz_choices))
@@ -377,8 +510,16 @@ def test_quiz_falls_back_to_english_when_chinese_choices_duplicate():
     session = StudySession(content, FakeUser(), random.Random(8))
     quiz = session.start(source_section="list1")
     quiz = session.set_mode(StudyMode.QUIZ)
-    assert len(set(quiz.quiz_choices)) == 4
-    assert sum(choice.startswith("English") for choice in quiz.quiz_choices) == 3
+    assert len({choice.text for choice in quiz.quiz_choices}) == 4
+    assert (
+        sum(choice.text.startswith("English") for choice in quiz.quiz_choices)
+        == 3
+    )
+    assert all(
+        choice.word_id == 1
+        or choice.text == content.get(choice.word_id).definition_en
+        for choice in quiz.quiz_choices
+    )
 
 
 def test_detail_snapshot_includes_star_and_word_relations(user_repo):
@@ -392,7 +533,8 @@ def test_detail_snapshot_includes_star_and_word_relations(user_repo):
     assert snapshot.lookalikes[0].word_id == 3
     assert snapshot.equivalents[0].word_id == 4
     assert snapshot.in_machine7 is True
-    assert snapshot.quiz_choices[snapshot.quiz_correct_index] == "中文释义1"
+    assert snapshot.quiz_choices[snapshot.quiz_correct_index].word_id == 1
+    assert snapshot.quiz_choices[snapshot.quiz_correct_index].text == "中文释义1"
     wrong_index = next(
         index
         for index in range(len(snapshot.quiz_choices))

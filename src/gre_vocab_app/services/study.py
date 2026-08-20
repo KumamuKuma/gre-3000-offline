@@ -7,6 +7,7 @@ from typing import Any, Sequence
 
 from gre_vocab_app.domain import (
     BrowseOrder,
+    QuizChoice,
     SessionSnapshot,
     StudyMode,
     WordEntry,
@@ -31,11 +32,12 @@ class StudySession:
         self._queue_name = BrowseOrder.SOURCE.value
         self._star_filter: int | None = None
         self._star_filters: tuple[int, ...] = ()
+        self._machine7_only = False
         self._list_key: str | None = None
         self._list_keys: tuple[str, ...] = ()
         self._list_label = ""
         self._answer_visible = False
-        self._quiz_choices: tuple[str, ...] = ()
+        self._quiz_choices: tuple[QuizChoice, ...] = ()
         self._quiz_correct_index: int | None = None
         self._quiz_selected_index: int | None = None
         self._quiz_attempt_count = 0
@@ -124,7 +126,12 @@ class StudySession:
             seen_word_id=self._ids[self._position],
             event_id=uuid.uuid4().hex,
         )
-        if self._star_filters:
+        if self._machine7_only:
+            self._user.save_setting(
+                "study_machine7_current_word_id",
+                str(self._ids[self._position]),
+            )
+        elif self._star_filters:
             self._user.save_setting(
                 "study_star_current_word_id",
                 str(self._ids[self._position]),
@@ -144,7 +151,7 @@ class StudySession:
 
     def _quiz_for_word(
         self, word: WordEntry
-    ) -> tuple[tuple[str, ...], int]:
+    ) -> tuple[tuple[QuizChoice, ...], int]:
         correct = self._definition_text(word, "definition_zh")
         if not correct:
             correct = self._definition_text(word, "definition_en")
@@ -199,11 +206,30 @@ class StudySession:
         if len(selected) != 3:
             raise ValueError("quiz requires four distinct definition choices")
 
-        choices = [text for text, _word_id in selected]
-        choices.append(correct)
+        choices = [
+            QuizChoice(
+                word_id=word_id,
+                text=text,
+                definition_en=self._definition_text(
+                    self._content.get(word_id), "definition_en"
+                ),
+            )
+            for text, word_id in selected
+        ]
+        choices.append(
+            QuizChoice(
+                word_id=word.id,
+                text=correct,
+                definition_en=self._definition_text(word, "definition_en"),
+            )
+        )
         self._random.shuffle(choices)
         result = tuple(choices)
-        return result, result.index(correct)
+        return result, next(
+            index
+            for index, choice in enumerate(result)
+            if choice.word_id == word.id
+        )
 
     def _prepare_quiz(self) -> None:
         self._quiz_choices = ()
@@ -225,6 +251,7 @@ class StudySession:
         source_sections: Sequence[str] | None = None,
         star_rating: int | None = None,
         star_ratings: Sequence[int] | None = None,
+        machine7_only: bool = False,
     ) -> SessionSnapshot:
         try:
             parsed_order = BrowseOrder(order)
@@ -232,6 +259,8 @@ class StudySession:
             raise ValueError("only source-order study is supported") from error
         if parsed_order is not BrowseOrder.SOURCE:  # pragma: no cover - one-value enum
             raise ValueError("only source-order study is supported")
+        if type(machine7_only) is not bool:
+            raise ValueError("machine7 filter must be a boolean")
 
         star_filters = self._validate_star_filters(star_rating, star_ratings)
         star_filter = star_filters[0] if len(star_filters) == 1 else None
@@ -289,30 +318,38 @@ class StudySession:
         else:
             scope_name = f"lists:{'+'.join(selected_keys)}"
             list_label = f"已选 {len(selected_keys)} 个 List"
-        if not star_filters:
-            ids = content_ids
-            queue_name = f"source:{scope_name}:all"
-            filter_setting = "all"
-        else:
+        ids = content_ids
+        queue_filters: list[str] = []
+        if machine7_only:
+            machine7_lookup = getattr(self._content, "in_machine7", None)
+            if not callable(machine7_lookup):
+                raise ValueError("machine7 filter is unavailable")
+            ids = tuple(word_id for word_id in ids if machine7_lookup(word_id))
+            queue_filters.append("machine7")
+
+        filter_setting = "all"
+        if star_filters:
             ids = tuple(
                 word_id
-                for word_id in content_ids
+                for word_id in ids
                 if self._user.star_rating(word_id) in star_filters
             )
             if len(star_filters) == 1:
-                queue_name = f"source:{scope_name}:star:{star_filters[0]}"
+                queue_filters.append(f"star:{star_filters[0]}")
                 filter_setting = f"star:{star_filters[0]}"
             else:
                 joined = "+".join(str(value) for value in star_filters)
-                queue_name = f"source:{scope_name}:stars:{joined}"
+                queue_filters.append(f"stars:{joined}")
                 filter_setting = (
                     f"stars:{','.join(str(value) for value in star_filters)}"
                 )
+        queue_name = (
+            f"source:{scope_name}:{':'.join(queue_filters)}"
+            if queue_filters
+            else f"source:{scope_name}:all"
+        )
         if not ids:
-            raise ValueError(
-                "no words match star ratings "
-                + ",".join(str(value) for value in star_filters)
-            )
+            raise ValueError("no words match selected filters")
 
         saved = self._user.load_queue(queue_name)
         if (
@@ -327,18 +364,26 @@ class StudySession:
                 ids,
                 content_ids,
             )
-            if saved is None:
-                raw_anchor = self._user.load_setting(
-                    "study_star_current_word_id"
-                )
+        else:
+            position = 0
+        if (
+            (saved is None or not tuple(saved.word_ids))
+            and (star_filters or machine7_only)
+        ):
+            anchor_keys = (
+                ("study_machine7_current_word_id",)
+                if machine7_only
+                else ("study_star_current_word_id",)
+            )
+            for anchor_key in anchor_keys:
+                raw_anchor = self._user.load_setting(anchor_key)
                 try:
                     anchor_id = int(raw_anchor) if raw_anchor else None
                 except ValueError:
                     anchor_id = None
                 if anchor_id in ids:
                     position = ids.index(anchor_id)
-        else:
-            position = 0
+                    break
 
         self._order = parsed_order
         self._mode = self._load_mode()
@@ -348,6 +393,7 @@ class StudySession:
         self._queue_name = queue_name
         self._star_filter = star_filter
         self._star_filters = star_filters
+        self._machine7_only = machine7_only
         self._list_key = selected_keys[0] if len(selected_keys) == 1 else None
         self._list_keys = selected_keys
         self._list_label = list_label
@@ -360,6 +406,9 @@ class StudySession:
         self._user.save_setting("study_lists", list_scope)
         self._user.save_setting("study_star_lists", list_scope)
         self._user.save_setting("study_filter", filter_setting)
+        self._user.save_setting(
+            "study_machine7_only", "1" if machine7_only else "0"
+        )
         self._prepare_quiz()
         self._save_navigation()
         return self.current()
@@ -380,7 +429,8 @@ class StudySession:
         answer_visible: bool,
         star_filter: int | None,
         star_filters: tuple[int, ...] = (),
-        quiz_choices: tuple[str, ...] = (),
+        machine7_only: bool = False,
+        quiz_choices: tuple[QuizChoice, ...] = (),
         quiz_correct_index: int | None = None,
         quiz_selected_index: int | None = None,
         quiz_attempt_count: int = 0,
@@ -425,8 +475,12 @@ class StudySession:
             list_key=list_key,
             list_keys=list_keys,
             list_label=list_label,
+            machine7_only=machine7_only,
             can_complete_round=(
-                not star_filters and bool(list_keys) and at_end
+                not star_filters
+                and not machine7_only
+                and bool(list_keys)
+                and at_end
             ),
             root_families=root_families,
             lookalikes=lookalikes,
@@ -451,6 +505,7 @@ class StudySession:
             answer_visible=self._answer_visible,
             star_filter=self._star_filter,
             star_filters=self._star_filters,
+            machine7_only=self._machine7_only,
             quiz_choices=self._quiz_choices,
             quiz_correct_index=self._quiz_correct_index,
             quiz_selected_index=self._quiz_selected_index,
@@ -464,7 +519,7 @@ class StudySession:
         self, word: WordEntry, mode: StudyMode | str
     ) -> SessionSnapshot:
         parsed_mode = self._coerce_mode(mode)
-        choices: tuple[str, ...] = ()
+        choices: tuple[QuizChoice, ...] = ()
         correct_index: int | None = None
         if parsed_mode is StudyMode.QUIZ:
             choices, correct_index = self._quiz_for_word(word)
@@ -603,7 +658,7 @@ class StudySession:
 
     def complete_round(self) -> int | dict[str, int]:
         self._require_started()
-        if not self._list_keys or self._star_filters:
+        if not self._list_keys or self._star_filters or self._machine7_only:
             raise RuntimeError("only a complete unfiltered List scope can be finished")
         if self._position != len(self._ids) - 1:
             raise RuntimeError("the current List scope has not reached its final word")

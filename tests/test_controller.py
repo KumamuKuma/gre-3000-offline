@@ -66,6 +66,9 @@ class FakeContent:
     def lookalikes(self, _word_id):
         return ()
 
+    def in_machine7(self, word_id):
+        return word_id % 2 == 1
+
     def list_by_ids(self, ids):
         return [self.words[word_id] for word_id in ids]
 
@@ -309,6 +312,53 @@ def test_controller_connects_selected_list_modes_and_navigation(qtbot):
     assert not hasattr(window.study_page, "favorite_button")
 
 
+def test_controller_machine7_filter_persists_and_keeps_source_order(qtbot):
+    controller, window, _content, user, _speech = make_controller(
+        qtbot, word_count=6
+    )
+
+    window.home_page.machine7_only_checkbox.click()
+    assert user.settings["study_machine7_only"] == "1"
+    assert window.home_page.machine7_only()
+    assert window.home_page.star_scope_button.text() == "全部星级（3 词）"
+    window.home_page.start_button.click()
+
+    first = window.study_page.snapshot
+    assert first.machine7_only
+    assert first.word.id == 1
+    assert first.total == 3
+    assert not first.can_complete_round
+    window.study_page.next_button.click()
+    assert window.study_page.snapshot.word.id == 3
+    window.study_page.last_button.click()
+    assert window.study_page.snapshot.word.id == 5
+    assert not window.study_page.snapshot.can_complete_round
+
+    window.study_page.back_button.click()
+    controller._configure_home_scope()
+    assert window.home_page.machine7_only_checkbox.isChecked()
+
+
+def test_controller_word_list_machine7_filter_is_independent_and_persisted(
+    qtbot,
+):
+    controller, window, _content, user, _speech = make_controller(
+        qtbot, word_count=6
+    )
+    window.word_list_action.trigger()
+    page = window.word_list_page
+    page.machine7_only_checkbox.click()
+
+    assert user.settings["word_list_machine7_only"] == "1"
+    assert page.count_label.text() == "3 / 6 词"
+    assert not page.machine7_only_checkbox.isHidden()
+
+    page.set_machine7_only(False)
+    controller._refresh_word_list()
+    assert page.machine7_only_checkbox.isChecked()
+    assert page.count_label.text() == "3 / 6 词"
+
+
 def test_controller_cycles_stars_studies_a_rating_in_source_order_and_quizzes(
     qtbot,
 ):
@@ -340,7 +390,8 @@ def test_controller_cycles_stars_studies_a_rating_in_source_order_and_quizzes(
     window.study_page.quiz_button.click()
     quiz = window.study_page.snapshot
     assert quiz.mode is StudyMode.QUIZ
-    assert len(quiz.quiz_choices) == len(set(quiz.quiz_choices)) == 4
+    assert len(quiz.quiz_choices) == 4
+    assert len({choice.text for choice in quiz.quiz_choices}) == 4
     selected_word_id = quiz.word.id
     window.study_page.word_detail.quiz_buttons[quiz.quiz_correct_index].click()
     answered = window.study_page.snapshot
@@ -402,6 +453,119 @@ def test_controller_quiz_auto_star_adjustments_are_independent_and_persisted(
 
     window.study_page.quiz_wrong_star_up_checkbox.setChecked(False)
     assert user.settings["quiz_wrong_star_up"] == "0"
+
+
+def test_quiz_choice_gre_entry_returns_to_the_same_retry_state(qtbot):
+    controller, window, _content, user, _speech = make_controller(
+        qtbot, word_count=6
+    )
+    window.home_page.start_button.click()
+    window.study_page.quiz_button.click()
+    window.study_page.quiz_wrong_star_up_checkbox.setChecked(True)
+
+    question = window.study_page.snapshot
+    wrong_index = next(
+        index
+        for index in range(len(question.quiz_choices))
+        if index != question.quiz_correct_index
+    )
+    target_word_id = question.quiz_choices[wrong_index].word_id
+    window.study_page.word_detail.quiz_buttons[wrong_index].click()
+    assert window.study_page.snapshot.quiz_selected_index == wrong_index
+    assert window.study_page.snapshot.quiz_attempt_count == 1
+    assert user.stars[question.word.id] == 1
+
+    window.study_page.word_detail.quiz_word_buttons[wrong_index].click()
+    preview = window.study_page.snapshot
+    assert preview.word.id == target_word_id
+    assert preview.mode is StudyMode.READING
+    assert controller._detail_origin == "quiz_word"
+
+    window.study_page.back_button.click()
+    restored = window.study_page.snapshot
+    assert restored.word.id == question.word.id
+    assert restored.quiz_selected_index == wrong_index
+    assert restored.quiz_attempt_count == 1
+    assert not window.study_page.quiz_retry_button.isHidden()
+
+    window.study_page.quiz_retry_button.click()
+    assert window.study_page.snapshot.quiz_selected_index is None
+    assert window.study_page.snapshot.quiz_attempt_count == 1
+    window.study_page.word_detail.quiz_word_buttons[
+        question.quiz_correct_index
+    ].click()
+    assert window.study_page.snapshot.mode is StudyMode.READING
+    window.study_page.back_button.click()
+    assert window.study_page.snapshot.quiz_selected_index is None
+    assert window.study_page.snapshot.quiz_attempt_count == 1
+    window.study_page.word_detail.quiz_buttons[
+        question.quiz_correct_index
+    ].click()
+    assert window.study_page.snapshot.quiz_attempt_count == 2
+    assert user.stars[question.word.id] == 1
+
+
+def test_quiz_choice_gre_entry_restores_a_word_list_detail_quiz(qtbot):
+    controller, window, content, user, _speech = make_controller(
+        qtbot, word_count=6
+    )
+    user.settings["study_mode"] = "quiz"
+    controller._open_detail(content.get(1), "word_list")
+    question = window.study_page.snapshot
+    wrong_index = next(
+        index
+        for index in range(len(question.quiz_choices))
+        if index != question.quiz_correct_index
+    )
+    window.study_page.word_detail.quiz_buttons[wrong_index].click()
+    answered = window.study_page.snapshot
+
+    window.study_page.word_detail.quiz_word_buttons[wrong_index].click()
+    assert window.study_page.snapshot.mode is StudyMode.READING
+    window.study_page.back_button.click()
+
+    restored = window.study_page.snapshot
+    assert restored.word.id == answered.word.id
+    assert restored.quiz_choices == answered.quiz_choices
+    assert restored.quiz_selected_index == answered.quiz_selected_index
+    assert restored.quiz_attempt_count == answered.quiz_attempt_count
+    assert controller._detail_origin == "word_list"
+
+
+def test_quiz_choice_gre_entry_restores_latest_rating_before_auto_adjustment(
+    qtbot,
+):
+    controller, window, content, user, _speech = make_controller(
+        qtbot, word_count=6
+    )
+    user.settings["study_mode"] = "quiz"
+    controller._open_detail(content.get(1), "word_list")
+    question = window.study_page.snapshot
+    wrong_index = next(
+        index
+        for index in range(len(question.quiz_choices))
+        if index != question.quiz_correct_index
+    )
+
+    window.study_page.word_detail.quiz_word_buttons[
+        question.quiz_correct_index
+    ].click()
+    assert window.study_page.snapshot.word.id == question.word.id
+    window.study_page.star_button.click()
+    window.study_page.star_button.click()
+    assert user.stars[question.word.id] == 2
+
+    window.study_page.back_button.click()
+    restored = window.study_page.snapshot
+    assert restored.word.id == question.word.id
+    assert restored.star_rating == 2
+    assert restored.quiz_selected_index is None
+    assert restored.quiz_attempt_count == 0
+
+    window.study_page.quiz_wrong_star_up_checkbox.setChecked(True)
+    window.study_page.word_detail.quiz_buttons[wrong_index].click()
+    assert user.stars[question.word.id] == 3
+    assert window.study_page.snapshot.star_rating == 3
 
 
 def test_controller_word_list_updates_rating_and_returns_from_detail(

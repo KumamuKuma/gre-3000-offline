@@ -520,6 +520,8 @@ class UserRepository:
             )
         elif kind == "reset_all":
             self.db.execute("update session_queue set position=0")
+        elif kind == "clear_queues":
+            self.db.execute("delete from session_queue")
         elif kind == "clear":
             for table in (
                 "settings",
@@ -795,6 +797,12 @@ class UserRepository:
             for name, state in self._queues.items()
         }
         return self._enqueue(_Mutation("reset_all", ()))
+
+    def clear_queues(self) -> bool:
+        """Remove every saved study queue before rebuilding imported progress."""
+
+        self._queues.clear()
+        return self._enqueue(_Mutation("clear_queues", ()))
 
     def clear_all(self) -> bool:
         self._settings.clear()

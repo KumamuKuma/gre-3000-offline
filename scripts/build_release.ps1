@@ -85,6 +85,7 @@ $IconSvg = Join-Path $RepoRoot "resources\app.svg"
 $IconIco = Join-Path $RepoRoot "resources\app.ico"
 $ClickDictionary = Join-Path $RepoRoot "resources\click_dictionary.json"
 $EcdictLicense = Join-Path $RepoRoot "resources\ECDICT-LICENSE.txt"
+$WordNetLicense = Join-Path $RepoRoot "resources\WORDNET-LICENSE.txt"
 $InstructionsSource = Join-Path $RepoRoot "resources\使用说明.txt"
 $ReleaseProbe = Join-Path $RepoRoot "scripts\windows_release_probe.py"
 $PublishReleaseSet = Join-Path $RepoRoot "scripts\publish_release_set.py"
@@ -122,6 +123,7 @@ foreach ($requiredFile in @(
     $IconSvg,
     $ClickDictionary,
     $EcdictLicense,
+    $WordNetLicense,
     $InstructionsSource,
     $ReleaseProbe,
     $PublishReleaseSet,

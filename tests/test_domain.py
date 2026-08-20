@@ -4,6 +4,7 @@ import pytest
 
 from gre_vocab_app.domain import (
     BrowseOrder,
+    QuizChoice,
     SessionSnapshot,
     StudyMode,
     WordEntry,
@@ -36,6 +37,19 @@ def test_word_entry_is_immutable_and_preserves_quality_flags():
     assert word.quality_flags == ("reviewed_split",)
     with pytest.raises(FrozenInstanceError):
         word.headword = "wane"
+
+
+def test_quiz_choice_preserves_its_source_word_and_is_immutable():
+    choice = QuizChoice(
+        12,
+        "(1) 快乐的\n(2) 使快乐",
+        "(1)adj. happy\n(2)v. make happy",
+    )
+
+    assert choice.word_id == 12
+    assert choice.text.startswith("(1) 快乐的")
+    with pytest.raises(FrozenInstanceError):
+        choice.word_id = 13
 
 
 def test_study_modes_and_source_only_order_are_explicit():

@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gre_vocab_app.services.dictionary import LookupResult
+from gre_vocab_app.services.dictionary import DictionarySense, LookupResult
 
 from .lookup_label import LookupLabel
 
@@ -54,8 +54,21 @@ class LookupDialog(QDialog):
         details = QVBoxLayout(content)
         details.setContentsMargins(0, 0, 0, 0)
         details.setSpacing(12)
+        self.primary_title = QLabel()
+        self.primary_title.setObjectName("sectionTitle")
         self.translation_label = self._detail_label("lookupTranslation")
         self.definition_label = self._lookup_detail_label()
+        self.gre_example_title = QLabel("GRE 原书例句")
+        self.gre_example_title.setObjectName("sectionTitle")
+        self.gre_example_label = self._lookup_detail_label()
+        self.offline_title = QLabel("ECDICT 离线英汉词典 · 全部义项")
+        self.offline_title.setObjectName("sectionTitle")
+        self.offline_translation_label = self._detail_label(
+            "lookupTranslation"
+        )
+        self.senses_title = QLabel("逐义项例句与语境提示")
+        self.senses_title.setObjectName("sectionTitle")
+        self.senses_label = self._lookup_detail_label()
         self.exchange_label = self._detail_label("muted")
         self.phrases_title = QLabel("常用词组")
         self.phrases_title.setObjectName("sectionTitle")
@@ -63,8 +76,15 @@ class LookupDialog(QDialog):
         self.online_title = QLabel("选中内容翻译")
         self.online_title.setObjectName("sectionTitle")
         self.online_label = self._detail_label("lookupOnline")
+        details.addWidget(self.primary_title)
         details.addWidget(self.translation_label)
         details.addWidget(self.definition_label)
+        details.addWidget(self.gre_example_title)
+        details.addWidget(self.gre_example_label)
+        details.addWidget(self.offline_title)
+        details.addWidget(self.offline_translation_label)
+        details.addWidget(self.senses_title)
+        details.addWidget(self.senses_label)
         details.addWidget(self.exchange_label)
         details.addWidget(self.phrases_title)
         details.addWidget(self.phrases_label)
@@ -121,12 +141,43 @@ class LookupDialog(QDialog):
         self.phonetic_label.setText(result.phonetic)
         self.phonetic_label.setVisible(bool(result.phonetic))
         self.source_label.setText(result.source)
-        self.translation_label.setText(
-            result.translation or "内置词典暂未收录，可使用联网翻译。"
-        )
+        has_gre = bool(result.gre_translation or result.gre_definition)
+        has_offline = bool(result.offline_translation or result.senses)
+        if has_gre:
+            self.primary_title.setText("GRE 3000 已审核释义")
+            primary_translation = result.gre_translation
+            primary_definition = result.gre_definition
+        elif has_offline:
+            self.primary_title.setText("ECDICT 离线英汉词典 · 全部义项")
+            primary_translation = result.offline_translation
+            primary_definition = ""
+        else:
+            self.primary_title.setText("查询结果")
+            primary_translation = "内置词典暂未收录，可使用联网翻译。"
+            primary_definition = ""
+        self.translation_label.setText(primary_translation)
         self.translation_label.setProperty("missing", not result.found)
-        self.definition_label.set_lookup_text(result.definition)
-        self.definition_label.setVisible(bool(result.definition))
+        self.definition_label.set_lookup_text(primary_definition)
+        self.definition_label.setVisible(bool(primary_definition))
+        gre_example = "\n".join(
+            value
+            for value in (result.gre_example_en, result.gre_example_zh)
+            if value
+        )
+        self.gre_example_title.setVisible(bool(gre_example))
+        self.gre_example_label.set_lookup_text(gre_example)
+        self.gre_example_label.setVisible(bool(gre_example))
+        show_separate_offline = has_gre and has_offline
+        self.offline_title.setVisible(show_separate_offline)
+        self.offline_translation_label.setText(result.offline_translation)
+        self.offline_translation_label.setVisible(show_separate_offline)
+        sense_text = "\n\n".join(
+            self._sense_text(index, sense)
+            for index, sense in enumerate(result.senses, start=1)
+        )
+        self.senses_title.setVisible(bool(sense_text))
+        self.senses_label.set_lookup_text(sense_text)
+        self.senses_label.setVisible(bool(sense_text))
         self.exchange_label.setText(
             f"词形变化：{result.exchange}" if result.exchange else ""
         )
@@ -182,9 +233,33 @@ class LookupDialog(QDialog):
             self.phonetic_label.text(),
             self.translation_label.text(),
             self.definition_label.text(),
+            self.gre_example_label.text(),
+            (
+                self.offline_translation_label.text()
+                if not self.offline_translation_label.isHidden()
+                else ""
+            ),
+            self.senses_label.text(),
             self.phrases_label.text(),
             self.online_label.text(),
         ]
         QGuiApplication.clipboard().setText(
             "\n".join(section for section in sections if section)
         )
+
+    @staticmethod
+    def _sense_text(index: int, sense: DictionarySense) -> str:
+        heading = f"{index}. {sense.part_of_speech}".strip()
+        values = [heading]
+        if sense.translation:
+            values.append(sense.translation)
+        if sense.definition:
+            values.append(f"英文释义：{sense.definition}")
+        for example in sense.examples:
+            label = (
+                "释义语境提示"
+                if example.source.startswith("释义语境")
+                else "例句"
+            )
+            values.append(f"{label} · {example.source}\n{example.text}")
+        return "\n".join(values)

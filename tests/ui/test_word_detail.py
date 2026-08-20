@@ -3,7 +3,7 @@ from dataclasses import replace
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QSignalSpy
 
-from gre_vocab_app.domain import RelatedWord, RootFamily, StudyMode
+from gre_vocab_app.domain import QuizChoice, RelatedWord, RootFamily, StudyMode
 from gre_vocab_app.ui.word_detail import WordDetail
 
 
@@ -90,7 +90,13 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
     detail = WordDetail()
     qtbot.addWidget(detail)
     detail.show()
-    choices = ("毫不避免的", "无害的", "短暂的", "隐秘的")
+    choice_texts = ("毫不避免的", "无害的", "短暂的", "隐秘的")
+    choices = (
+        QuizChoice(11, choice_texts[0], "adj. impossible to avoid"),
+        QuizChoice(12, choice_texts[1], "adj. harmless"),
+        QuizChoice(sample_word.id, choice_texts[2], sample_word.definition_en),
+        QuizChoice(14, choice_texts[3], "adj. secret"),
+    )
     detail.set_word(
         sample_word,
         mode=StudyMode.QUIZ,
@@ -102,19 +108,31 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
     assert detail.meaning_panel.isHidden()
     assert detail.quiz_panel.isVisible()
     assert detail.quiz_feedback_label.isHidden()
-    assert [button.text() for button in detail.quiz_buttons] == list(choices)
+    assert [button.text() for button in detail.quiz_buttons] == list(choice_texts)
     assert all(button.objectName() == "" for button in detail.quiz_buttons)
-    assert all(button.focusPolicy() & Qt.StrongFocus for button in detail.quiz_buttons)
+    assert all(
+        button.focusPolicy() & Qt.StrongFocus
+        for button in detail.quiz_buttons
+    )
+    assert all(button.isVisible() for button in detail.quiz_word_buttons)
+    assert all(button.isEnabled() for button in detail.quiz_word_buttons)
 
     choice_spy = QSignalSpy(detail.quizChoiceRequested)
+    word_spy = QSignalSpy(detail.quizWordRequested)
+    detail.quiz_word_buttons[1].click()
+    assert word_spy.count() == 1
+    assert word_spy.at(0) == [12]
+    assert choice_spy.count() == 0
+    assert detail._quiz_selected_index is None
     detail.quiz_buttons[1].click()
     assert choice_spy.count() == 1
     assert choice_spy.at(0) == [1]
     assert detail.quiz_buttons[1].text().startswith("✗ 你的选择")
     assert detail.quiz_buttons[2].text().startswith("✓ 正确答案")
-    assert "adj." + choices[2] in detail.quiz_buttons[2].text()
+    assert "adj." + choice_texts[2] in detail.quiz_buttons[2].text()
     assert "回答错误" in detail.quiz_feedback_label.text()
     assert detail.quiz_retry_button.isVisible()
+    assert all(button.isEnabled() for button in detail.quiz_word_buttons)
     retry_spy = QSignalSpy(detail.quizRetryRequested)
     detail.quiz_retry_button.click()
     assert retry_spy.count() == 1
@@ -132,7 +150,7 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
     assert detail.quiz_buttons[1].text().startswith("✗ 你的选择")
     assert detail.quiz_buttons[1].objectName() == "dangerButton"
     assert detail.quiz_buttons[2].text().startswith("✓ 正确答案")
-    assert "adj." + choices[2] in detail.quiz_buttons[2].text()
+    assert "adj." + choice_texts[2] in detail.quiz_buttons[2].text()
     assert detail.quiz_buttons[2].objectName() == "primaryButton"
     assert "回答错误" in detail.quiz_feedback_label.text()
     assert detail.quiz_retry_button.isVisible()
@@ -149,7 +167,7 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
         quiz_selected_index=2,
     )
     assert detail.quiz_buttons[2].text().startswith("✓ 回答正确")
-    assert "adj." + choices[2] in detail.quiz_buttons[2].text()
+    assert "adj." + choice_texts[2] in detail.quiz_buttons[2].text()
     assert detail.quiz_feedback_label.text() == "回答正确"
     assert detail.quiz_retry_button.isHidden()
     assert detail.meaning_panel.isVisible()
@@ -163,6 +181,37 @@ def test_quiz_hides_answer_until_selection_then_marks_result(qtbot, sample_word)
         "(1) 快乐的\n\n(2) 使快乐",
         "(1)adj. happy\n(2)v. to make happy",
     ) == "(1)adj.快乐的\n\n(2)v.使快乐"
+
+
+def test_quiz_uses_each_choice_source_definition_for_multisense_pos(
+    qtbot, sample_word
+):
+    detail = WordDetail()
+    qtbot.addWidget(detail)
+    detail.show()
+    choices = (
+        QuizChoice(11, "普通释义", "n. an unrelated noun"),
+        QuizChoice(
+            sample_word.id,
+            "(1) 快乐的\n\n(2) 使快乐",
+            "(1)adj. happy\n(2)v. to make happy",
+        ),
+        QuizChoice(13, "另一释义", "adv. otherwise"),
+        QuizChoice(14, "最后释义", "n. final meaning"),
+    )
+
+    detail.set_word(
+        replace(sample_word, definition_en="n. deliberately unrelated"),
+        mode=StudyMode.QUIZ,
+        quiz_choices=choices,
+        quiz_correct_index=1,
+        quiz_selected_index=0,
+    )
+
+    assert (
+        "(1)adj.快乐的\n\n(2)v.使快乐"
+        in detail.quiz_buttons[1].text()
+    )
 
 
 def test_word_detail_clears_stale_optional_fields_and_supports_long_text(
@@ -264,7 +313,10 @@ def test_related_words_render_below_answer_and_do_not_leak_recall_or_quiz(
     detail.set_word(
         sample_word,
         mode=StudyMode.QUIZ,
-        quiz_choices=("甲", "乙", "丙", "丁"),
+        quiz_choices=tuple(
+            QuizChoice(index + 1, text, "n. sample")
+            for index, text in enumerate(("甲", "乙", "丙", "丁"))
+        ),
         quiz_correct_index=0,
         root_families=family,
         lookalikes=lookalikes,

@@ -12,7 +12,10 @@ _SYNC_SETTING_KEYS = (
     "study_lists",
     "study_star_lists",
     "study_star_current_word_id",
+    "study_machine7_current_word_id",
     "study_filter",
+    "study_machine7_only",
+    "word_list_machine7_only",
     "study_mode",
     "auto_speak",
     "quiz_wrong_star_up",
@@ -130,6 +133,8 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
         "auto_speak": "自动朗读",
         "quiz_wrong_star_up": "答错自动加星",
         "quiz_correct_star_down": "答对自动减星",
+        "study_machine7_only": "机经 7.0 学习筛选",
+        "word_list_machine7_only": "机经 7.0 词表筛选",
     }
     for key, label in boolean_settings.items():
         if key in settings and settings[key] not in {"0", "1"}:
@@ -168,6 +173,20 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
             raise ProgressFormatError("星级学习当前位置无效。") from error
         if str(star_word_id) != raw_word_id or star_word_id not in valid_word_ids:
             raise ProgressFormatError("星级学习当前位置无效。")
+    if "study_machine7_current_word_id" in settings:
+        raw_word_id = settings["study_machine7_current_word_id"]
+        try:
+            machine7_word_id = int(raw_word_id)
+        except ValueError as error:
+            raise ProgressFormatError("机经 7.0 学习当前位置无效。") from error
+        machine7_lookup = getattr(content, "in_machine7", None)
+        if (
+            str(machine7_word_id) != raw_word_id
+            or machine7_word_id not in valid_word_ids
+            or not callable(machine7_lookup)
+            or not machine7_lookup(machine7_word_id)
+        ):
+            raise ProgressFormatError("机经 7.0 学习当前位置无效。")
     if "study_filter" in settings:
         raw_filter = settings["study_filter"]
         valid_filter = raw_filter == "all"
@@ -199,6 +218,9 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
         desired = stars.get(word_id, 0)
         if int(user.star_rating(word_id)) != desired:
             user.set_star_rating(word_id, desired)
+    clear_queues = getattr(user, "clear_queues", None)
+    if callable(clear_queues):
+        clear_queues()
     for key in source_lists:
         completed, current_word_id = parsed_lists.get(key, (0, None))
         user.set_list_completion_count(key, completed)

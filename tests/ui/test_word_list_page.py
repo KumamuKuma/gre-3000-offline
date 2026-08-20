@@ -43,6 +43,27 @@ def test_word_list_sorts_displays_list_and_filters_locally(qtbot, sample_word):
     assert page.words_table.isRowHidden(0)
     assert not page.words_table.isRowHidden(1)
 
+    page.search_edit.clear()
+    with qtbot.waitSignal(page.machine7FilterChanged) as changed:
+        page.machine7_only_checkbox.click()
+    assert changed.args == [True]
+    assert page.words_table.isRowHidden(0)
+    assert not page.words_table.isRowHidden(1)
+    assert page.count_label.text() == "1 / 2 词"
+
+
+def test_word_list_machine7_filter_has_an_explicit_empty_state(qtbot, sample_word):
+    page = WordListPage()
+    qtbot.addWidget(page)
+    page.show()
+    page.set_words((WordListRow(sample_word, 0, in_machine7=False),))
+    page.set_machine7_only(True)
+
+    assert page.machine7_only()
+    assert page.empty_state.isVisible()
+    assert "没有机经 7.0" in page.empty_state.text()
+    assert not page.open_button.isEnabled()
+
 
 def test_word_list_actions_emit_open_and_zero_to_three_star_cycle(qtbot, sample_word):
     page = WordListPage()

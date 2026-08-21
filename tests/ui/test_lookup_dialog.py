@@ -50,9 +50,8 @@ def test_gre_lookup_also_shows_full_offline_entry_and_sense_examples(qtbot):
         "It was inevitable.\n这是不可避免的。"
     )
     assert dialog.offline_title.isVisible()
-    assert dialog.offline_translation_label.text() == (
-        "a. 不可避免的, 必然的\n[法] 无法规避的"
-    )
+    assert dialog.offline_translation_label.text() == "[法] 无法规避的"
+    assert dialog.senses_label.text().count("不可避免的, 必然的") == 1
     assert "The inevitable result finally arrived." in (
         dialog.senses_label.text()
     )
@@ -88,10 +87,122 @@ def test_offline_only_lookup_uses_offline_entry_as_primary_section(qtbot):
     dialog.show_result(result)
 
     assert dialog.primary_title.text() == "ECDICT 离线英汉词典 · 全部义项"
-    assert dialog.translation_label.text() == "n. 工作"
+    assert dialog.translation_label.text() == ""
+    assert not dialog.translation_label.isVisible()
+    assert dialog.senses_label.text().count("工作") == 1
     assert not dialog.offline_title.isVisible()
     assert dialog.senses_title.isVisible()
 
     dialog.copy_button.click()
     copied = QGuiApplication.clipboard().text()
-    assert copied.splitlines().count("n. 工作") == 1
+    assert copied.splitlines().count("工作") == 1
+
+
+def test_repeated_sense_translation_is_shown_once_without_losing_details(qtbot):
+    dialog = LookupDialog()
+    qtbot.addWidget(dialog)
+    repeated_translation = "使服从, 压制, 减弱, 抑制, 克制"
+    result = LookupResult(
+        query="subdue",
+        normalized="subdue",
+        kind="word",
+        source="ECDICT 离线英汉词典",
+        headword="subdue",
+        translation=f"vt. {repeated_translation}",
+        offline_translation=f"vt. {repeated_translation}",
+        senses=tuple(
+            DictionarySense(
+                part_of_speech="v.",
+                translation=repeated_translation,
+                definition=definition,
+                examples=(SenseExample(example, "Princeton WordNet 3.0"),),
+            )
+            for definition, example in (
+                ("put down by force", "The army subdued the rebellion."),
+                ("make less intense", "The lights subdued the room."),
+                ("hold within limits", "She subdued her anger."),
+            )
+        ),
+    )
+
+    dialog.show_result(result)
+
+    assert dialog.senses_label.text().count(repeated_translation) == 1
+    assert dialog.senses_label.text().count("英文释义：") == 3
+    for expected in (
+        "put down by force",
+        "make less intense",
+        "hold within limits",
+        "The army subdued the rebellion.",
+        "The lights subdued the room.",
+        "She subdued her anger.",
+    ):
+        assert expected in dialog.senses_label.text()
+
+    dialog.copy_button.click()
+    assert QGuiApplication.clipboard().text().count(repeated_translation) == 1
+
+
+def test_duplicate_non_summary_translation_is_rendered_on_first_sense_only(qtbot):
+    dialog = LookupDialog()
+    qtbot.addWidget(dialog)
+    senses = (
+        DictionarySense(
+            "adj.",
+            "额外的",
+            "more than needed",
+            (SenseExample("Extra time was allowed.", "source"),),
+        ),
+        DictionarySense(
+            "adj.",
+            "额外的",
+            "added to an existing amount",
+            (SenseExample("She paid an extra fee.", "source"),),
+        ),
+        DictionarySense(
+            "adj.",
+            "不同的",
+            "not the same",
+            (SenseExample("They chose a different route.", "source"),),
+        ),
+    )
+
+    displayed = dialog._senses_for_display(senses)
+
+    assert [translation for _sense, translation in displayed] == [
+        "额外的",
+        "",
+        "不同的",
+    ]
+
+
+def test_sense_without_chinese_still_shows_part_definition_and_example(qtbot):
+    dialog = LookupDialog()
+    qtbot.addWidget(dialog)
+    result = LookupResult(
+        query="temper",
+        normalized="temper",
+        kind="word",
+        source="ECDICT 离线英汉词典",
+        headword="temper",
+        senses=(
+            DictionarySense(
+                part_of_speech="v.",
+                translation="",
+                definition="harden by reheating and cooling",
+                examples=(
+                    SenseExample(
+                        "The smith tempered the steel.",
+                        "Princeton WordNet 3.0",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    dialog.show_result(result)
+
+    sense_text = dialog.senses_label.text()
+    assert sense_text.startswith("1. v.")
+    assert "英文释义：harden by reheating and cooling" in sense_text
+    assert "The smith tempered the steel." in sense_text

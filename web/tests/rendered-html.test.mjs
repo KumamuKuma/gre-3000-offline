@@ -2,7 +2,77 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import {
+  dictionaryEntryForDisplay,
+  dictionarySensesForDisplay,
+} from "../app/dictionary-senses.ts";
+
 const root = new URL("../", import.meta.url);
+
+test("shows repeated Chinese sense text once while retaining every English sense and example", () => {
+  const repeatedTranslation = "使服从, 压制, 减弱, 抑制, 克制";
+  const senses = [
+    {
+      part_of_speech: "v.",
+      translation: repeatedTranslation,
+      definition: "put down by force",
+      examples: [{ text: "The army subdued the rebellion.", source: "WordNet" }],
+    },
+    {
+      part_of_speech: "v.",
+      translation: repeatedTranslation,
+      definition: "make less intense",
+      examples: [{ text: "The lights subdued the room.", source: "WordNet" }],
+    },
+    {
+      part_of_speech: "v.",
+      translation: "约束",
+      definition: "hold within limits",
+      examples: [{ text: "She subdued her anger.", source: "WordNet" }],
+    },
+    {
+      part_of_speech: "v.",
+      translation: "",
+      definition: "bring under cultivation",
+      examples: [{ text: "They subdued the wild land.", source: "WordNet" }],
+    },
+  ];
+
+  const displayed = dictionarySensesForDisplay(senses);
+
+  assert.deepEqual(
+    displayed.map(({ displayTranslation }) => displayTranslation),
+    [repeatedTranslation, "", "约束", ""],
+  );
+  assert.deepEqual(
+    displayed.map(({ sense }) => sense.definition),
+    senses.map(({ definition }) => definition),
+  );
+  assert.deepEqual(
+    displayed.flatMap(({ sense }) => sense.examples),
+    senses.flatMap(({ examples }) => examples),
+  );
+});
+
+test("keeps a distinct per-sense translation even when the broad summary overlaps", () => {
+  const { senses: [displayed], summaryTranslation } = dictionaryEntryForDisplay(
+    [{ translation: "压制, 缓和, 新义项", definition: "", examples: [] }],
+    "vt. 压制, 缓和",
+  );
+
+  assert.equal(displayed.displayTranslation, "压制, 缓和, 新义项");
+  assert.equal(summaryTranslation, "");
+});
+
+test("keeps unmatched entry-level meanings after moving precise meanings to senses", () => {
+  const displayed = dictionaryEntryForDisplay(
+    [{ translation: "压制", definition: "put down by force", examples: [] }],
+    "vt. 压制, 减弱",
+  );
+
+  assert.equal(displayed.senses[0].displayTranslation, "压制");
+  assert.equal(displayed.summaryTranslation, "vt. 减弱");
+});
 
 test("ships the GRE product metadata and install manifest", async () => {
   const [layout, manifest] = await Promise.all([

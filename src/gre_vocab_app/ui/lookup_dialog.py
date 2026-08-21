@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+import unicodedata
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
@@ -16,6 +19,12 @@ from PySide6.QtWidgets import (
 from gre_vocab_app.services.dictionary import DictionarySense, LookupResult
 
 from .lookup_label import LookupLabel
+
+
+_TRANSLATION_PART_OF_SPEECH = re.compile(
+    r"^(?:(?:n|v|vt|vi|a|adj|ad|adv|prep|conj|pron|num|art|int|aux|abbr)\.)\s*",
+    re.IGNORECASE,
+)
 
 
 class LookupDialog(QDialog):
@@ -143,13 +152,18 @@ class LookupDialog(QDialog):
         self.source_label.setText(result.source)
         has_gre = bool(result.gre_translation or result.gre_definition)
         has_offline = bool(result.offline_translation or result.senses)
+        displayed_senses = self._senses_for_display(result.senses)
+        displayed_offline_translation = self._summary_for_display(
+            result.offline_translation,
+            displayed_senses,
+        )
         if has_gre:
             self.primary_title.setText("GRE 3000 已审核释义")
             primary_translation = result.gre_translation
             primary_definition = result.gre_definition
         elif has_offline:
             self.primary_title.setText("ECDICT 离线英汉词典 · 全部义项")
-            primary_translation = result.offline_translation
+            primary_translation = displayed_offline_translation
             primary_definition = ""
         else:
             self.primary_title.setText("查询结果")
@@ -157,6 +171,7 @@ class LookupDialog(QDialog):
             primary_definition = ""
         self.translation_label.setText(primary_translation)
         self.translation_label.setProperty("missing", not result.found)
+        self.translation_label.setVisible(bool(primary_translation))
         self.definition_label.set_lookup_text(primary_definition)
         self.definition_label.setVisible(bool(primary_definition))
         gre_example = "\n".join(
@@ -169,11 +184,16 @@ class LookupDialog(QDialog):
         self.gre_example_label.setVisible(bool(gre_example))
         show_separate_offline = has_gre and has_offline
         self.offline_title.setVisible(show_separate_offline)
-        self.offline_translation_label.setText(result.offline_translation)
-        self.offline_translation_label.setVisible(show_separate_offline)
+        self.offline_translation_label.setText(displayed_offline_translation)
+        self.offline_translation_label.setVisible(
+            show_separate_offline and bool(displayed_offline_translation)
+        )
         sense_text = "\n\n".join(
-            self._sense_text(index, sense)
-            for index, sense in enumerate(result.senses, start=1)
+            self._sense_text(index, sense, display_translation)
+            for index, (sense, display_translation) in enumerate(
+                displayed_senses,
+                start=1,
+            )
         )
         self.senses_title.setVisible(bool(sense_text))
         self.senses_label.set_lookup_text(sense_text)
@@ -248,11 +268,97 @@ class LookupDialog(QDialog):
         )
 
     @staticmethod
-    def _sense_text(index: int, sense: DictionarySense) -> str:
+    def _translation_key(value: str) -> str:
+        lines = (
+            _TRANSLATION_PART_OF_SPEECH.sub("", line.strip()).strip()
+            for line in unicodedata.normalize("NFKC", value).splitlines()
+        )
+        compact = "\n".join(line for line in lines if line)
+        compact = re.sub(r"\s+", " ", compact)
+        compact = re.sub(r"\s*([,;:])\s*", r"\1", compact)
+        return compact.casefold()
+
+    @classmethod
+    def _senses_for_display(
+        cls,
+        senses: tuple[DictionarySense, ...],
+    ) -> tuple[tuple[DictionarySense, str], ...]:
+        seen_translations: set[str] = set()
+        displayed: list[tuple[DictionarySense, str]] = []
+        for sense in senses:
+            key = cls._translation_key(sense.translation)
+            display_translation = (
+                sense.translation.strip()
+                if key and key not in seen_translations
+                else ""
+            )
+            if key:
+                seen_translations.add(key)
+            displayed.append((sense, display_translation))
+        return tuple(displayed)
+
+    @classmethod
+    def _summary_for_display(
+        cls,
+        summary: str,
+        displayed_senses: tuple[tuple[DictionarySense, str], ...],
+    ) -> str:
+        displayed_keys = {
+            key
+            for _sense, translation in displayed_senses
+            if (key := cls._translation_key(translation))
+        }
+        for _sense, translation in displayed_senses:
+            for raw_line in translation.splitlines():
+                body = _TRANSLATION_PART_OF_SPEECH.sub(
+                    "", raw_line.strip()
+                ).strip()
+                for part in re.split(r"[,，;；、]", body):
+                    if key := cls._translation_key(part):
+                        displayed_keys.add(key)
+        remaining_lines: list[str] = []
+        for raw_line in summary.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if cls._translation_key(line) in displayed_keys:
+                continue
+            prefix_match = _TRANSLATION_PART_OF_SPEECH.match(line)
+            prefix = prefix_match.group(0) if prefix_match else ""
+            body = line[len(prefix):].strip()
+            parts = [
+                part.strip()
+                for part in re.split(r"[,，;；、]", body)
+                if part.strip()
+            ]
+            if len(parts) > 1:
+                remaining_parts = [
+                    part
+                    for part in parts
+                    if cls._translation_key(part) not in displayed_keys
+                ]
+                if not remaining_parts:
+                    continue
+                remaining_lines.append(f"{prefix}{'，'.join(remaining_parts)}")
+                continue
+            remaining_lines.append(line)
+        return "\n".join(remaining_lines)
+
+    @staticmethod
+    def _sense_text(
+        index: int,
+        sense: DictionarySense,
+        display_translation: str | None = None,
+    ) -> str:
         heading = f"{index}. {sense.part_of_speech}".strip()
         values = [heading]
-        if sense.translation:
-            values.append(sense.translation)
+        translation = (
+            sense.translation
+            if display_translation is None
+            else display_translation
+        )
+        if translation:
+            values.append(translation)
         if sense.definition:
             values.append(f"英文释义：{sense.definition}")
         for example in sense.examples:

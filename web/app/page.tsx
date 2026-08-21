@@ -8,6 +8,7 @@ import {
   encryptProgress,
   validateSyncCode,
 } from "./sync-code";
+import { dictionaryEntryForDisplay } from "./dictionary-senses";
 
 type StudyMode = "reading" | "brief" | "recall" | "quiz";
 type Screen = "home" | "study" | "words" | "settings";
@@ -1216,6 +1217,10 @@ export default function Home() {
     : WORD_LIST_BATCH_SIZE;
   const filteredWords = wordListMatches.slice(0, wordListLimit);
   const canLoadMoreWords = filteredWords.length < wordListMatches.length;
+  const displayedLookup = lookup
+    ? dictionaryEntryForDisplay(lookup.offlineSenses, lookup.offlineTranslation)
+    : { senses: [], summaryTranslation: "" };
+  const displayedLookupSenses = displayedLookup.senses;
 
   return (
     <main className="app-shell">
@@ -1541,16 +1546,16 @@ export default function Home() {
             {(lookup.offlineTranslation || lookup.offlineSenses.length > 0) && (
               <section className="lookup-dictionary-section lookup-offline">
                 <h3>ECDICT 离线词典 · 全部义项</h3>
-                {lookup.offlineTranslation && <div className="lookup-meaning">{lookup.offlineTranslation}</div>}
+                {displayedLookup.summaryTranslation && <div className="lookup-meaning">{displayedLookup.summaryTranslation}</div>}
                 {lookup.offlineSenses.length > 0 && (
                   <div className="lookup-senses">
-                    {lookup.offlineSenses.map((sense, senseIndex) => (
+                    {displayedLookupSenses.map(({ sense, displayTranslation }, senseIndex) => (
                       <article key={`${sense.part_of_speech}-${senseIndex}`}>
                         <div className="lookup-sense-title">
                           <span>义项 {senseIndex + 1}</span>
                           {sense.part_of_speech && <em>{sense.part_of_speech}</em>}
                         </div>
-                        <strong>{sense.translation}</strong>
+                        {displayTranslation && <strong>{displayTranslation}</strong>}
                         {sense.definition && <p className="lookup-sense-definition"><LookupText text={sense.definition} onLookup={openLookup} /></p>}
                         {sense.examples.map((example, exampleIndex) => {
                           const contextOnly = example.source.startsWith("释义语境");
@@ -1599,8 +1604,8 @@ export default function Home() {
                 lookup.headword,
                 lookup.greTranslation,
                 lookup.greDefinition,
-                lookup.offlineTranslation,
-                ...lookup.offlineSenses.flatMap((sense) => [sense.translation, sense.definition, ...sense.examples.map((example) => example.text)]),
+                displayedLookup.summaryTranslation,
+                ...displayedLookupSenses.flatMap(({ sense, displayTranslation }) => [displayTranslation, sense.definition, ...sense.examples.map((example) => example.text)]),
                 lookup.onlineTranslation,
               ].filter(Boolean).join("\n"))}>复制</button>
               <button className="translate" disabled={lookup.onlineStatus === "loading"} onClick={() => void translateLookup(lookup.query)}>{lookup.onlineStatus === "loading" ? "翻译中…" : "联网翻译"}</button>

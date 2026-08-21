@@ -1,0 +1,52 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "version": "2.1",
+  "envId": "kuma-d9gnt6m3d6b8050f8",
+  "functionRoot": "./functions",
+  "functions": [
+    {
+      "name": "gre-sync-api",
+      "description": "GRE Offline Sync encrypted code-progress API",
+      "type": "HTTP",
+      "runtime": "Nodejs20.19",
+      "timeout": 15,
+      "memorySize": 128,
+      "dir": "./functions/gre-sync-api",
+      "installDependency": true,
+      "envVariables": {
+        "SYNC_STORAGE_PREFIX": "gre-sync",
+        "CORS_ALLOW_ORIGIN": "https://kuma-d9gnt6m3d6b8050f8-1472025206.tcloudbaseapp.com,https://kuma-d9gnt6m3d6b8050f8-1472025206.ap-shanghai.app.tcloudbase.com"
+      }
+    }
+  ],
+  "gateway": {
+    "routes": [
+      {
+        "path": "/api/code-progress",
+        "target": "function:gre-sync-api",
+        "enablePathTransmission": true,
+        "enableAuth": false,
+        "qpsPolicy": {
+          "qpsTotal": 100,
+          "qpsPerClient": {
+            "limitBy": "ClientIP",
+            "limitValue": 10
+          }
+        }
+      },
+      {
+        "path": "/api/translate",
+        "target": "function:gre-sync-api",
+        "enablePathTransmission": true,
+        "enableAuth": false,
+        "qpsPolicy": {
+          "qpsTotal": 100,
+          "qpsPerClient": {
+            "limitBy": "ClientIP",
+            "limitValue": 10
+          }
+        }
+      }
+    ]
+  }
+}

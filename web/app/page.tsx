@@ -389,10 +389,19 @@ function speak(word: string) {
   window.speechSynthesis.speak(utterance);
 }
 
+function apiUrl(path: string) {
+  if (typeof document === "undefined") return path;
+  const origin = document
+    .querySelector<HTMLMetaElement>('meta[name="gre-api-origin"]')
+    ?.content.trim()
+    .replace(/\/$/, "");
+  return origin ? `${origin}${path}` : path;
+}
+
 async function readCodeProgress(code: string) {
   const { spaceId, authToken } = await deriveSyncCredentials(code);
   const response = await fetchWithTimeout(
-    `/api/code-progress?space=${encodeURIComponent(spaceId)}`,
+    apiUrl(`/api/code-progress?space=${encodeURIComponent(spaceId)}`),
     {
       cache: "no-store",
       headers: { authorization: `Bearer ${authToken}` },
@@ -409,7 +418,7 @@ async function writeCodeProgress(code: string, progress: Progress) {
     encryptProgress(code, progress),
   ]);
   const response = await fetchWithTimeout(
-    `/api/code-progress?space=${encodeURIComponent(spaceId)}`,
+    apiUrl(`/api/code-progress?space=${encodeURIComponent(spaceId)}`),
     {
       method: "PUT",
       headers: {
@@ -1065,7 +1074,7 @@ export default function Home() {
       let translation = "";
       try {
         const response = await fetchWithTimeout(
-          "/api/translate",
+          apiUrl("/api/translate"),
           {
             method: "POST",
             headers: { "content-type": "application/json" },

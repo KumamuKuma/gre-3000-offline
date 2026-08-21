@@ -21,6 +21,12 @@ class FakeResponse:
         return json.dumps(self.payload).encode()
 
 
+def test_default_endpoint_uses_the_independent_cloudbase_site():
+    assert cloud_sync.DEFAULT_CLOUD_ENDPOINT == (
+        "https://kuma-d9gnt6m3d6b8050f8-1472025206.ap-shanghai.app.tcloudbase.com"
+    )
+
+
 def test_cloud_sync_validates_endpoint_and_token():
     with pytest.raises(cloud_sync.CloudSyncError, match="网址"):
         cloud_sync.download_progress("", "gre_" + "x" * 40)
@@ -46,6 +52,7 @@ def test_cloud_sync_uploads_and_downloads_progress(monkeypatch):
         "schema": "gre-vocab-progress"
     }
     assert calls[0][0].headers["Authorization"] == f"Bearer {token}"
+    assert calls[0][0].headers["User-agent"] == "GRE-3000-Windows/0.8.1"
     assert calls[0][1] == 15
 
 

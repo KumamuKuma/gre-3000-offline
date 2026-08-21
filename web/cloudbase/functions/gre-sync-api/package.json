@@ -1,0 +1,16 @@
+{
+  "name": "gre-sync-api",
+  "version": "0.8.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@cloudbase/node-sdk": "3.18.3"
+  }
+}

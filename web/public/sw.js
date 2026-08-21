@@ -1,4 +1,4 @@
-const CACHE = "gre-3000-pwa-v17";
+const CACHE = "gre-3000-pwa-v18";
 const CORE = [
   "/",
   "/manifest.webmanifest",

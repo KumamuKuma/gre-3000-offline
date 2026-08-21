@@ -14,7 +14,7 @@
 <p align="center">
   <a href="https://github.com/KumamuKuma/gre-3000-offline/releases/latest"><strong>下载 Windows 版</strong></a>
   ·
-  <a href="https://gre-3000-offline.cbg206.chatgpt.site"><strong>打开网页版 / iPhone 版</strong></a>
+  <a href="https://kuma-d9gnt6m3d6b8050f8-1472025206.ap-shanghai.app.tcloudbase.com/"><strong>打开网页版 / iPhone 版</strong></a>
 </p>
 
 ![GRE 3000 Vocabulary Trainer Windows 离线版首页](docs/images/windows-home.png)
@@ -79,7 +79,9 @@ Get-FileHash -Algorithm SHA256 ".\GRE-3000-Vocabulary-Trainer-Windows.exe"
 
 Windows EXE 不能直接安装到 iPhone。iPhone 使用的是配套的 PWA 网页版：
 
-**正式网址：<https://gre-3000-offline.cbg206.chatgpt.site>**
+**正式网址：<https://kuma-d9gnt6m3d6b8050f8-1472025206.ap-shanghai.app.tcloudbase.com/>**
+
+这是可以直接打开的独立网站，不经过 GPT / ChatGPT，也不需要登录 GPT / ChatGPT 账号。
 
 1. 用 Safari 打开上面的正式网址。
 2. 等待首页和词库完整加载。
@@ -159,7 +161,7 @@ Windows EXE 不能直接安装到 iPhone。iPhone 使用的是配套的 PWA 网�
 
 ## 免账号同步码
 
-同步不需要 GPT、Apple、GitHub 或其他账号。同步码同时承担身份验证和解密钥匙的作用，个人进度会在设备端使用 **AES-256-GCM** 加密。服务器不保存明文进度，只保存加密进度及同步所需的哈希、随机数和时间戳等技术元数据。
+同步不需要 GPT、ChatGPT、Apple、GitHub 或其他账号。同步码同时承担身份验证和解密钥匙的作用，个人进度会先在设备端使用 **AES-256-GCM** 加密，再上传到 CloudBase 私有对象存储。云端每个同步空间只保存 `authHash`、`ciphertext`、`nonce` 和 `updatedAt`；同步码明文与学习进度明文都不会上传。
 
 ### 推荐同步流程
 
@@ -214,7 +216,7 @@ logs\app.log
 ## 隐私说明
 
 - 词库与个人进度默认保存在本机。
-- 云同步不上传明文进度；云端保存加密进度及同步所需的哈希、随机数和时间戳等技术元数据。
+- 云同步不上传明文进度或同步码明文；CloudBase 私有对象存储只保存密文及验证哈希、随机数和更新时间。
 - 使用 Windows 备用自然语音时，待朗读文字会发送给微软在线语音服务。
 - 只有主动点击“联网翻译”时，选中的文字才会发送给 MyMemory 翻译服务。
 - 原始参考 PDF、Windows 个人数据库和用户导出的进度文件不会提交到本仓库。

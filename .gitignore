@@ -17,6 +17,7 @@ tmp/
 outputs/*.exe
 outputs/*.html
 outputs/使用说明.txt
+outputs-v*/
 src/gre_vocab_app/data/words.db
 *.log
 

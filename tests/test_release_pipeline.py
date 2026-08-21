@@ -103,3 +103,18 @@ def test_release_script_uses_an_isolated_temp_directory_for_each_run():
     assert '$ReleaseTempRoot = Join-Path $RepoRoot "work\\release-temp"' in script
     assert '[Guid]::NewGuid().ToString("N")' in script
     assert "-AllowedRoot $ReleaseTempRoot" in script
+
+
+def test_release_script_embeds_and_verifies_windows_version_metadata():
+    script = (ROOT / "scripts" / "build_release.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+
+    assert '$ReleaseVersion = "0.8.1"' in script
+    assert '"--product-name=$ExpectedTitle"' in script
+    assert '"--file-description=$ExpectedTitle"' in script
+    assert '"--file-version=$ReleaseVersion"' in script
+    assert '"--product-version=$ReleaseVersion"' in script
+    assert ".VersionInfo" in script
+    assert "Release candidate is missing Windows version metadata" in script
+    assert "Release candidate product metadata does not match" in script

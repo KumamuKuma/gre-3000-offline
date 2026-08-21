@@ -75,7 +75,7 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.ok(studyScreen.indexOf('className="study-actions"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="quiz-retry study-retry"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="study-jumps"') > studyScreen.indexOf('className="word-card"'));
-  assert.match(worker, /gre-3000-pwa-v17/);
+  assert.match(worker, /gre-3000-pwa-v18/);
   assert.match(worker, /data\/words\.json/);
   assert.match(worker, /data\/click_dictionary\.json/);
   assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);
@@ -125,6 +125,7 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(completeRoundSource, /study_star_current_word_id: String\(firstScopeWordId\)/);
   assert.match(styles, /touch-action:\s*pan-y/);
   assert.match(translateRoute, /MAX_CHARS = 500/);
+  assert.match(translateRoute, /GRE3000Offline-Web\/0\.8\.1/);
   assert.match(translateRoute, /cache-control": "private, no-store/);
 });
 

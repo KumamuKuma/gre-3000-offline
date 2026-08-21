@@ -13,7 +13,9 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
-DEFAULT_CLOUD_ENDPOINT = "https://gre-3000-offline.cbg206.chatgpt.site"
+DEFAULT_CLOUD_ENDPOINT = (
+    "https://kuma-d9gnt6m3d6b8050f8-1472025206.ap-shanghai.app.tcloudbase.com"
+)
 SYNC_CODE_PREFIX = "GRE1-"
 _SPACE_CONTEXT = b"gre-sync-space-v1:"
 _AUTH_CONTEXT = b"gre-sync-auth-v1:"
@@ -81,7 +83,7 @@ def _request(
     headers = {
         "accept": "application/json",
         "authorization": f"Bearer {token}",
-        "user-agent": "GRE-3000-Windows/0.3",
+        "user-agent": "GRE-3000-Windows/0.8.1",
     }
     if payload is not None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")

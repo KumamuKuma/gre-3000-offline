@@ -112,6 +112,7 @@ $ExpectedOutputNames = @(
     "词库导入审计报告.html"
 )
 $SmokeProfile = Join-Path $RepoRoot "build\smoke-profile"
+$ReleaseVersion = "0.8.1"
 $ExpectedTitle = "GRE 3000 Vocabulary Trainer"
 $Amd64Machine = "0x8664"
 $WindowsGuiSubsystem = "2"
@@ -252,6 +253,10 @@ try {
         "--nofollow-import-to=PySide6",
         "--windows-icon-from-ico=$IconIco",
         "--include-data-files=$embeddedRuntime",
+        "--product-name=$ExpectedTitle",
+        "--file-description=$ExpectedTitle",
+        "--file-version=$ReleaseVersion",
+        "--product-version=$ReleaseVersion",
         "--msvc=latest",
         "--assume-yes-for-downloads",
         "--output-dir=$LauncherBuild",
@@ -265,6 +270,36 @@ try {
     New-Item -ItemType Directory -Force -Path $ReleaseCandidateDirectory | Out-Null
     Copy-Item -LiteralPath $LauncherExe -Destination $ReleaseCandidate
     Copy-Item -LiteralPath $InstructionsSource -Destination $StagedInstructions
+
+    $expectedVersion = [version]$ReleaseVersion
+    $versionInfo = (Get-Item -LiteralPath $ReleaseCandidate).VersionInfo
+    foreach ($actualVersionText in @(
+        $versionInfo.FileVersion,
+        $versionInfo.ProductVersion
+    )) {
+        if ([string]::IsNullOrWhiteSpace($actualVersionText)) {
+            throw "Release candidate is missing Windows version metadata."
+        }
+        $actualVersion = [version]$actualVersionText
+        if (
+            $actualVersion.Major -ne $expectedVersion.Major -or
+            $actualVersion.Minor -ne $expectedVersion.Minor -or
+            $actualVersion.Build -ne $expectedVersion.Build
+        ) {
+            throw "Release candidate version mismatch: $actualVersionText"
+        }
+    }
+    if (
+        $versionInfo.ProductName -ne $ExpectedTitle -or
+        $versionInfo.FileDescription -ne $ExpectedTitle
+    ) {
+        throw "Release candidate product metadata does not match $ExpectedTitle."
+    }
+    Write-Host (
+        "version_info file={0} product={1}" -f
+        $versionInfo.FileVersion,
+        $versionInfo.ProductVersion
+    )
 
     Invoke-External -Label "final Unicode candidate x64 GUI verification" -FilePath $Python -ArgumentList @(
         $ReleaseProbe,

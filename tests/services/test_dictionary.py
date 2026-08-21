@@ -6,6 +6,8 @@ from pathlib import Path
 
 from gre_vocab_app.services.dictionary import (
     DictionaryService,
+    GRE_OFFLINE_DICTIONARY_SOURCE,
+    OFFLINE_DICTIONARY_SOURCE,
     normalize_query,
 )
 
@@ -57,7 +59,7 @@ def test_gre_entry_takes_priority_and_keeps_offline_phrases(
 
     result = service.lookup("inevitable")
 
-    assert result.source == "GRE 3000 已审核词库 + ECDICT 离线英汉词典"
+    assert result.source == GRE_OFFLINE_DICTIONARY_SOURCE
     assert result.translation == sample_word.definition_zh
     assert result.gre_translation == sample_word.definition_zh
     assert result.gre_definition == sample_word.definition_en
@@ -77,6 +79,7 @@ def test_common_word_and_exact_phrase_are_available_offline(tmp_path: Path):
     phrase = service.lookup("work out")
 
     assert not word.found
+    assert common.source == OFFLINE_DICTIONARY_SOURCE
     assert common.translation == "n. 工作；v. 工作"
     assert common.offline_translation == common.translation
     assert common.senses
@@ -112,7 +115,7 @@ def test_gre_phrase_keeps_reviewed_entry_and_adds_offline_phrase_meaning(
 
     result = service.lookup("ad hoc")
 
-    assert result.source == "GRE 3000 已审核词库 + ECDICT 离线英汉词典"
+    assert result.source == GRE_OFFLINE_DICTIONARY_SOURCE
     assert result.gre_word_id == gre_phrase.id
     assert result.gre_translation == gre_phrase.definition_zh
     assert result.offline_translation == "特别地；临时"
@@ -245,4 +248,15 @@ def test_version_one_fallback_never_repeats_or_cross_applies_summary_translation
         sense.examples
         for result in (subdue, record, yourself, alpha)
         for sense in result.senses
+    )
+
+
+def test_v1_fallback_does_not_guess_unindented_a_as_adjective_pos():
+    assert DictionaryService._definition_lines(
+        {
+            "definition": "v. first definition\na certain continuation"
+        }
+    ) == (
+        ("v", "first definition"),
+        ("", "a certain continuation"),
     )

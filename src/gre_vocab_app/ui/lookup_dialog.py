@@ -70,7 +70,7 @@ class LookupDialog(QDialog):
         self.gre_example_title = QLabel("GRE 原书例句")
         self.gre_example_title.setObjectName("sectionTitle")
         self.gre_example_label = self._lookup_detail_label()
-        self.offline_title = QLabel("ECDICT 离线英汉词典 · 全部义项")
+        self.offline_title = QLabel("离线英汉词典 · 全部义项")
         self.offline_title.setObjectName("sectionTitle")
         self.offline_translation_label = self._detail_label(
             "lookupTranslation"
@@ -162,7 +162,7 @@ class LookupDialog(QDialog):
             primary_translation = result.gre_translation
             primary_definition = result.gre_definition
         elif has_offline:
-            self.primary_title.setText("ECDICT 离线英汉词典 · 全部义项")
+            self.primary_title.setText("离线英汉词典 · 全部义项")
             primary_translation = displayed_offline_translation
             primary_definition = ""
         else:

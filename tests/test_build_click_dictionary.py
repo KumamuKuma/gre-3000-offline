@@ -218,6 +218,99 @@ def test_merges_wrapped_definition_continuations_instead_of_making_fake_senses()
     )
 
 
+def test_unindented_non_pos_line_starts_a_conservative_separate_sense():
+    assert _definition_lines(
+        "v first independent definition\n"
+        "plain independent definition"
+    ) == (
+        ("v.", "first independent definition"),
+        ("", "plain independent definition"),
+    )
+
+
+def test_build_preserves_ecdict_indent_for_to_shall_and_yourself(tmp_path):
+    words = tmp_path / "words.json"
+    words.write_text(
+        json.dumps(
+            {
+                "words": [
+                    {
+                        "word": word,
+                        "definition_en": "",
+                        "synonyms": "",
+                        "example_en": "",
+                    }
+                    for word in ("to", "shall", "yourself")
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    ecdict = tmp_path / "ecdict.csv"
+    with ecdict.open("w", encoding="utf-8", newline="") as destination:
+        writer = csv.DictWriter(
+            destination,
+            fieldnames=(
+                "word",
+                "phonetic",
+                "translation",
+                "definition",
+                "exchange",
+                "frq",
+                "bnc",
+            ),
+        )
+        writer.writeheader()
+        writer.writerows(
+            [
+                {
+                    "word": "to",
+                    "translation": "prep. 到, 向\nadv. 向前",
+                    "definition": (
+                        "prep. Accord; adaptation; as, an occupation to his "
+                        "taste; she has\n   a husband to her mind.\n"
+                        "prep. Comparison; as, three is to nine."
+                    ),
+                },
+                {
+                    "word": "shall",
+                    "translation": "aux. 将",
+                    "definition": (
+                        "v. A foretelling or an expectation may include\n"
+                        "   a certain degree of plan or intention."
+                    ),
+                },
+                {
+                    "word": "yourself",
+                    "translation": "pron. 你自己",
+                    "definition": (
+                        "pron. An emphasized or reflexive form of the pronoun "
+                        "of the\n   second person; used with you."
+                    ),
+                },
+            ]
+        )
+    output = tmp_path / "dictionary.json"
+
+    build_dictionary(
+        words_path=words,
+        ecdict_path=ecdict,
+        output_paths=(output,),
+    )
+    entries = json.loads(output.read_text(encoding="utf-8"))["entries"]
+
+    assert "\n   a husband to her mind." in entries["to"]["definition"]
+    assert [sense["part_of_speech"] for sense in entries["to"]["senses"]] == [
+        "prep.",
+        "prep.",
+    ]
+    assert "a husband to her mind" in entries["to"]["senses"][0]["definition"]
+    assert len(entries["shall"]["senses"]) == 1
+    assert "a certain degree" in entries["shall"]["senses"][0]["definition"]
+    assert len(entries["yourself"]["senses"]) == 1
+    assert entries["yourself"]["senses"][0]["part_of_speech"] == "pron."
+
+
 def test_reads_cow_synset_rows_and_deduplicates_chinese_lemmas(tmp_path):
     cow = tmp_path / "wn-data-cmn.tab"
     cow.write_text(

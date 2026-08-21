@@ -2,7 +2,9 @@ from PySide6.QtGui import QGuiApplication
 
 from gre_vocab_app.services.dictionary import (
     DictionarySense,
+    GRE_OFFLINE_DICTIONARY_SOURCE,
     LookupResult,
+    OFFLINE_DICTIONARY_SOURCE,
     SenseExample,
 )
 from gre_vocab_app.ui.lookup_dialog import LookupDialog
@@ -15,7 +17,7 @@ def test_gre_lookup_also_shows_full_offline_entry_and_sense_examples(qtbot):
         query="inevitable",
         normalized="inevitable",
         kind="word",
-        source="GRE 3000 已审核词库 + ECDICT 离线英汉词典",
+        source=GRE_OFFLINE_DICTIONARY_SOURCE,
         headword="inevitable",
         phonetic="[ɪnˈevɪtəbl]",
         translation="必然的",
@@ -65,7 +67,7 @@ def test_offline_only_lookup_uses_offline_entry_as_primary_section(qtbot):
         query="work",
         normalized="work",
         kind="word",
-        source="ECDICT 离线英汉词典",
+        source=OFFLINE_DICTIONARY_SOURCE,
         headword="work",
         translation="n. 工作",
         offline_translation="n. 工作",
@@ -86,7 +88,7 @@ def test_offline_only_lookup_uses_offline_entry_as_primary_section(qtbot):
 
     dialog.show_result(result)
 
-    assert dialog.primary_title.text() == "ECDICT 离线英汉词典 · 全部义项"
+    assert dialog.primary_title.text() == "离线英汉词典 · 全部义项"
     assert dialog.translation_label.text() == ""
     assert not dialog.translation_label.isVisible()
     assert dialog.senses_label.text().count("工作") == 1
@@ -106,7 +108,7 @@ def test_repeated_sense_translation_is_shown_once_without_losing_details(qtbot):
         query="subdue",
         normalized="subdue",
         kind="word",
-        source="ECDICT 离线英汉词典",
+        source=OFFLINE_DICTIONARY_SOURCE,
         headword="subdue",
         translation=f"vt. {repeated_translation}",
         offline_translation=f"vt. {repeated_translation}",
@@ -183,7 +185,7 @@ def test_sense_without_chinese_still_shows_part_definition_and_example(qtbot):
         query="temper",
         normalized="temper",
         kind="word",
-        source="ECDICT 离线英汉词典",
+        source=OFFLINE_DICTIONARY_SOURCE,
         headword="temper",
         senses=(
             DictionarySense(

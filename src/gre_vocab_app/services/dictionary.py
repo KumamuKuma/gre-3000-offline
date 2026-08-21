@@ -21,10 +21,17 @@ TRANSLATION_PART_OF_SPEECH = re.compile(
 DEFINITION_PART_OF_SPEECH = re.compile(
     r"^(?P<part>"
     r"(?:n|v|vt|vi|a|adj|ad|adv|prep|conj|pron|num|art|int|aux|abbr|s|r)"
-    r")\.?\s+(?P<definition>.+)$",
+    r")(?P<dot>\.)?\s+(?P<definition>.+)$",
     re.IGNORECASE,
 )
 CONTEXT_EXAMPLE_SOURCE = "释义语境（非语料例句）"
+OFFLINE_DICTIONARY_SOURCE = (
+    "离线英汉词典（ECDICT 中文总览 · COW 逐义项中文 · "
+    "WordNet 英文释义与例句）"
+)
+GRE_OFFLINE_DICTIONARY_SOURCE = (
+    f"GRE 3000 已审核词库 + {OFFLINE_DICTIONARY_SOURCE}"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,16 +169,27 @@ class DictionaryService:
     ) -> tuple[tuple[str, str], ...]:
         values: list[tuple[str, str]] = []
         for raw_line in str(entry.get("definition", "")).splitlines():
+            is_continuation = bool(raw_line[:1].isspace())
             line = re.sub(r"\s+", " ", raw_line).strip()
             if not line:
                 continue
-            match = DEFINITION_PART_OF_SPEECH.match(line)
-            if match:
-                part = cls._canonical_part_of_speech(match.group("part"))
-                values.append((part, match.group("definition").strip()))
-            elif values:
+            if is_continuation and values:
                 part, previous = values[-1]
                 values[-1] = (part, f"{previous} {line}".strip())
+                continue
+            match = DEFINITION_PART_OF_SPEECH.match(line)
+            # An unpunctuated leading "a" is ambiguous once indentation has
+            # been lost by an old v1 producer (for example, "a certain...").
+            # Preserve it as text instead of claiming it is an adjective POS.
+            ambiguous_a = bool(
+                match
+                and match.group("part").casefold() == "a"
+                and not match.group("dot")
+                and values
+            )
+            if match and not ambiguous_a:
+                part = cls._canonical_part_of_speech(match.group("part"))
+                values.append((part, match.group("definition").strip()))
             else:
                 values.append(("", line))
         return tuple(values)
@@ -322,7 +340,7 @@ class DictionaryService:
                 normalized=normalized,
                 kind="word",
                 source=(
-                    "GRE 3000 已审核词库 + ECDICT 离线英汉词典"
+                    GRE_OFFLINE_DICTIONARY_SOURCE
                     if entry or phrase
                     else "GRE 3000 已审核词库"
                 ),
@@ -351,7 +369,7 @@ class DictionaryService:
                 query=query,
                 normalized=normalized,
                 kind=kind,
-                source="ECDICT 离线英汉词典",
+                source=OFFLINE_DICTIONARY_SOURCE,
                 headword=str(entry.get("word", normalized)),
                 phonetic=str(entry.get("phonetic", "")),
                 translation=str(entry.get("translation", "")),
@@ -371,7 +389,7 @@ class DictionaryService:
                 query=query,
                 normalized=normalized,
                 kind=kind,
-                source="ECDICT 离线英汉词典",
+                source=OFFLINE_DICTIONARY_SOURCE,
                 headword=phrase.phrase,
                 translation=phrase.translation,
                 offline_translation=phrase.translation,

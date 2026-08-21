@@ -20,7 +20,7 @@ TRANSLATION_PART_OF_SPEECH = re.compile(
 DEFINITION_PART_OF_SPEECH = re.compile(
     r"^(?P<part>"
     r"(?:n|v|vt|vi|a|adj|ad|adv|prep|conj|pron|num|art|int|aux|abbr|s|r)"
-    r")\.?\s+(?P<definition>.+)$",
+    r")(?P<dot>\.)?\s+(?P<definition>.+)$",
     re.IGNORECASE,
 )
 WORDNET_DATA_FILES = {
@@ -73,6 +73,18 @@ def _clean(
     return text
 
 
+def _clean_definition(value: str) -> str:
+    """Normalize definition text without discarding continuation indent."""
+    lines: list[str] = []
+    for raw_line in value.replace("\\n", "\n").splitlines():
+        is_continuation = bool(raw_line[:1].isspace())
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line:
+            continue
+        lines.append(f"   {line}" if is_continuation else line)
+    return "\n".join(lines).strip()
+
+
 def _canonical_part_of_speech(value: str) -> str:
     part = value.lower().rstrip(".")
     if part in {"v", "vt", "vi", "aux"}:
@@ -103,8 +115,13 @@ def _translation_lines(value: str) -> tuple[tuple[str, str], ...]:
 def _definition_lines(value: str) -> tuple[tuple[str, str], ...]:
     values: list[tuple[str, str]] = []
     for raw_line in value.splitlines():
+        is_continuation = bool(raw_line[:1].isspace())
         line = re.sub(r"\s+", " ", raw_line).strip()
         if not line:
+            continue
+        if is_continuation and values:
+            part, previous = values[-1]
+            values[-1] = (part, f"{previous} {line}".strip())
             continue
         match = DEFINITION_PART_OF_SPEECH.match(line)
         if match:
@@ -114,12 +131,6 @@ def _definition_lines(value: str) -> tuple[tuple[str, str], ...]:
                     match.group("definition").strip(),
                 )
             )
-        elif values:
-            # ECDICT occasionally wraps one English definition over several
-            # physical lines.  Treat an unprefixed continuation as part of the
-            # preceding definition instead of manufacturing a new sense.
-            part, previous = values[-1]
-            values[-1] = (part, f"{previous} {line}".strip())
         else:
             values.append(("", line))
     return tuple(values)
@@ -634,10 +645,8 @@ def build_dictionary(
                         row.get("phonetic", ""), max_lines=1, max_chars=120
                     ),
                     "translation": translation,
-                    "definition": _clean(
-                        row.get("definition", ""),
-                        max_lines=None,
-                        max_chars=None,
+                    "definition": _clean_definition(
+                        row.get("definition", "")
                     ),
                     "exchange": _clean(
                         row.get("exchange", ""), max_lines=1, max_chars=260

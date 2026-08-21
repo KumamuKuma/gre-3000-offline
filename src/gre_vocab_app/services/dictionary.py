@@ -19,7 +19,9 @@ TRANSLATION_PART_OF_SPEECH = re.compile(
     re.IGNORECASE,
 )
 DEFINITION_PART_OF_SPEECH = re.compile(
-    r"^(?P<part>[nvars])\.?\s+(?P<definition>.+)$",
+    r"^(?P<part>"
+    r"(?:n|v|vt|vi|a|adj|ad|adv|prep|conj|pron|num|art|int|aux|abbr|s|r)"
+    r")\.?\s+(?P<definition>.+)$",
     re.IGNORECASE,
 )
 CONTEXT_EXAMPLE_SOURCE = "释义语境（非语料例句）"
@@ -153,23 +155,23 @@ class DictionaryService:
             return "", value.strip()
         return match.group("part"), match.group("translation").strip()
 
-    @staticmethod
+    @classmethod
     def _definition_lines(
+        cls,
         entry: dict[str, object],
     ) -> tuple[tuple[str, str], ...]:
         values: list[tuple[str, str]] = []
         for raw_line in str(entry.get("definition", "")).splitlines():
-            line = raw_line.strip()
+            line = re.sub(r"\s+", " ", raw_line).strip()
             if not line:
                 continue
             match = DEFINITION_PART_OF_SPEECH.match(line)
             if match:
-                part = match.group("part").lower()
-                if part in {"a", "s"}:
-                    part = "adj"
-                elif part == "r":
-                    part = "adv"
+                part = cls._canonical_part_of_speech(match.group("part"))
                 values.append((part, match.group("definition").strip()))
+            elif values:
+                part, previous = values[-1]
+                values[-1] = (part, f"{previous} {line}".strip())
             else:
                 values.append(("", line))
         return tuple(values)
@@ -270,29 +272,8 @@ class DictionaryService:
             for line in str(entry.get("translation", "")).splitlines()
             if line.strip()
         )
-        if not translations and definitions:
-            translations = tuple((part, "") for part, _ in definitions)
-
         legacy_senses: list[DictionarySense] = []
-        used_translations: set[int] = set()
         for definition_part, definition in definitions:
-            canonical_part = cls._canonical_part_of_speech(definition_part)
-            matching_indexes = tuple(
-                index
-                for index, (translation_part, _translation) in enumerate(
-                    translations
-                )
-                if canonical_part
-                and cls._canonical_part_of_speech(translation_part)
-                == canonical_part
-            )
-            if not matching_indexes and len(translations) == 1:
-                matching_indexes = (0,)
-            used_translations.update(matching_indexes)
-            matching_translation = "\n".join(
-                " ".join(value for value in translations[index] if value)
-                for index in matching_indexes
-            )
             legacy_senses.append(
                 DictionarySense(
                     part_of_speech=(
@@ -300,22 +281,21 @@ class DictionaryService:
                         if definition_part and not definition_part.endswith(".")
                         else definition_part
                     ),
-                    translation=matching_translation,
+                    translation="",
                     definition=definition,
                     examples=(cls._context_example(headword, definition),),
                 )
             )
-        for index, (part, translation) in enumerate(translations):
-            if index in used_translations:
-                continue
-            legacy_senses.append(
-                DictionarySense(
-                    part_of_speech=part,
-                    translation=translation,
-                    definition="",
-                    examples=(cls._context_example(headword, ""),),
+        if not definitions:
+            for part, translation in translations:
+                legacy_senses.append(
+                    DictionarySense(
+                        part_of_speech=part,
+                        translation=translation,
+                        definition="",
+                        examples=(cls._context_example(headword, ""),),
+                    )
                 )
-            )
         return tuple(legacy_senses)
 
     def lookup(self, query: str) -> LookupResult:

@@ -5,6 +5,7 @@ import csv
 import json
 import re
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -17,7 +18,9 @@ TRANSLATION_PART_OF_SPEECH = re.compile(
     re.IGNORECASE,
 )
 DEFINITION_PART_OF_SPEECH = re.compile(
-    r"^(?P<part>[nvars])\.?\s+(?P<definition>.+)$",
+    r"^(?P<part>"
+    r"(?:n|v|vt|vi|a|adj|ad|adv|prep|conj|pron|num|art|int|aux|abbr|s|r)"
+    r")\.?\s+(?P<definition>.+)$",
     re.IGNORECASE,
 )
 WORDNET_DATA_FILES = {
@@ -26,9 +29,29 @@ WORDNET_DATA_FILES = {
     "adj.": "data.adj",
     "adv.": "data.adv",
 }
+WORDNET_SYNSET_PARTS = {
+    "n.": "n",
+    "v.": "v",
+    "adj.": "a",
+    "adv.": "r",
+}
 WORDNET_EXAMPLE = re.compile(r'"([^"]+)"')
+WORDNET_SYNSET_ID = re.compile(r"^(?P<offset>\d{8})-(?P<part>[nvar])$")
 WORDNET_SOURCE = "Princeton WordNet 3.0"
+COW_SOURCE = "Chinese Open Wordnet 0.9"
 CONTEXT_EXAMPLE_SOURCE = "释义语境（非语料例句）"
+DEFAULT_COW_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "resources"
+    / "cow"
+    / "wn-data-cmn.tab"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class WordNetSenseRecord:
+    synset_id: str
+    examples: tuple[str, ...]
 
 
 def _clean(
@@ -80,7 +103,7 @@ def _translation_lines(value: str) -> tuple[tuple[str, str], ...]:
 def _definition_lines(value: str) -> tuple[tuple[str, str], ...]:
     values: list[tuple[str, str]] = []
     for raw_line in value.splitlines():
-        line = raw_line.strip()
+        line = re.sub(r"\s+", " ", raw_line).strip()
         if not line:
             continue
         match = DEFINITION_PART_OF_SPEECH.match(line)
@@ -91,6 +114,12 @@ def _definition_lines(value: str) -> tuple[tuple[str, str], ...]:
                     match.group("definition").strip(),
                 )
             )
+        elif values:
+            # ECDICT occasionally wraps one English definition over several
+            # physical lines.  Treat an unprefixed continuation as part of the
+            # preceding definition instead of manufacturing a new sense.
+            part, previous = values[-1]
+            values[-1] = (part, f"{previous} {line}".strip())
         else:
             values.append(("", line))
     return tuple(values)
@@ -151,13 +180,11 @@ def _example_uses_recorded_form(
     )
 
 
-def _wordnet_example_index(
-    wordnet_path: Path | None,
-) -> dict[tuple[str, str, str], tuple[str, ...]]:
+def _wordnet_base(wordnet_path: Path | None) -> Path | None:
     if wordnet_path is None:
-        return {}
+        return None
     candidates = (wordnet_path, wordnet_path / "dict")
-    base = next(
+    return next(
         (
             candidate
             for candidate in candidates
@@ -165,12 +192,22 @@ def _wordnet_example_index(
         ),
         None,
     )
+
+
+def _wordnet_sense_index(
+    wordnet_path: Path | None,
+) -> dict[tuple[str, str, str], tuple[WordNetSenseRecord, ...]]:
+    if wordnet_path is None:
+        return {}
+    base = _wordnet_base(wordnet_path)
     if base is None:
         raise FileNotFoundError(
             f"WordNet data.noun/data.verb files not found below {wordnet_path}"
         )
 
-    values: dict[tuple[str, str, str], list[str]] = defaultdict(list)
+    values: dict[tuple[str, str, str], list[WordNetSenseRecord]] = defaultdict(
+        list
+    )
     for part, filename in WORDNET_DATA_FILES.items():
         path = base / filename
         if not path.is_file():
@@ -187,6 +224,8 @@ def _wordnet_example_index(
                     word_count = int(fields[3], 16)
                 except ValueError:
                     continue
+                if not fields[0].isdigit() or len(fields[0]) != 8:
+                    continue
                 lemmas = tuple(
                     _headword_key(fields[4 + index * 2])
                     for index in range(word_count)
@@ -199,14 +238,79 @@ def _wordnet_example_index(
                     for value in WORDNET_EXAMPLE.findall(gloss)
                     if value.strip()
                 )
-                if not examples:
+                raw_part = fields[2].lower()
+                synset_part = WORDNET_SYNSET_PARTS.get(part)
+                if raw_part == "s":
+                    synset_part = "a"
+                if synset_part is None:
                     continue
+                synset_id = f"{fields[0]}-{synset_part}"
                 for lemma in lemmas:
                     key = (lemma, part, _definition_key(definition))
-                    for example in examples:
-                        if example not in values[key]:
-                            values[key].append(example)
+                    record = WordNetSenseRecord(synset_id, examples)
+                    if record not in values[key]:
+                        values[key].append(record)
+    return {key: tuple(records) for key, records in values.items()}
+
+
+def _wordnet_example_index(
+    wordnet_path: Path | None,
+) -> dict[tuple[str, str, str], tuple[str, ...]]:
+    """Return the legacy example-only index used by v2 callers/tests."""
+    if wordnet_path is None:
+        return {}
+    records = _wordnet_sense_index(wordnet_path)
+    values: dict[tuple[str, str, str], list[str]] = defaultdict(list)
+    for key, sense_records in records.items():
+        for record in sense_records:
+            for example in record.examples:
+                if example not in values[key]:
+                    values[key].append(example)
     return {key: tuple(examples) for key, examples in values.items()}
+
+
+def _cow_synset_id(value: str) -> str | None:
+    match = WORDNET_SYNSET_ID.fullmatch(value.strip().lower())
+    if not match:
+        return None
+    return f"{match.group('offset')}-{match.group('part')}"
+
+
+def _cow_translation_index(
+    cow_path: Path | None,
+) -> dict[str, tuple[str, ...]]:
+    """Read Chinese Open Wordnet's synset-to-Chinese lemma table.
+
+    COW 0.9 uses rows such as ``00462092-v<TAB>cmn:lemma<TAB>征服``.
+    A few mirrors omit the language prefix or put the lemma in the second
+    column, so the parser accepts both forms while ignoring comments and
+    non-Chinese rows.
+    """
+    if cow_path is None:
+        return {}
+    if not cow_path.is_file():
+        raise FileNotFoundError(f"Chinese Open Wordnet file not found: {cow_path}")
+
+    values: dict[str, list[str]] = defaultdict(list)
+    with cow_path.open("r", encoding="utf-8-sig") as source:
+        for raw_line in source:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            columns = [column.strip() for column in line.split("\t")]
+            if len(columns) < 3:
+                continue
+            synset_id = _cow_synset_id(columns[0])
+            if synset_id is None:
+                continue
+            if columns[1].casefold() not in {"cmn:lemma", "zho:lemma"}:
+                continue
+            # COW marks detachable Chinese morphology as ``审美+的``.  The
+            # plus sign is annotation, not user-facing punctuation.
+            translation = columns[2].replace("+", "").strip()
+            if translation and translation not in values[synset_id]:
+                values[synset_id].append(translation)
+    return {key: tuple(items) for key, items in values.items()}
 
 
 def _context_example(headword: str, definition: str) -> dict[str, str]:
@@ -268,87 +372,145 @@ def _merge_duplicate_senses(
     return merged
 
 
+def _wordnet_records_for_definition(
+    *,
+    headword: str,
+    definition_part: str,
+    definition_text: str,
+    exchange: str,
+    wordnet_senses: dict[
+        tuple[str, str, str], tuple[WordNetSenseRecord, ...]
+    ],
+    wordnet_examples: dict[tuple[str, str, str], tuple[str, ...]] | None = None,
+) -> tuple[WordNetSenseRecord, ...]:
+    for candidate in _candidate_headword_keys(headword, exchange):
+        records = wordnet_senses.get(
+            (
+                candidate,
+                definition_part,
+                _definition_key(definition_text),
+            ),
+            (),
+        )
+        if records:
+            return records
+        if wordnet_examples is not None:
+            examples = wordnet_examples.get(
+                (candidate, definition_part, _definition_key(definition_text)),
+                (),
+            )
+            if examples:
+                return (WordNetSenseRecord("", examples),)
+    return ()
+
+
+def _examples_for_definition(
+    *,
+    headword: str,
+    definition_text: str,
+    exchange: str,
+    records: tuple[WordNetSenseRecord, ...],
+) -> list[dict[str, str]]:
+    sourced_examples = tuple(
+        dict.fromkeys(
+            example
+            for record in records
+            for example in record.examples
+            if _example_uses_recorded_form(
+                example,
+                headword=headword,
+                exchange=exchange,
+            )
+        )
+    )
+    if sourced_examples:
+        return [
+            {"text": text, "source": WORDNET_SOURCE}
+            for text in sourced_examples
+        ]
+    return [_context_example(headword, definition_text)]
+
+
 def _build_senses(
     *,
     headword: str,
     translation: str,
     definition: str,
     exchange: str,
-    wordnet_examples: dict[tuple[str, str, str], tuple[str, ...]],
+    wordnet_senses: dict[
+        tuple[str, str, str], tuple[WordNetSenseRecord, ...]
+    ] | None = None,
+    cow_translations: dict[str, tuple[str, ...]] | None = None,
+    # Kept as a compatibility hook for callers that supplied the pre-v2
+    # example-only index directly.
+    wordnet_examples: dict[tuple[str, str, str], tuple[str, ...]] | None = None,
 ) -> list[dict[str, object]]:
+    wordnet_senses = wordnet_senses or {}
+    cow_translations = cow_translations or {}
     translations = _translation_lines(translation)
-    definitions = _definition_lines(definition)
+    definitions = tuple(
+        dict.fromkeys(
+            (
+                definition_part,
+                definition_text,
+            )
+            for definition_part, definition_text in _definition_lines(definition)
+        )
+    )
     senses: list[dict[str, object]] = []
-    used_translations: set[int] = set()
 
     for definition_part, definition_text in definitions:
-        matching_indexes = tuple(
-            index
-            for index, (translation_part, _translation) in enumerate(translations)
-            if definition_part
-            and _canonical_part_of_speech(translation_part) == definition_part
+        records = _wordnet_records_for_definition(
+            headword=headword,
+            definition_part=definition_part,
+            definition_text=definition_text,
+            exchange=exchange,
+            wordnet_senses=wordnet_senses,
+            wordnet_examples=wordnet_examples,
         )
-        if not matching_indexes and len(translations) == 1:
-            matching_indexes = (0,)
-        used_translations.update(matching_indexes)
-        if len(matching_indexes) == 1:
-            translation_part, matching_translation = translations[
-                matching_indexes[0]
-            ]
-            sense_part = translation_part or definition_part
-        else:
-            matching_translation = "\n".join(
-                " ".join(value for value in translations[index] if value).strip()
-                for index in matching_indexes
+        cow_translation = "；".join(
+            dict.fromkeys(
+                translation
+                for record in records
+                for translation in cow_translations.get(record.synset_id, ())
+                if translation
             )
+        )
+        if cow_translation:
+            matching_translation = cow_translation
             sense_part = definition_part
-        sourced_examples: tuple[str, ...] = ()
-        for candidate in _candidate_headword_keys(headword, exchange):
-            sourced_examples = wordnet_examples.get(
-                (
-                    candidate,
-                    definition_part,
-                    _definition_key(definition_text),
-                ),
-                (),
-            )
-            sourced_examples = tuple(
-                example
-                for example in sourced_examples
-                if _example_uses_recorded_form(
-                    example,
-                    headword=headword,
-                    exchange=exchange,
-                )
-            )
-            if sourced_examples:
-                break
-        examples = [
-            {"text": text, "source": WORDNET_SOURCE}
-            for text in sourced_examples
-        ]
-        if not examples:
-            examples = [_context_example(headword, definition_text)]
+        else:
+            matching_translation = ""
+            sense_part = definition_part
         senses.append(
             {
                 "part_of_speech": sense_part,
                 "translation": matching_translation,
                 "definition": definition_text,
-                "examples": examples,
+                "examples": _examples_for_definition(
+                    headword=headword,
+                    definition_text=definition_text,
+                    exchange=exchange,
+                    records=records,
+                ),
             }
         )
 
-    for index, (part, translation_text) in enumerate(translations):
-        if index in used_translations:
-            continue
-        senses.append(
-            {
-                "part_of_speech": part,
-                "translation": translation_text,
-                "definition": "",
-                "examples": [_context_example(headword, "")],
-            }
-        )
+    # ECDICT's translation is a headword/POS-level Chinese summary, while its
+    # English definitions are individual WordNet senses. Repeating a summary
+    # beside every English definition falsely presents it as a precise mapping.
+    # The entry-level ``translation`` retains that summary. Only a synset-level
+    # bilingual source may populate a definition's ``translation`` above.
+    if not definitions:
+        for part, translation_text in translations:
+            senses.append(
+                {
+                    "part_of_speech": part,
+                    "translation": translation_text,
+                    "definition": "",
+                    "examples": [_context_example(headword, "")],
+                }
+            )
     return _merge_duplicate_senses(senses)
 
 
@@ -441,9 +603,13 @@ def build_dictionary(
     ecdict_path: Path,
     output_paths: tuple[Path, ...],
     wordnet_path: Path | None = None,
+    cow_path: Path | None = None,
 ) -> dict[str, int]:
+    if cow_path is not None and wordnet_path is None:
+        raise ValueError("Chinese Open Wordnet requires a WordNet 3.0 source")
     targets = _target_tokens(words_path)
-    wordnet_examples = _wordnet_example_index(wordnet_path)
+    wordnet_senses = _wordnet_sense_index(wordnet_path)
+    cow_translations = _cow_translation_index(cow_path)
     entries: dict[str, dict[str, object]] = {}
     phrase_candidates: dict[
         str, list[tuple[tuple[int, int, int, str], str, str]]
@@ -522,7 +688,8 @@ def build_dictionary(
             translation=str(entry["translation"]),
             definition=str(entry["definition"]),
             exchange=str(entry["exchange"]),
-            wordnet_examples=wordnet_examples,
+            wordnet_senses=wordnet_senses,
+            cow_translations=cow_translations,
         )
     _validate_senses(entries)
 
@@ -530,6 +697,32 @@ def build_dictionary(
         "schema": "gre-click-dictionary",
         "version": 2,
         "source": "ECDICT",
+        "sources": [
+            {
+                "name": "ECDICT",
+                "role": "词条与词性级中文汇总",
+            },
+            *(
+                [
+                    {
+                        "name": WORDNET_SOURCE,
+                        "role": "英文义项与例句",
+                    }
+                ]
+                if wordnet_path is not None
+                else []
+            ),
+            *(
+                [
+                    {
+                        "name": COW_SOURCE,
+                        "role": "按 WordNet 3.0 synset 精确对应的中文同义词",
+                    }
+                ]
+                if cow_path is not None
+                else []
+            ),
+        ],
         "entry_count": len(entries),
         "target_count": len(targets),
         "entries": dict(sorted(entries.items())),
@@ -562,6 +755,12 @@ def build_dictionary(
             for example in sense["examples"]
             if example["source"] == CONTEXT_EXAMPLE_SOURCE
         ),
+        "cow_translated_senses": sum(
+            1
+            for entry in entries.values()
+            for sense in entry["senses"]
+            if sense["translation"] and sense["definition"]
+        ),
         "bytes": len(encoded.encode("utf-8")),
     }
 
@@ -581,13 +780,31 @@ def main() -> int:
             "uncovered senses receive an explicitly labelled context example."
         ),
     )
+    parser.add_argument(
+        "--cow",
+        type=Path,
+        help=(
+            f"Optional {COW_SOURCE} wn-data-cmn.tab. Chinese "
+            "lemmas are joined to English definitions by exact WordNet "
+            "3.0 synset offset and part of speech. Requires --wordnet. "
+            f"Defaults to {DEFAULT_COW_PATH} when that file exists."
+        ),
+    )
     parser.add_argument("--output", required=True, action="append", type=Path)
     args = parser.parse_args()
+    cow_path = args.cow
+    if (
+        cow_path is None
+        and args.wordnet is not None
+        and DEFAULT_COW_PATH.is_file()
+    ):
+        cow_path = DEFAULT_COW_PATH
     summary = build_dictionary(
         words_path=args.words,
         ecdict_path=args.ecdict,
         output_paths=tuple(args.output),
         wordnet_path=args.wordnet,
+        cow_path=cow_path,
     )
     print(json.dumps(summary, ensure_ascii=False))
     return 0

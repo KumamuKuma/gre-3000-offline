@@ -171,3 +171,78 @@ def test_version_two_senses_preserve_source_examples_and_fill_missing_ones(
     assert result.senses[0].examples[0].source == "Princeton WordNet 3.0"
     assert "work" in result.senses[1].examples[0].text
     assert result.senses[1].examples[0].source == "释义语境（非语料例句）"
+
+
+def test_version_one_fallback_never_repeats_or_cross_applies_summary_translation(
+    tmp_path: Path,
+):
+    path = tmp_path / "dictionary-v1.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "gre-click-dictionary",
+                "version": 1,
+                "entries": {
+                    "subdue": {
+                        "word": "subdue",
+                        "translation": "vt. 使服从, 压制, 减弱, 抑制, 克制",
+                        "definition": (
+                            "v put down by force or intimidation\n"
+                            "v hold within limits and control"
+                        ),
+                        "phrases": [],
+                    },
+                    "record": {
+                        "word": "record",
+                        "translation": "n. 记录",
+                        "definition": "v set down in writing",
+                        "phrases": [],
+                    },
+                    "yourself": {
+                        "word": "yourself",
+                        "translation": "pron. 你自己",
+                        "definition": (
+                            "pron. An emphasized or reflexive form of the "
+                            "pronoun of the\n   second person; used with you."
+                        ),
+                        "phrases": [],
+                    },
+                    "alpha": {
+                        "word": "alpha",
+                        "translation": "n. 阿尔法",
+                        "definition": "",
+                        "phrases": [],
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    service = DictionaryService(path)
+
+    subdue = service.lookup("subdue")
+    assert subdue.offline_translation == "vt. 使服从, 压制, 减弱, 抑制, 克制"
+    assert [sense.translation for sense in subdue.senses] == ["", ""]
+    assert [sense.definition for sense in subdue.senses] == [
+        "put down by force or intimidation",
+        "hold within limits and control",
+    ]
+
+    record = service.lookup("record")
+    assert len(record.senses) == 1
+    assert record.senses[0].part_of_speech == "v."
+    assert record.senses[0].translation == ""
+
+    yourself = service.lookup("yourself")
+    assert len(yourself.senses) == 1
+    assert yourself.senses[0].part_of_speech == "pron."
+    assert "second person" in yourself.senses[0].definition
+
+    alpha = service.lookup("alpha")
+    assert len(alpha.senses) == 1
+    assert alpha.senses[0].translation == "阿尔法"
+    assert all(
+        sense.examples
+        for result in (subdue, record, yourself, alpha)
+        for sense in result.senses
+    )

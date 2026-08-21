@@ -22,7 +22,7 @@ def test_readme_documents_the_complete_offline_dictionary_sources_and_counts():
     assert "Chinese Open Wordnet 0.9" in readme
     assert "WordNet 3.0 synset 精确对应" in readme
     assert "31,551 个独立义项" in readme
-    assert "13,422 个义项" in readme
+    assert "13,424 个义项" in readme
     assert "219 个目标未收录" in readme
     assert "19,812 条 WordNet 3.0 语料例句" in readme
     assert "16,570 条明确标注的释义语境提示" in readme

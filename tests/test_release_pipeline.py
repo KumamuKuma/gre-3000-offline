@@ -112,7 +112,7 @@ def test_release_script_embeds_and_verifies_windows_version_metadata():
         encoding="utf-8-sig"
     )
 
-    assert '$ReleaseVersion = "0.8.2"' in script
+    assert '$ReleaseVersion = "0.8.3"' in script
     assert '"--product-name=$ExpectedTitle"' in script
     assert '"--file-description=$ExpectedTitle"' in script
     assert '"--file-version=$ReleaseVersion"' in script

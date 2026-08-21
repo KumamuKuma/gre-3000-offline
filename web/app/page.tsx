@@ -538,8 +538,19 @@ export default function Home() {
         setHydrated(true);
       })
       .catch((error) => setNotice(`词库加载失败：${error.message}`));
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-    fetch("/data/click_dictionary.json?v=3")
+    let reloadingForWorkerUpdate = false;
+    const reloadForWorkerUpdate = () => {
+      if (reloadingForWorkerUpdate) return;
+      reloadingForWorkerUpdate = true;
+      window.location.reload();
+    };
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("controllerchange", reloadForWorkerUpdate);
+      navigator.serviceWorker.register("/sw.js")
+        .then((registration) => registration.update())
+        .catch(() => undefined);
+    }
+    fetch("/data/click_dictionary.json?v=4", { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
@@ -550,6 +561,11 @@ export default function Home() {
         setDictionaryStatus("ready");
       })
       .catch(() => setDictionaryStatus("error"));
+    return () => {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("controllerchange", reloadForWorkerUpdate);
+      }
+    };
   }, []);
 
   useEffect(() => {

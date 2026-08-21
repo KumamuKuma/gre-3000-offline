@@ -224,7 +224,7 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.ok(studyScreen.indexOf('className="study-actions"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="quiz-retry study-retry"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="study-jumps"') > studyScreen.indexOf('className="word-card"'));
-  assert.match(worker, /gre-3000-pwa-v19/);
+  assert.match(worker, /gre-3000-pwa-v20/);
   assert.match(worker, /data\/words\.json/);
   assert.match(worker, /data\/click_dictionary\.json/);
   assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);
@@ -242,9 +242,15 @@ test("contains all study modes, offline support, and progress transfer", async (
   ]);
   const dictionarySenses = Object.values(clickDictionary.entries).flatMap((entry) => entry.senses);
   assert.equal(dictionarySenses.length, 31_551);
-  assert.equal(dictionarySenses.filter((sense) => sense.translation && sense.definition).length, 13_422);
-  assert.match(page, /click_dictionary\.json\?v=3/);
-  assert.match(worker, /click_dictionary\.json\?v=3/);
+  assert.equal(dictionarySenses.filter((sense) => sense.translation && sense.definition).length, 13_424);
+  assert.match(page, /click_dictionary\.json\?v=4/);
+  assert.match(page, /click_dictionary\.json\?v=4", \{ cache: "no-store" \}/);
+  assert.match(page, /addEventListener\("controllerchange", reloadForWorkerUpdate\)/);
+  assert.match(page, /registration\.update\(\)/);
+  assert.match(page, /window\.location\.reload\(\)/);
+  assert.match(worker, /click_dictionary\.json\?v=4/);
+  assert.match(worker, /url\.pathname === "\/data\/click_dictionary\.json"/);
+  assert.match(worker, /fetch\(event\.request\)[\s\S]*caches\.match\(event\.request\)/);
   assert.match(page, /payload\.version !== 2/);
   assert.ok(dictionarySenses.every((sense) => (
     Array.isArray(sense.examples)
@@ -284,7 +290,7 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(completeRoundSource, /study_star_current_word_id: String\(firstScopeWordId\)/);
   assert.match(styles, /touch-action:\s*pan-y/);
   assert.match(translateRoute, /MAX_CHARS = 500/);
-  assert.match(translateRoute, /GRE3000Offline-Web\/0\.8\.2/);
+  assert.match(translateRoute, /GRE3000Offline-Web\/0\.8\.3/);
   assert.match(translateRoute, /cache-control": "private, no-store/);
 });
 

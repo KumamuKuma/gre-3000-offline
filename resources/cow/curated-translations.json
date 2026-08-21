@@ -2,21 +2,217 @@
   "schema": "gre-cow-curated-translations",
   "version": 1,
   "overrides": {
+    "00421306-v": {
+      "translations": ["放松", "使松弛"],
+      "reason": "WordNet 定义为 slacken，例句 douse a rope 指放松、使绳索松弛，不是浸没或浸泡。"
+    },
+    "00438893-n": {
+      "translations": ["分腿体操动作", "双杠分腿练习"],
+      "reason": "WordNet 定义是双腿分置于双杠两侧的体操动作，不是俯卧式跳高。"
+    },
+    "00978369-v": {
+      "translations": ["清晰表达", "明确说明"],
+      "reason": "WordNet 定义为 express or state clearly；发音属于 articulate 的另一个义项。"
+    },
+    "01068773-n": {
+      "translations": ["节制", "禁欲"],
+      "reason": "WordNet 定义泛指克制食欲或其他欲望的行为，不仅限于禁食。"
+    },
+    "01134232-a": {
+      "translations": ["和蔼可亲的", "友善的"],
+      "reason": "WordNet 定义 disposed to please 描写待人友善、讨人喜欢，不是快乐或愉快。"
+    },
+    "02044866-v": {
+      "translations": ["斜向移动", "转向"],
+      "reason": "WordNet 定义是不及物的斜向移动或转向，不是使某物转动角度。"
+    },
+    "02094569-v": {
+      "translations": ["猛推", "用力塞入"],
+      "reason": "WordNet 定义为 press or force，例句是把钱塞进信封或把信猛塞到某人手中。"
+    },
+    "02149302-v": {
+      "translations": ["证明有罪", "定罪"],
+      "reason": "WordNet 该义项是通过行为或证据显示某人有罪，不是谴责或声讨。"
+    },
+    "02175057-v": {
+      "translations": ["发出连续短促的声响", "嘎嘎作响"],
+      "reason": "WordNet 定义为 make short successive sounds；喋喋不休属于 rattle 的另一说话义项。"
+    },
+    "02291135-v": {
+      "translations": ["适合", "相宜"],
+      "reason": "WordNet 例句 White wine doesn't agree with me 表示适合、相宜，不是同意或赞成。"
+    },
+    "02303331-v": {
+      "translations": ["因过失或违法而丧失（权利等）", "被罚没"],
+      "reason": "WordNet 定义明确包含因错误、违法或犯罪而失去某物或相应权利，需保留惩罚性语义。"
+    },
+    "02371811-v": {
+      "translations": ["努力", "用力"],
+      "reason": "WordNet 定义是为脑力或体力任务付出巨大努力，例句为 exert oneself。"
+    },
+    "02381397-v": {
+      "translations": ["就任", "承担（职务或职责）"],
+      "reason": "WordNet 定义为 take on duties or office，例句 accede to the throne 表示就任。"
+    },
+    "02384843-a": {
+      "translations": ["不得体的", "不机智的"],
+      "reason": "WordNet 定义为待人处事不合宜或欠缺体谅；上游译文误混入反义的机智的。"
+    },
+    "02386675-v": {
+      "translations": ["授予权力", "赋予权威"],
+      "reason": "WordNet 该义项特指给君主等授予权力或权威，不是装饰或使增色。"
+    },
+    "02395996-v": {
+      "translations": ["正式开放", "启用（供公众使用）"],
+      "reason": "WordNet 定义为把公路、公园或建筑正式开放给公众使用，不是致力于。"
+    },
+    "02422967-v": {
+      "translations": ["灭弧", "抑制振荡或放电"],
+      "reason": "WordNet 明确限定为电子学中的抑制火花、振荡或放电，并非普通的断开。"
+    },
+    "02436140-v": {
+      "translations": ["使失去组织", "破坏组织"],
+      "reason": "WordNet 定义为 remove the organization from；同时修正上游破坏阻织的错字。"
+    },
+    "02448079-v": {
+      "translations": ["组建公司", "注册成立公司"],
+      "reason": "WordNet 该义项明确为 form a corporation；合并、混合属于 incorporate 的其他义项。"
+    },
+    "02463426-v": {
+      "translations": ["弃权"],
+      "reason": "WordNet 定义明确为投票时不表决；戒绝属于 abstain 的另一消费义项。"
+    },
+    "02513742-v": {
+      "translations": ["因偏见使处于不利地位", "使受偏见损害"],
+      "reason": "WordNet 定义为 disadvantage by prejudice，重点是偏见造成损害或不利，而非使某人产生歧视。"
+    },
+    "02533682-a": {
+      "translations": ["冷漠的", "缺乏温情和慷慨的", "精于算计的"],
+      "reason": "WordNet 定义和例句描述冷漠、缺乏温情且精于算计的人；上游末项是明显误译。"
+    },
     "02538050-a": {
       "translations": ["渐弱的", "渐慢的"],
       "reason": "WordNet 的该音乐义项统摄音量或速度逐渐降低，不是普通的数量减少。"
+    },
+    "02577454-a": {
+      "translations": ["经济方面的", "物质生活的"],
+      "reason": "WordNet 定义为与生活所需尤其金钱有关；合算、有利可图属于 economic 的其他义项。"
+    },
+    "02712443-v": {
+      "translations": ["先于", "早于（古义）"],
+      "reason": "WordNet 的直接 lemma 含 forgo/forego，定义为时间上更早；这是罕见古义但应保留并准确标明。"
+    },
+    "03024333-n": {
+      "translations": ["阻风门", "节气门阻风阀"],
+      "reason": "WordNet 定义为控制汽油发动机化油器进气量的阀门，标准技术名称是阻风门。"
+    },
+    "03111899-n": {
+      "translations": ["治疗器械", "康复装置"],
+      "reason": "WordNet 定义是治疗损伤或疾病的器械，不是恢复药。"
     },
     "03188725-n": {
       "translations": ["菱形花纹布"],
       "reason": "WordNet 定义为带小型重复织纹的织物，与婴儿尿布义项 03188531-n 不同。"
     },
+    "03340009-n": {
+      "translations": ["滤波器"],
+      "reason": "WordNet 定义是改变电信号频谱的电气装置，即滤波器；滤光器是光学装置。"
+    },
+    "03574004-n": {
+      "translations": ["创意成果", "构想", "心血之作"],
+      "reason": "WordNet 定义为创造性思考和工作的成果，不是启发这一过程。"
+    },
+    "04882622-n": {
+      "translations": ["戒酒", "节制"],
+      "reason": "WordNet 定义为节制的特质，尤其指戒酒；上游 COW 未提供该义项中文。"
+    },
+    "05821102-n": {
+      "translations": ["蹩脚的例子", "拙劣的范例"],
+      "reason": "WordNet 该义项表示某物是很差的例子，例句 an apology for a meal，不是道歉或借口。"
+    },
+    "05965388-n": {
+      "translations": ["虚无主义", "主张摧毁现存社会制度的革命学说"],
+      "reason": "WordNet 定义是以摧毁现存社会制度本身为目标的革命学说；该义项原先缺少中文。"
+    },
+    "06158346-n": {
+      "translations": ["哲学"],
+      "reason": "WordNet 定义为对存在、知识与伦理问题的理性探究；人生观属于 philosophy 的另一义项。"
+    },
+    "06484696-n": {
+      "translations": ["论据", "可用于攻防观点的信息"],
+      "reason": "WordNet 定义是可用于攻击或捍卫观点的信息；像炮弹一样的信息是生硬的逐字翻译。"
+    },
+    "07014029-n": {
+      "translations": ["装腔作势", "虚伪的表现"],
+      "reason": "WordNet 定义为不真诚的表现，例句是 he put on quite an act；履行、执行与该名词义项无关。"
+    },
+    "07479926-n": {
+      "translations": ["情感", "情绪"],
+      "reason": "WordNet 该名词义项指有意识的主观感受或情绪；影响是 affect 的动词义。"
+    },
+    "09799461-n": {
+      "translations": ["倡导者", "先驱"],
+      "reason": "WordNet 定义为某事业或改革早期的热烈支持者，不一定是亲自实施改革的改革家。"
+    },
+    "12303921-n": {
+      "translations": ["白蜡木"],
+      "reason": "WordNet 定义指 Fraxinus 属白蜡树的木材；桉树材是 eucalyptus wood，不能作为该义项翻译。"
+    },
     "12633994-n": {
       "translations": ["苹果树"],
       "reason": "WordNet 定义明确指结苹果的树，而不是果实。"
     },
+    "13290991-n": {
+      "translations": ["法律救济", "法院判给的补救或赔偿"],
+      "reason": "WordNet 明确限定为法院判给的法律补救，不是社会福利意义的救济金或补助金。"
+    },
+    "13291189-n": {
+      "translations": ["平衡物", "抵消物"],
+      "reason": "WordNet 定义为起补偿作用的等价事物；抵消金是生硬且过窄的误译。"
+    },
+    "13350182-n": {
+      "translations": ["定金", "保证金"],
+      "reason": "WordNet 定义为为约束合同而交付的有价物，通常是定金或保证金。"
+    },
+    "13429006-n": {
+      "translations": ["衰老", "老化过程"],
+      "reason": "WordNet 定义为机体逐渐变老并显现年龄影响的过程，不是成熟过程。"
+    },
+    "13617308-n": {
+      "translations": ["（矿业）体积单位", "立方英寻（6立方英尺）"],
+      "reason": "WordNet 明确指矿业中等于 6 立方英尺的体积单位，不是英寸。"
+    },
     "13693641-n": {
       "translations": ["塞浦路斯镑"],
       "reason": "WordNet 定义明确指塞浦路斯的旧货币单位。"
+    },
+    "13695674-n": {
+      "translations": ["叙利亚镑"],
+      "reason": "WordNet 定义明确指 Syria 的货币；苏利亚是上游中文词条的拼写错误。"
+    },
+    "13774404-n": {
+      "translations": ["大量", "许多", "一连串"],
+      "reason": "WordNet 定义为大量的数目、数量或程度；书库、堆、批不能准确覆盖该义项。"
+    },
+    "13820239-n": {
+      "translations": ["同位素丰度", "同位素丰度比"],
+      "reason": "WordNet 物理学定义是某同位素原子数占该元素全部同位素原子数的比率。"
+    },
+    "13912540-n": {
+      "translations": ["文本谱系图", "手稿传抄谱系"],
+      "reason": "WordNet 定义为重建文学作品手稿传抄关系的树状图，不是家族家谱。"
+    },
+    "13973320-n": {
+      "translations": ["虚无主义", "彻底否定既有权威和制度"],
+      "reason": "WordNet 定义是对一切既定权威和制度的全盘否定，不等同于怀疑论或无政府主义。"
+    },
+    "14441230-n": {
+      "translations": ["奇耻大辱", "极度耻辱"],
+      "reason": "WordNet 定义为极端不名誉的状态；出丑偏向行为，未准确表达 extreme dishonor。"
+    },
+    "14441498-n": {
+      "translations": ["耻辱", "骂名", "声名狼藉"],
+      "reason": "WordNet 定义为遭公开辱骂后陷入的失誉状态，不是毁谤这一行为。"
     }
   }
 }

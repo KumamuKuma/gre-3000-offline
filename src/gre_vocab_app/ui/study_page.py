@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtCore import QEvent, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QKeyEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -203,6 +203,8 @@ class StudyPage(QWidget):
         application = QApplication.instance()
         if application is not None:
             application.focusChanged.connect(self._sync_shortcut_state)
+        for child in self.findChildren(QWidget):
+            child.installEventFilter(self)
         self._sync_shortcut_state()
 
     def _shortcut(self, key: Qt.Key, callback) -> QShortcut:
@@ -210,6 +212,21 @@ class StudyPage(QWidget):
         shortcut.setContext(Qt.WidgetWithChildrenShortcut)
         shortcut.activated.connect(callback)
         return shortcut
+
+    def eventFilter(self, watched, event) -> bool:
+        if (
+            event.type() == QEvent.KeyPress
+            and event.key() in (Qt.Key_Left, Qt.Key_Right)
+            and event.modifiers() == Qt.NoModifier
+            and not self._focus_blocks_navigation()
+        ):
+            if event.key() == Qt.Key_Left:
+                self._previous()
+            else:
+                self._next()
+            event.accept()
+            return True
+        return super().eventFilter(watched, event)
 
     def render(self, snapshot: SessionSnapshot) -> None:
         self.snapshot = snapshot

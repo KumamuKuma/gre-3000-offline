@@ -113,7 +113,7 @@ $ExpectedOutputNames = @(
     "词库导入审计报告.html"
 )
 $SmokeProfile = Join-Path $RepoRoot "build\smoke-profile"
-$ReleaseVersion = "0.8.2"
+$ReleaseVersion = "0.8.3"
 $ExpectedTitle = "GRE 3000 Vocabulary Trainer"
 $Amd64Machine = "0x8664"
 $WindowsGuiSubsystem = "2"

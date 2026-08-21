@@ -59,7 +59,7 @@ def test_checked_in_click_dictionaries_are_identical_complete_version_two_data()
     assert sum(
         bool(sense["translation"] and sense["definition"])
         for sense in senses
-    ) == 13_422
+    ) == 13_424
     assert sum(
         example["source"] == "Princeton WordNet 3.0"
         for example in examples
@@ -71,10 +71,98 @@ def test_checked_in_click_dictionaries_are_identical_complete_version_two_data()
 
     entries = payload["entries"]
     expected_curated_translations = {
+        (
+            "abstinence",
+            "the trait of abstaining (especially from alcohol)",
+        ): "戒酒；节制",
+        (
+            "abstinence",
+            "act or practice of refraining from indulging an appetite",
+        ): "节制；禁欲",
+        ("angle", "move or proceed at an angle"): "斜向移动；转向",
+        ("agree", "be agreeable or suitable"): "适合；相宜",
+        ("abstain", "refrain from voting"): "弃权",
         ("diaper", "a fabric (usually cotton or linen) with a distinctive woven pattern of small repeated figures"): "菱形花纹布",
         ("apple", "native Eurasian tree widely cultivated in many varieties for its firm rounded edible fruits"): "苹果树",
+        (
+            "ashes",
+            "strong elastic wood of any of various ash trees; used for furniture and tool handles and sporting goods such as baseball bats",
+        ): "白蜡木",
         ("pounds", "the basic unit of money in Cyprus; equal to 100 cents"): "塞浦路斯镑",
+        ("pounds", "the basic unit of money in Syria; equal to 100 piasters"): "叙利亚镑",
         ("decreasing", "music"): "渐弱的；渐慢的",
+        ("amiable", "disposed to please"): "和蔼可亲的；友善的",
+        (
+            "affect",
+            "the conscious subjective aspect of feeling or emotion",
+        ): "情感；情绪",
+        (
+            "abundance",
+            "(physics) the ratio of the number of atoms of a specific isotope of an element to the total number of isotopes present",
+        ): "同位素丰度；同位素丰度比",
+        ("accede", "take on duties or office"): "就任；承担（职务或职责）",
+        (
+            "articulate",
+            "express or state clearly",
+        ): "清晰表达；明确说明",
+        ("philosophy", "the rational investigation of questions about existence and knowledge and ethics"): "哲学",
+        (
+            "nihilism",
+            "complete denial of all established authority and institutions",
+        ): "虚无主义；彻底否定既有权威和制度",
+        (
+            "nihilism",
+            "a revolutionary doctrine that advocates destruction of the social system for its own sake",
+        ): "虚无主义；主张摧毁现存社会制度的革命学说",
+        (
+            "forgo",
+            "be earlier in time; go back further",
+        ): "先于；早于（古义）",
+        (
+            "forgo",
+            "lose (s.th.) or lose the right to (s.th.) by some error, offense, or crime",
+        ): "因过失或违法而丧失（权利等）；被罚没",
+        (
+            "fathom",
+            "(mining) a unit of volume (equal to 6 cubic feet) used in measuring bodies of ore",
+        ): "（矿业）体积单位；立方英寻（6立方英尺）",
+        (
+            "filter",
+            "an electrical device that alters the frequency spectrum of signals passing through it",
+        ): "滤波器",
+        (
+            "dedicate",
+            "open to public use, as of a highway, park, or building",
+        ): "正式开放；启用（供公众使用）",
+        (
+            "tactless",
+            "lacking or showing a lack of what is fitting and considerate in dealing with others",
+        ): "不得体的；不机智的",
+        (
+            "slew",
+            "(often followed by `of') a large number or amount or extent",
+        ): "大量；许多；一连串",
+        (
+            "spate",
+            "(often followed by `of') a large number or amount or extent",
+        ): "大量；许多；一连串",
+        (
+            "obloquy",
+            "state of disgrace resulting from public abuse",
+        ): "耻辱；骂名；声名狼藉",
+        (
+            "opprobrium",
+            "state of disgrace resulting from public abuse",
+        ): "耻辱；骂名；声名狼藉",
+        (
+            "opprobrium",
+            "a state of extreme dishonor",
+        ): "奇耻大辱；极度耻辱",
+        (
+            "ammunition",
+            "information that can be used to attack or defend a claim or argument or viewpoint",
+        ): "论据；可用于攻防观点的信息",
+        ("acts", "a manifestation of insincerity"): "装腔作势；虚伪的表现",
     }
     for (word, definition), translation in expected_curated_translations.items():
         matching = [

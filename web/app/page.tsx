@@ -539,7 +539,7 @@ export default function Home() {
       })
       .catch((error) => setNotice(`词库加载失败：${error.message}`));
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-    fetch("/data/click_dictionary.json?v=2")
+    fetch("/data/click_dictionary.json?v=3")
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
@@ -567,8 +567,8 @@ export default function Home() {
       return {
         ...current,
         source: current.greWordId
-          ? "GRE 3000 + ECDICT 双词典"
-          : "ECDICT 离线英汉词典",
+          ? "GRE 3000 + ECDICT/COW/WordNet 离线词典"
+          : "ECDICT/COW/WordNet 离线词典",
         headword: current.greWordId ? current.headword : local?.word ?? phrase?.[0] ?? current.headword,
         phonetic: current.phonetic || local?.phonetic || "",
         offlineTranslation: local?.translation ?? phrase?.[1] ?? "",
@@ -1016,11 +1016,11 @@ export default function Home() {
       query: queryText.trim(),
       normalized,
       source: greWord && (local || phrase)
-        ? "GRE 3000 + ECDICT 双词典"
+        ? "GRE 3000 + ECDICT/COW/WordNet 离线词典"
         : greWord
           ? "GRE 3000 已审核词库"
         : local || phrase
-          ? "ECDICT 离线英汉词典"
+          ? "ECDICT/COW/WordNet 离线词典"
           : dictionaryStatus === "loading"
             ? "内置词典载入中"
             : dictionaryStatus === "error"
@@ -1545,7 +1545,7 @@ export default function Home() {
             )}
             {(lookup.offlineTranslation || lookup.offlineSenses.length > 0) && (
               <section className="lookup-dictionary-section lookup-offline">
-                <h3>ECDICT 离线词典 · 全部义项</h3>
+                <h3>离线词典 · ECDICT 中文总览 + COW 逐义项中文 + WordNet 英文义项/例句</h3>
                 {displayedLookup.summaryTranslation && <div className="lookup-meaning">{displayedLookup.summaryTranslation}</div>}
                 {lookup.offlineSenses.length > 0 && (
                   <div className="lookup-senses">
@@ -1596,7 +1596,7 @@ export default function Home() {
             )}
             <p className="lookup-privacy">
               点词释义来自本地；只有点击联网翻译时，当前文字才会发送给第三方 MyMemory。本站后端限流时，浏览器会直接连接该服务重试。
-              <br /><a href="/ECDICT-LICENSE.txt" target="_blank" rel="noreferrer">ECDICT 许可</a> · <a href="/WORDNET-LICENSE.txt" target="_blank" rel="noreferrer">WordNet 3.0 许可</a>
+              <br /><a href="/ECDICT-LICENSE.txt" target="_blank" rel="noreferrer">ECDICT 许可</a> · <a href="/COW-LICENSE.txt" target="_blank" rel="noreferrer">Chinese Open Wordnet 0.9 许可</a> · <a href="/WORDNET-LICENSE.txt" target="_blank" rel="noreferrer">WordNet 3.0 许可</a>
             </p>
             <div className="lookup-actions">
               {lookup.greWordId && <button onClick={() => { setGrePreviewWordId(lookup.greWordId!); setLookup(null); }}>打开 GRE 词条</button>}

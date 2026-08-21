@@ -1,0 +1,22 @@
+{
+  "schema": "gre-cow-curated-translations",
+  "version": 1,
+  "overrides": {
+    "02538050-a": {
+      "translations": ["渐弱的", "渐慢的"],
+      "reason": "WordNet 的该音乐义项统摄音量或速度逐渐降低，不是普通的数量减少。"
+    },
+    "03188725-n": {
+      "translations": ["菱形花纹布"],
+      "reason": "WordNet 定义为带小型重复织纹的织物，与婴儿尿布义项 03188531-n 不同。"
+    },
+    "12633994-n": {
+      "translations": ["苹果树"],
+      "reason": "WordNet 定义明确指结苹果的树，而不是果实。"
+    },
+    "13693641-n": {
+      "translations": ["塞浦路斯镑"],
+      "reason": "WordNet 定义明确指塞浦路斯的旧货币单位。"
+    }
+  }
+}

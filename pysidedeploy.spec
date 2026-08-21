@@ -68,7 +68,7 @@ macos.permissions =
 mode = onefile
 
 # specify any extra nuitka arguments
-extra_args = --quiet --noinclude-qt-translations --windows-console-mode=disable --include-module=PySide6.QtSql --include-module=PySide6.QtNetwork --include-data-files=build/generated/words.db=gre_vocab_app/data/words.db --include-data-files=resources/click_dictionary.json=gre_vocab_app/data/click_dictionary.json --include-data-files=resources/ECDICT-LICENSE.txt=gre_vocab_app/data/ECDICT-LICENSE.txt --include-data-files=resources/WORDNET-LICENSE.txt=gre_vocab_app/data/WORDNET-LICENSE.txt --msvc=latest --assume-yes-for-downloads
+extra_args = --quiet --noinclude-qt-translations --windows-console-mode=disable --include-module=PySide6.QtSql --include-module=PySide6.QtNetwork --include-data-files=build/generated/words.db=gre_vocab_app/data/words.db --include-data-files=resources/click_dictionary.json=gre_vocab_app/data/click_dictionary.json --include-data-files=resources/ECDICT-LICENSE.txt=gre_vocab_app/data/ECDICT-LICENSE.txt --include-data-files=resources/WORDNET-LICENSE.txt=gre_vocab_app/data/WORDNET-LICENSE.txt --include-data-files=resources/COW-LICENSE.txt=gre_vocab_app/data/COW-LICENSE.txt --msvc=latest --assume-yes-for-downloads
 
 [buildozer]
 

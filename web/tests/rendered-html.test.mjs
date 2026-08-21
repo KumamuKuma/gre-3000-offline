@@ -42,7 +42,7 @@ test("shows repeated Chinese sense text once while retaining every English sense
 
   assert.deepEqual(
     displayed.map(({ displayTranslation }) => displayTranslation),
-    [repeatedTranslation, "", "约束", ""],
+    [repeatedTranslation, "同译见义项 1", "约束", ""],
   );
   assert.deepEqual(
     displayed.map(({ sense }) => sense.definition),
@@ -54,9 +54,88 @@ test("shows repeated Chinese sense text once while retaining every English sense
   );
 });
 
+test("references overlapping Chinese lemmas once without dropping English senses", () => {
+  const displayed = dictionaryEntryForDisplay(
+    [
+      { part_of_speech: "v.", translation: "中断；中止", definition: "interrupt", examples: [] },
+      { part_of_speech: "v.", translation: "中断；暂停", definition: "pause", examples: [] },
+      { part_of_speech: "v.", translation: "中止", definition: "end", examples: [] },
+    ],
+    "v. 中断, 中断, 中止, 暂停, 终止",
+  );
+
+  assert.deepEqual(
+    displayed.senses.map(({ displayTranslation }) => displayTranslation),
+    ["中断；中止", "暂停\n同译见义项 1", "同译见义项 1"],
+  );
+  assert.equal(displayed.summaryTranslation, "v. 终止");
+  assert.deepEqual(
+    displayed.senses.map(({ sense }) => sense.definition),
+    ["interrupt", "pause", "end"],
+  );
+});
+
+test("keeps a same-text summary meaning when its POS differs from the precise sense", () => {
+  const displayed = dictionaryEntryForDisplay(
+    [
+      {
+        part_of_speech: "adj.",
+        translation: "荒诞",
+        definition: "inconsistent with reason",
+        examples: [{ text: "an absurd claim", source: "WordNet" }],
+      },
+    ],
+    "a. 荒诞\nn. 荒诞",
+  );
+
+  assert.equal(displayed.summaryTranslation, "n. 荒诞");
+  assert.equal(displayed.senses[0].displayTranslation, "荒诞");
+  assert.equal(displayed.senses[0].sense.definition, "inconsistent with reason");
+  assert.deepEqual(displayed.senses[0].sense.examples, [
+    { text: "an absurd claim", source: "WordNet" },
+  ]);
+});
+
+test("splits translation lines without treating a question mark as a separator", () => {
+  const displayed = dictionarySensesForDisplay([
+    { translation: "询问", definition: "ask", examples: [] },
+    {
+      translation: "疑问?号\r\n询问",
+      definition: "question mark",
+      examples: [{ text: "The sentence ends with a question mark.", source: "WordNet" }],
+    },
+  ]);
+
+  assert.equal(displayed[1].displayTranslation, "疑问?号\n同译见义项 1");
+  assert.equal(displayed[1].sense.definition, "question mark");
+  assert.deepEqual(displayed[1].sense.examples, [
+    { text: "The sentence ends with a question mark.", source: "WordNet" },
+  ]);
+});
+
+test("deduplicates summary meanings only when their parts of speech agree", () => {
+  const typed = dictionaryEntryForDisplay(
+    [{ part_of_speech: "adj.", translation: "荒诞", definition: "absurd", examples: [] }],
+    "a. 荒诞\nn. 荒诞\n荒诞",
+  );
+  assert.equal(typed.summaryTranslation, "n. 荒诞");
+
+  const untyped = dictionaryEntryForDisplay(
+    [{ part_of_speech: "", translation: "荒诞", definition: "absurd", examples: [] }],
+    "n. 荒诞\n荒诞",
+  );
+  assert.equal(untyped.summaryTranslation, "n. 荒诞");
+
+  const repeatedVerb = dictionaryEntryForDisplay(
+    [],
+    "vt. 投降, 退出\nvi. 投降, 离开",
+  );
+  assert.equal(repeatedVerb.summaryTranslation, "vt. 投降，退出\nvi. 离开");
+});
+
 test("keeps a distinct per-sense translation even when the broad summary overlaps", () => {
   const { senses: [displayed], summaryTranslation } = dictionaryEntryForDisplay(
-    [{ translation: "压制, 缓和, 新义项", definition: "", examples: [] }],
+    [{ part_of_speech: "v.", translation: "压制, 缓和, 新义项", definition: "", examples: [] }],
     "vt. 压制, 缓和",
   );
 
@@ -66,7 +145,7 @@ test("keeps a distinct per-sense translation even when the broad summary overlap
 
 test("keeps unmatched entry-level meanings after moving precise meanings to senses", () => {
   const displayed = dictionaryEntryForDisplay(
-    [{ translation: "压制", definition: "put down by force", examples: [] }],
+    [{ part_of_speech: "v.", translation: "压制", definition: "put down by force", examples: [] }],
     "vt. 压制, 减弱",
   );
 
@@ -145,18 +224,27 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.ok(studyScreen.indexOf('className="study-actions"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="quiz-retry study-retry"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="study-jumps"') > studyScreen.indexOf('className="word-card"'));
-  assert.match(worker, /gre-3000-pwa-v18/);
+  assert.match(worker, /gre-3000-pwa-v19/);
   assert.match(worker, /data\/words\.json/);
   assert.match(worker, /data\/click_dictionary\.json/);
   assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);
   assert.equal(clickDictionary.schema, "gre-click-dictionary");
   assert.ok(worker.includes("WORDNET-LICENSE.txt"));
+  assert.ok(worker.includes("COW-LICENSE.txt"));
   assert.equal(clickDictionary.version, 2);
-  assert.ok(clickDictionary.entry_count > 11_000);
+  assert.equal(clickDictionary.entry_count, 11_414);
+  assert.equal(clickDictionary.target_count, 11_633);
+  assert.deepEqual(clickDictionary.sources.map(({ name }) => name), [
+    "ECDICT",
+    "Princeton WordNet 3.0",
+    "Chinese Open Wordnet 0.9",
+    "项目内 COW 已审核修正",
+  ]);
   const dictionarySenses = Object.values(clickDictionary.entries).flatMap((entry) => entry.senses);
-  assert.equal(dictionarySenses.length, 37_343);
-  assert.match(page, /click_dictionary\.json\?v=2/);
-  assert.match(worker, /click_dictionary\.json\?v=2/);
+  assert.equal(dictionarySenses.length, 31_551);
+  assert.equal(dictionarySenses.filter((sense) => sense.translation && sense.definition).length, 13_422);
+  assert.match(page, /click_dictionary\.json\?v=3/);
+  assert.match(worker, /click_dictionary\.json\?v=3/);
   assert.match(page, /payload\.version !== 2/);
   assert.ok(dictionarySenses.every((sense) => (
     Array.isArray(sense.examples)
@@ -168,8 +256,9 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(page, /LookupText/);
   assert.match(page, /function LookupQuery/);
   assert.match(page, /<LookupQuery text=\{activeWord\.word\} onLookup=\{openLookup\} \/>/);
-  assert.match(page, /GRE 3000 \+ ECDICT 双词典/);
-  assert.match(page, /ECDICT 离线词典 · 全部义项/);
+  assert.match(page, /GRE 3000 \+ ECDICT\/COW\/WordNet 离线词典/);
+  assert.match(page, /ECDICT 中文总览 \+ COW 逐义项中文 \+ WordNet 英文义项\/例句/);
+  assert.match(page, /Chinese Open Wordnet 0\.9 许可/);
   assert.match(page, /offlineSenses/);
   assert.match(page, /lookup\.greTranslation/);
   assert.match(page, /lookup\.offlineTranslation/);
@@ -195,7 +284,7 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(completeRoundSource, /study_star_current_word_id: String\(firstScopeWordId\)/);
   assert.match(styles, /touch-action:\s*pan-y/);
   assert.match(translateRoute, /MAX_CHARS = 500/);
-  assert.match(translateRoute, /GRE3000Offline-Web\/0\.8\.1/);
+  assert.match(translateRoute, /GRE3000Offline-Web\/0\.8\.2/);
   assert.match(translateRoute, /cache-control": "private, no-store/);
 });
 

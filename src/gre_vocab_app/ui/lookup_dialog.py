@@ -22,9 +22,22 @@ from .lookup_label import LookupLabel
 
 
 _TRANSLATION_PART_OF_SPEECH = re.compile(
-    r"^(?:(?:n|v|vt|vi|a|adj|ad|adv|prep|conj|pron|num|art|int|aux|abbr)\.)\s*",
+    r"^(?:(?:n|v|vt|vi|a|adj|ad|adv|prep|conj|pron|num|art|int|aux|abbr|s|r)\.)\s*",
     re.IGNORECASE,
 )
+
+_TRANSLATION_POSITIONS = {
+    "v": "v",
+    "vt": "v",
+    "vi": "v",
+    "aux": "v",
+    "a": "adj",
+    "adj": "adj",
+    "s": "adj",
+    "ad": "adv",
+    "adv": "adv",
+    "r": "adv",
+}
 
 
 class LookupDialog(QDialog):
@@ -278,22 +291,66 @@ class LookupDialog(QDialog):
         compact = re.sub(r"\s*([,;:])\s*", r"\1", compact)
         return compact.casefold()
 
+    @staticmethod
+    def _translation_pos(value: str) -> str:
+        """Return a canonical POS prefix, or ``""`` when none is present."""
+        text = value.strip()
+        match = _TRANSLATION_PART_OF_SPEECH.match(text)
+        if not match:
+            bare = re.match(
+                r"^(n|v|vt|vi|a|adj|ad|adv|prep|conj|pron|num|art|int|aux|abbr|s|r)\.?$",
+                text,
+                re.IGNORECASE,
+            )
+            if not bare:
+                return ""
+            raw = bare.group(1).casefold()
+            return _TRANSLATION_POSITIONS.get(raw, raw)
+        raw = match.group(0).strip().rstrip(".").casefold()
+        return _TRANSLATION_POSITIONS.get(raw, raw)
+
     @classmethod
     def _senses_for_display(
         cls,
         senses: tuple[DictionarySense, ...],
     ) -> tuple[tuple[DictionarySense, str], ...]:
-        seen_translations: set[str] = set()
+        first_sense_by_translation: dict[str, int] = {}
         displayed: list[tuple[DictionarySense, str]] = []
-        for sense in senses:
-            key = cls._translation_key(sense.translation)
-            display_translation = (
-                sense.translation.strip()
-                if key and key not in seen_translations
-                else ""
-            )
-            if key:
-                seen_translations.add(key)
+        for sense_index, sense in enumerate(senses, start=1):
+            parts = [
+                part.strip()
+                for part in re.split(
+                    r"[,，;；、\n]",
+                    sense.translation,
+                )
+                if part.strip()
+            ]
+            new_parts: list[str] = []
+            repeated_senses: list[int] = []
+            local_keys: set[str] = set()
+            for part in parts:
+                key = cls._translation_key(part)
+                if not key or key in local_keys:
+                    continue
+                local_keys.add(key)
+                previous_sense = first_sense_by_translation.get(key)
+                if previous_sense is None:
+                    first_sense_by_translation[key] = sense_index
+                    new_parts.append(part)
+                elif previous_sense not in repeated_senses:
+                    repeated_senses.append(previous_sense)
+
+            values: list[str] = []
+            if new_parts:
+                values.append(
+                    sense.translation.strip()
+                    if not repeated_senses and len(new_parts) == len(parts)
+                    else "；".join(new_parts)
+                )
+            if repeated_senses:
+                references = "、".join(str(value) for value in repeated_senses)
+                values.append(f"同译见义项 {references}")
+            display_translation = "\n".join(values)
             displayed.append((sense, display_translation))
         return tuple(displayed)
 
@@ -303,25 +360,45 @@ class LookupDialog(QDialog):
         summary: str,
         displayed_senses: tuple[tuple[DictionarySense, str], ...],
     ) -> str:
-        displayed_keys = {
-            key
-            for _sense, translation in displayed_senses
-            if (key := cls._translation_key(translation))
-        }
-        for _sense, translation in displayed_senses:
-            for raw_line in translation.splitlines():
-                body = _TRANSLATION_PART_OF_SPEECH.sub(
-                    "", raw_line.strip()
-                ).strip()
+        # Keep the summary's explicit part of speech.  A Chinese string can
+        # legitimately occur under more than one POS (for example ``n. 荒诞``
+        # and ``a. 荒诞``); hiding by Chinese text alone would discard one of
+        # those meanings when only the other POS has a precise sense card.
+        displayed_all_keys: set[str] = set()
+        displayed_pos_keys: set[tuple[str, str]] = set()
+        for sense, _display_translation in displayed_senses:
+            sense_pos = cls._translation_pos(sense.part_of_speech)
+            for raw_line in sense.translation.splitlines():
+                line = raw_line.strip()
+                line_pos = cls._translation_pos(line) or sense_pos
+                body = _TRANSLATION_PART_OF_SPEECH.sub("", line).strip()
                 for part in re.split(r"[,，;；、]", body):
                     if key := cls._translation_key(part):
-                        displayed_keys.add(key)
+                        displayed_all_keys.add(key)
+                        if line_pos:
+                            displayed_pos_keys.add((line_pos, key))
+
+        seen_summary_keys: set[tuple[str, str]] = set()
+
+        def is_displayed(line: str, *, part: str | None = None) -> bool:
+            summary_pos = cls._translation_pos(line)
+            value = line if part is None else part
+            key = cls._translation_key(value)
+            if not key:
+                return False
+            if summary_pos:
+                return (summary_pos, key) in displayed_pos_keys
+            # A summary line without a POS cannot disambiguate; retain the
+            # historical de-duplication behavior and hide it when any precise
+            # sense already supplies the same Chinese text.
+            return key in displayed_all_keys
+
         remaining_lines: list[str] = []
         for raw_line in summary.splitlines():
             line = raw_line.strip()
             if not line:
                 continue
-            if cls._translation_key(line) in displayed_keys:
+            if is_displayed(line):
                 continue
             prefix_match = _TRANSLATION_PART_OF_SPEECH.match(line)
             prefix = prefix_match.group(0) if prefix_match else ""
@@ -332,15 +409,31 @@ class LookupDialog(QDialog):
                 if part.strip()
             ]
             if len(parts) > 1:
-                remaining_parts = [
-                    part
-                    for part in parts
-                    if cls._translation_key(part) not in displayed_keys
-                ]
+                remaining_parts: list[str] = []
+                seen_line_parts: set[str] = set()
+                for part in parts:
+                    key = cls._translation_key(part)
+                    summary_key = (cls._translation_pos(line), key)
+                    if (
+                        not key
+                        or is_displayed(line, part=part)
+                        or key in seen_line_parts
+                        or summary_key in seen_summary_keys
+                    ):
+                        continue
+                    seen_line_parts.add(key)
+                    seen_summary_keys.add(summary_key)
+                    remaining_parts.append(part)
                 if not remaining_parts:
                     continue
                 remaining_lines.append(f"{prefix}{'，'.join(remaining_parts)}")
                 continue
+            key = cls._translation_key(body)
+            summary_key = (cls._translation_pos(line), key)
+            if key and summary_key in seen_summary_keys:
+                continue
+            if key:
+                seen_summary_keys.add(summary_key)
             remaining_lines.append(line)
         return "\n".join(remaining_lines)
 

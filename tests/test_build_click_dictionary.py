@@ -7,12 +7,16 @@ import pytest
 
 from scripts.build_click_dictionary import (
     COW_SOURCE,
+    COW_OVERRIDES_SOURCE,
     CONTEXT_EXAMPLE_SOURCE,
     WORDNET_SOURCE,
     WordNetSenseRecord,
     _build_senses,
+    _deduplicate_cow_lemmas,
     _cow_translation_index,
+    _cow_curated_translation_index,
     _definition_lines,
+    _recorded_word_forms,
     _validate_senses,
     build_dictionary,
 )
@@ -228,6 +232,16 @@ def test_unindented_non_pos_line_starts_a_conservative_separate_sense():
     )
 
 
+def test_uppercase_article_is_not_an_unpunctuated_adjective_code():
+    assert _definition_lines(
+        "A colloquial contraction for can not.\n"
+        "a capable of being believed"
+    ) == (
+        ("", "A colloquial contraction for can not."),
+        ("adj.", "capable of being believed"),
+    )
+
+
 def test_build_preserves_ecdict_indent_for_to_shall_and_yourself(tmp_path):
     words = tmp_path / "words.json"
     words.write_text(
@@ -326,6 +340,42 @@ def test_reads_cow_synset_rows_and_deduplicates_chinese_lemmas(tmp_path):
 
     assert _cow_translation_index(cow) == {
         "00462092-v": ("征服", "抑制", "审美的"),
+    }
+
+
+def test_cow_dedup_keeps_compound_lemma_without_splitting_names():
+    assert _deduplicate_cow_lemmas(
+        ["使集中", "集中", "集中，聚集", "奥斯汀，简", "奥斯汀，简"]
+    ) == ("使集中", "集中，聚集", "奥斯汀，简")
+
+
+def test_exchange_inflection_code_is_not_treated_as_a_recorded_word_form():
+    assert _recorded_word_forms(
+        "assuming",
+        "0:assume/1:i/i:assuming",
+    ) == ("assuming", "assume")
+
+
+def test_reads_traceable_cow_curated_translation_replacements(tmp_path):
+    overrides = tmp_path / "curated.json"
+    overrides.write_text(
+        json.dumps(
+            {
+                "schema": "gre-cow-curated-translations",
+                "version": 1,
+                "overrides": {
+                    "03188725-n": {
+                        "translations": ["菱形花纹布", "菱形花纹布"],
+                        "reason": "WordNet 定义指织物。",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert _cow_curated_translation_index(overrides) == {
+        "03188725-n": ("菱形花纹布",),
     }
 
 

@@ -173,9 +173,94 @@ def test_duplicate_non_summary_translation_is_rendered_on_first_sense_only(qtbot
 
     assert [translation for _sense, translation in displayed] == [
         "额外的",
-        "",
+        "同译见义项 1",
         "不同的",
     ]
+
+
+def test_overlapping_chinese_parts_reference_the_first_sense_without_repeating(qtbot):
+    dialog = LookupDialog()
+    qtbot.addWidget(dialog)
+    senses = (
+        DictionarySense(
+            "v.",
+            "中断；中止",
+            "interrupt an activity",
+            (SenseExample("The noise interrupted us.", "source"),),
+        ),
+        DictionarySense(
+            "v.",
+            "中断；暂停",
+            "pause temporarily",
+            (SenseExample("They paused the work.", "source"),),
+        ),
+        DictionarySense(
+            "v.",
+            "中止",
+            "bring to an end",
+            (SenseExample("They ended the trial.", "source"),),
+        ),
+    )
+
+    displayed = dialog._senses_for_display(senses)
+
+    assert [translation for _sense, translation in displayed] == [
+        "中断；中止",
+        "暂停\n同译见义项 1",
+        "同译见义项 1",
+    ]
+    combined = "\n".join(translation for _sense, translation in displayed)
+    assert combined.count("中断") == 1
+    assert combined.count("中止") == 1
+
+
+def test_summary_deduplicates_repeated_parts_within_the_same_pos_line(qtbot):
+    dialog = LookupDialog()
+    qtbot.addWidget(dialog)
+
+    assert dialog._summary_for_display("v. 投降, 投降, 退出", ()) == (
+        "v. 投降，退出"
+    )
+    assert dialog._summary_for_display(
+        "vt. 投降, 退出\nvi. 投降, 离开",
+        (),
+    ) == "vt. 投降，退出\nvi. 离开"
+
+
+def test_summary_keeps_same_chinese_text_when_summary_pos_differs(qtbot):
+    dialog = LookupDialog()
+    qtbot.addWidget(dialog)
+    senses = (
+        DictionarySense(
+            "adj.",
+            "荒诞",
+            "inconsistent with reason",
+            (SenseExample("an absurd claim", "source"),),
+        ),
+    )
+
+    assert dialog._summary_for_display(
+        "a. 荒诞\nn. 荒诞",
+        dialog._senses_for_display(senses),
+    ) == "n. 荒诞"
+
+
+def test_summary_without_pos_deduplicates_but_explicit_pos_is_preserved(qtbot):
+    dialog = LookupDialog()
+    qtbot.addWidget(dialog)
+    senses = (
+        DictionarySense(
+            "",
+            "荒诞",
+            "inconsistent with reason",
+            (SenseExample("an absurd claim", "source"),),
+        ),
+    )
+
+    assert dialog._summary_for_display(
+        "n. 荒诞\n荒诞",
+        dialog._senses_for_display(senses),
+    ) == "n. 荒诞"
 
 
 def test_sense_without_chinese_still_shows_part_definition_and_example(qtbot):

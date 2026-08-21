@@ -260,3 +260,33 @@ def test_v1_fallback_does_not_guess_unindented_a_as_adjective_pos():
         ("v", "first definition"),
         ("", "a certain continuation"),
     )
+
+
+def test_v1_fallback_does_not_guess_uppercase_article_as_adjective_pos():
+    assert DictionaryService._definition_lines(
+        {
+            "definition": (
+                "A colloquial contraction for can not.\n"
+                "adj. capable of being believed"
+            )
+        }
+    ) == (
+        ("", "A colloquial contraction for can not."),
+        ("adj", "capable of being believed"),
+    )
+
+
+def test_v1_fallback_accepts_lowercase_wordnet_pos_codes_on_first_sense():
+    assert DictionaryService._definition_lines(
+        {
+            "definition": (
+                "a using or skilled in using analysis\n"
+                "s aesthetically pleasing\n"
+                "r in a direct manner"
+            )
+        }
+    ) == (
+        ("adj", "using or skilled in using analysis"),
+        ("adj", "aesthetically pleasing"),
+        ("adv", "in a direct manner"),
+    )

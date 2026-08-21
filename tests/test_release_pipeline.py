@@ -89,9 +89,11 @@ def test_release_bundles_the_offline_click_dictionary_and_license():
     assert '"resources\\click_dictionary.json"' in script
     assert '"resources\\ECDICT-LICENSE.txt"' in script
     assert '"resources\\WORDNET-LICENSE.txt"' in script
+    assert '"resources\\COW-LICENSE.txt"' in script
     assert "resources/click_dictionary.json=gre_vocab_app/data/click_dictionary.json" in spec
     assert "resources/ECDICT-LICENSE.txt=gre_vocab_app/data/ECDICT-LICENSE.txt" in spec
     assert "resources/WORDNET-LICENSE.txt=gre_vocab_app/data/WORDNET-LICENSE.txt" in spec
+    assert "resources/COW-LICENSE.txt=gre_vocab_app/data/COW-LICENSE.txt" in spec
     assert "--include-module=PySide6.QtNetwork" in spec
 
 
@@ -110,7 +112,7 @@ def test_release_script_embeds_and_verifies_windows_version_metadata():
         encoding="utf-8-sig"
     )
 
-    assert '$ReleaseVersion = "0.8.1"' in script
+    assert '$ReleaseVersion = "0.8.2"' in script
     assert '"--product-name=$ExpectedTitle"' in script
     assert '"--file-description=$ExpectedTitle"' in script
     assert '"--file-version=$ReleaseVersion"' in script

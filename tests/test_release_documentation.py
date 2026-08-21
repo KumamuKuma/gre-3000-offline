@@ -15,6 +15,20 @@ def test_readme_reports_the_current_reviewed_record_count():
     assert "4 条已人工复核记录" not in readme
 
 
+def test_readme_documents_the_complete_offline_dictionary_sources_and_counts():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "ECDICT 提供词条和词性级中文总览" in readme
+    assert "Chinese Open Wordnet 0.9" in readme
+    assert "WordNet 3.0 synset 精确对应" in readme
+    assert "31,551 个独立义项" in readme
+    assert "13,422 个义项" in readme
+    assert "219 个目标未收录" in readme
+    assert "19,812 条 WordNet 3.0 语料例句" in readme
+    assert "16,570 条明确标注的释义语境提示" in readme
+    assert "resources/COW-LICENSE.txt" in readme
+
+
 def test_user_instructions_explain_all_three_speech_states():
     instructions = (ROOT / "resources" / "使用说明.txt").read_text(
         encoding="utf-8"
@@ -49,6 +63,7 @@ def test_release_documentation_matches_the_current_study_features():
         assert "自动朗读一次" in text
         assert "查看 GRE 词条" in text or "完整 GRE 词条" in text
         assert "ECDICT" in text
+        assert "Chinese Open Wordnet 0.9" in text
         assert "WordNet 3.0" in text
         assert "随机学习" not in text
         assert "重新洗牌" not in text

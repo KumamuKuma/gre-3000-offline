@@ -39,12 +39,19 @@ WORDNET_EXAMPLE = re.compile(r'"([^"]+)"')
 WORDNET_SYNSET_ID = re.compile(r"^(?P<offset>\d{8})-(?P<part>[nvar])$")
 WORDNET_SOURCE = "Princeton WordNet 3.0"
 COW_SOURCE = "Chinese Open Wordnet 0.9"
+COW_OVERRIDES_SOURCE = "项目内 COW 已审核修正"
 CONTEXT_EXAMPLE_SOURCE = "释义语境（非语料例句）"
+# ECDICT's ``1:`` exchange item stores an inflection *code* (for example
+# ``1:i``), not a spelling.  Only these markers carry a real recorded form.
+RECORDED_FORM_MARKERS = frozenset({"0", "d", "p", "i", "3", "s", "r", "t", "f"})
 DEFAULT_COW_PATH = (
     Path(__file__).resolve().parents[1]
     / "resources"
     / "cow"
     / "wn-data-cmn.tab"
+)
+DEFAULT_COW_OVERRIDES_PATH = (
+    DEFAULT_COW_PATH.parent / "curated-translations.json"
 )
 
 
@@ -124,6 +131,16 @@ def _definition_lines(value: str) -> tuple[tuple[str, str], ...]:
             values[-1] = (part, f"{previous} {line}".strip())
             continue
         match = DEFINITION_PART_OF_SPEECH.match(line)
+        # WordNet/ECDICT definitions may begin with the English article
+        # ``A``.  The only valid unpunctuated one-letter POS codes are the
+        # lowercase WordNet codes; reject any other case-insensitive match.
+        if (
+            match
+            and not match.group("dot")
+            and len(match.group("part")) == 1
+            and match.group("part") not in {"n", "v", "a", "s", "r"}
+        ):
+            match = None
         if match:
             values.append(
                 (
@@ -168,7 +185,9 @@ def _candidate_headword_keys(headword: str, exchange: str) -> tuple[str, ...]:
 def _recorded_word_forms(headword: str, exchange: str) -> tuple[str, ...]:
     values = [_headword_key(headword)]
     for item in exchange.split("/"):
-        _marker, separator, value = item.partition(":")
+        marker, separator, value = item.partition(":")
+        if marker not in RECORDED_FORM_MARKERS:
+            continue
         cleaned = _headword_key(value) if separator else ""
         if cleaned and re.fullmatch(r"[a-z][a-z' -]*", cleaned):
             values.append(cleaned)
@@ -321,7 +340,79 @@ def _cow_translation_index(
             translation = columns[2].replace("+", "").strip()
             if translation and translation not in values[synset_id]:
                 values[synset_id].append(translation)
-    return {key: tuple(items) for key, items in values.items()}
+    return {
+        key: _deduplicate_cow_lemmas(items)
+        for key, items in values.items()
+    }
+
+
+def _deduplicate_cow_lemmas(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
+    """Remove a redundant standalone COW lemma from a compound lemma.
+
+    COW occasionally records both a lemma and a comma-separated compound
+    lemma for one synset (for example ``集中`` and ``集中，聚集``).  Keep the
+    richer compound entry and remove only the standalone component.  We do
+    not split or rewrite punctuation globally: commas are meaningful in
+    names such as ``奥斯汀，简`` and must remain intact.
+    """
+    unique = list(dict.fromkeys(item.strip() for item in values if item.strip()))
+    compound_parts = {
+        part.strip()
+        for item in unique
+        if any(separator in item for separator in ("，", ",", "；", ";"))
+        for part in re.split(r"[，,；;]", item)
+        if part.strip()
+    }
+    return tuple(
+        item
+        for item in unique
+        if item not in compound_parts
+        or any(
+            separator in item for separator in ("，", ",", "；", ";")
+        )
+    )
+
+
+def _cow_curated_translation_index(
+    overrides_path: Path | None,
+) -> dict[str, tuple[str, ...]]:
+    if overrides_path is None:
+        return {}
+    if not overrides_path.is_file():
+        raise FileNotFoundError(
+            f"COW curated translation file not found: {overrides_path}"
+        )
+    payload = json.loads(overrides_path.read_text(encoding="utf-8"))
+    if (
+        payload.get("schema") != "gre-cow-curated-translations"
+        or payload.get("version") != 1
+        or not isinstance(payload.get("overrides"), dict)
+    ):
+        raise ValueError("unsupported COW curated translation format")
+    values: dict[str, tuple[str, ...]] = {}
+    for raw_synset_id, raw_override in payload["overrides"].items():
+        synset_id = _cow_synset_id(str(raw_synset_id))
+        if synset_id is None or not isinstance(raw_override, dict):
+            raise ValueError("invalid COW curated translation override")
+        raw_translations = raw_override.get("translations")
+        reason = str(raw_override.get("reason", "")).strip()
+        if not isinstance(raw_translations, list) or not reason:
+            raise ValueError(
+                f"COW curated translation {synset_id!r} is incomplete"
+            )
+        translations = tuple(
+            dict.fromkeys(
+                str(value).strip()
+                for value in raw_translations
+                if str(value).strip()
+            )
+        )
+        if not translations:
+            raise ValueError(
+                f"COW curated translation {synset_id!r} has no translation"
+            )
+        values[synset_id] = translations
+    return values
 
 
 def _context_example(headword: str, definition: str) -> dict[str, str]:
@@ -615,12 +706,16 @@ def build_dictionary(
     output_paths: tuple[Path, ...],
     wordnet_path: Path | None = None,
     cow_path: Path | None = None,
+    cow_overrides_path: Path | None = None,
 ) -> dict[str, int]:
     if cow_path is not None and wordnet_path is None:
         raise ValueError("Chinese Open Wordnet requires a WordNet 3.0 source")
     targets = _target_tokens(words_path)
     wordnet_senses = _wordnet_sense_index(wordnet_path)
     cow_translations = _cow_translation_index(cow_path)
+    cow_translations.update(
+        _cow_curated_translation_index(cow_overrides_path)
+    )
     entries: dict[str, dict[str, object]] = {}
     phrase_candidates: dict[
         str, list[tuple[tuple[int, int, int, str], str, str]]
@@ -731,6 +826,16 @@ def build_dictionary(
                 if cow_path is not None
                 else []
             ),
+            *(
+                [
+                    {
+                        "name": COW_OVERRIDES_SOURCE,
+                        "role": "对高置信 COW 词义翻译错误的可追溯修正",
+                    }
+                ]
+                if cow_overrides_path is not None
+                else []
+            ),
         ],
         "entry_count": len(entries),
         "target_count": len(targets),
@@ -799,6 +904,15 @@ def main() -> int:
             f"Defaults to {DEFAULT_COW_PATH} when that file exists."
         ),
     )
+    parser.add_argument(
+        "--cow-overrides",
+        type=Path,
+        help=(
+            "Optional reviewed replacements for individual COW synsets. "
+            "The bundled corrections are used automatically with the "
+            "bundled COW file."
+        ),
+    )
     parser.add_argument("--output", required=True, action="append", type=Path)
     args = parser.parse_args()
     cow_path = args.cow
@@ -808,12 +922,21 @@ def main() -> int:
         and DEFAULT_COW_PATH.is_file()
     ):
         cow_path = DEFAULT_COW_PATH
+    cow_overrides_path = args.cow_overrides
+    if (
+        cow_overrides_path is None
+        and cow_path is not None
+        and cow_path.resolve() == DEFAULT_COW_PATH.resolve()
+        and DEFAULT_COW_OVERRIDES_PATH.is_file()
+    ):
+        cow_overrides_path = DEFAULT_COW_OVERRIDES_PATH
     summary = build_dictionary(
         words_path=args.words,
         ecdict_path=args.ecdict,
         output_paths=tuple(args.output),
         wordnet_path=args.wordnet,
         cow_path=cow_path,
+        cow_overrides_path=cow_overrides_path,
     )
     print(json.dumps(summary, ensure_ascii=False))
     return 0

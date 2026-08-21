@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     url.searchParams.set("q", text);
     url.searchParams.set("langpair", "en|zh-CN");
     const upstream = await fetch(url, {
-      headers: { "user-agent": "GRE3000Offline-Web/0.8.1" },
+      headers: { "user-agent": "GRE3000Offline-Web/0.8.2" },
       signal: AbortSignal.timeout(12_000),
     });
     if (!upstream.ok) throw new Error(`翻译服务返回 HTTP ${upstream.status}`);

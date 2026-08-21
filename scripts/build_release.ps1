@@ -86,6 +86,7 @@ $IconIco = Join-Path $RepoRoot "resources\app.ico"
 $ClickDictionary = Join-Path $RepoRoot "resources\click_dictionary.json"
 $EcdictLicense = Join-Path $RepoRoot "resources\ECDICT-LICENSE.txt"
 $WordNetLicense = Join-Path $RepoRoot "resources\WORDNET-LICENSE.txt"
+$CowLicense = Join-Path $RepoRoot "resources\COW-LICENSE.txt"
 $InstructionsSource = Join-Path $RepoRoot "resources\使用说明.txt"
 $ReleaseProbe = Join-Path $RepoRoot "scripts\windows_release_probe.py"
 $PublishReleaseSet = Join-Path $RepoRoot "scripts\publish_release_set.py"
@@ -112,7 +113,7 @@ $ExpectedOutputNames = @(
     "词库导入审计报告.html"
 )
 $SmokeProfile = Join-Path $RepoRoot "build\smoke-profile"
-$ReleaseVersion = "0.8.1"
+$ReleaseVersion = "0.8.2"
 $ExpectedTitle = "GRE 3000 Vocabulary Trainer"
 $Amd64Machine = "0x8664"
 $WindowsGuiSubsystem = "2"
@@ -125,6 +126,7 @@ foreach ($requiredFile in @(
     $ClickDictionary,
     $EcdictLicense,
     $WordNetLicense,
+    $CowLicense,
     $InstructionsSource,
     $ReleaseProbe,
     $PublishReleaseSet,

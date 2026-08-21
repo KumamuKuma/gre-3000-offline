@@ -37,7 +37,7 @@ def test_online_translation_encodes_text_and_decodes_result():
     assert result == "努力工作 & 学习"
     assert "langpair=en%7Czh-CN" in requests[0][0]
     assert "work+hard+%26+learn" in requests[0][0]
-    assert requests[0][1] == "GRE3000Offline/0.8.1"
+    assert requests[0][1] == "GRE3000Offline/0.8.2"
     assert requests[0][2] == 12
 
 

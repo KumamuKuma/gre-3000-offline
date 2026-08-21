@@ -149,9 +149,9 @@ class DictionaryService:
         part = value.lower().rstrip(".")
         if part in {"v", "vt", "vi", "aux"}:
             return "v"
-        if part in {"a", "adj"}:
+        if part in {"a", "adj", "s"}:
             return "adj"
-        if part in {"ad", "adv"}:
+        if part in {"ad", "adv", "r"}:
             return "adv"
         return part
 
@@ -178,6 +178,12 @@ class DictionaryService:
                 values[-1] = (part, f"{previous} {line}".strip())
                 continue
             match = DEFINITION_PART_OF_SPEECH.match(line)
+            uppercase_one_letter_code = bool(
+                match
+                and not match.group("dot")
+                and len(match.group("part")) == 1
+                and match.group("part") not in {"n", "v", "a", "s", "r"}
+            )
             # An unpunctuated leading "a" is ambiguous once indentation has
             # been lost by an old v1 producer (for example, "a certain...").
             # Preserve it as text instead of claiming it is an adjective POS.
@@ -187,7 +193,7 @@ class DictionaryService:
                 and not match.group("dot")
                 and values
             )
-            if match and not ambiguous_a:
+            if match and not uppercase_one_letter_code and not ambiguous_a:
                 part = cls._canonical_part_of_speech(match.group("part"))
                 values.append((part, match.group("definition").strip()))
             else:

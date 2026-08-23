@@ -146,6 +146,8 @@ def test_home_word_list_and_result_selection_emit_domain_values(qtbot, sample_wo
     page.show()
     with qtbot.waitSignal(page.wordListRequested):
         page.word_list_button.click()
+    with qtbot.waitSignal(page.longSentencesRequested):
+        page.long_sentence_button.click()
 
     other = replace(sample_word, id=2, headword="unabated")
     page.set_results([sample_word, other])

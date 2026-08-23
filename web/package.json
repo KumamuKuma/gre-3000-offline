@@ -1,6 +1,6 @@
 {
   "name": "gre-3000-pwa",
-  "version": "0.8.3",
+  "version": "0.9.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"

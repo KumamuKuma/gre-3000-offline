@@ -123,6 +123,99 @@ def test_builds_version_two_senses_with_wordnet_and_labelled_fallbacks(
     assert summary["cow_translated_senses"] == 1
 
 
+def test_adds_long_sentence_words_to_click_dictionary_targets(tmp_path):
+    words = tmp_path / "words.json"
+    words.write_text(
+        json.dumps(
+            {
+                "words": [
+                    {
+                        "word": "abate",
+                        "definition_en": "",
+                        "synonyms": "",
+                        "example_en": "",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    sentences = tmp_path / "long_sentences.json"
+    sentences.write_text(
+        json.dumps(
+            {
+                "schema": "gre-long-sentences",
+                "version": 1,
+                "count": 1,
+                "sentences": [
+                    {"id": 1, "source_number": 1, "text": "Arduous work can abate."}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    ecdict = tmp_path / "ecdict.csv"
+    with ecdict.open("w", encoding="utf-8", newline="") as destination:
+        writer = csv.DictWriter(
+            destination,
+            fieldnames=(
+                "word",
+                "phonetic",
+                "translation",
+                "definition",
+                "exchange",
+                "frq",
+                "bnc",
+            ),
+        )
+        writer.writeheader()
+        writer.writerows(
+            [
+                {"word": "abate", "translation": "v. 减弱"},
+                {"word": "arduous", "translation": "adj. 艰巨的"},
+                {"word": "work", "translation": "n. 工作"},
+                {"word": "can", "translation": "aux. 能够"},
+            ]
+        )
+    output = tmp_path / "dictionary.json"
+
+    summary = build_dictionary(
+        words_path=words,
+        long_sentences_path=sentences,
+        ecdict_path=ecdict,
+        output_paths=(output,),
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert summary["targets"] == 4
+    assert set(payload["entries"]) == {"abate", "arduous", "can", "work"}
+
+
+def test_rejects_inconsistent_long_sentence_data(tmp_path):
+    words = tmp_path / "words.json"
+    words.write_text(json.dumps({"words": []}), encoding="utf-8")
+    sentences = tmp_path / "long_sentences.json"
+    sentences.write_text(
+        json.dumps(
+            {
+                "schema": "gre-long-sentences",
+                "version": 1,
+                "count": 2,
+                "sentences": [{"id": 1, "text": "Only one."}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="unsupported long-sentence"):
+        build_dictionary(
+            words_path=words,
+            long_sentences_path=sentences,
+            ecdict_path=tmp_path / "unused.csv",
+            output_paths=(tmp_path / "dictionary.json",),
+        )
+
+
 def test_does_not_copy_one_pos_summary_onto_many_english_senses():
     senses = _build_senses(
         headword="subdue",

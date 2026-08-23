@@ -132,6 +132,17 @@ QFrame#studyHeader, QFrame#navigationBar {
     border-color: #e2e8f0;
     border-radius: 14px;
 }
+QFrame#longSentenceCard {
+    background: #ffffff;
+    border: 1px solid #dce3ee;
+    border-top: 3px solid #6366f1;
+    border-radius: 19px;
+}
+QLabel#longSentenceText {
+    color: #101828;
+    font-size: 21px;
+    font-weight: 560;
+}
 QFrame#quizAutomationBar {
     background: #fff7ed;
     border: 1px solid #fed7aa;
@@ -257,6 +268,18 @@ QPushButton#primaryButton:hover {
     color: #ffffff;
     background: #5048c8;
     border-color: #5048c8;
+}
+QPushButton#heroActionButton {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 18);
+    border: 1px solid rgba(255, 255, 255, 70);
+    padding: 8px 13px;
+    font-weight: 700;
+}
+QPushButton#heroActionButton:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 34);
+    border-color: #a5b4fc;
 }
 QPushButton#outlineButton { color: #4338ca; border-color: #c7d2fe; }
 QPushButton#outlineButton:hover { background: #eef2ff; }

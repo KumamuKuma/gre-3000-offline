@@ -11,6 +11,8 @@ from gre_vocab_app.controller import ApplicationController
 from gre_vocab_app.db.user import QueueState, UserRepository
 from gre_vocab_app.domain import BrowseOrder, SourceList, StudyMode, WordEntry
 from gre_vocab_app.services.search import SearchService
+from gre_vocab_app.services.dictionary import LookupResult
+from gre_vocab_app.services.long_sentences import LongSentence
 from gre_vocab_app.services.study import StudySession
 from gre_vocab_app.ui.main_window import MainWindow
 
@@ -272,7 +274,15 @@ class FakeSpeech(QObject):
         return notice
 
 
-def make_controller(qtbot, *, user=None, word_count=3, speech=None):
+def make_controller(
+    qtbot,
+    *,
+    user=None,
+    word_count=3,
+    speech=None,
+    long_sentence_service=None,
+    dictionary_service=None,
+):
     content = FakeContent(word_count)
     user = user or FakeUser()
     speech = speech or FakeSpeech()
@@ -286,9 +296,58 @@ def make_controller(qtbot, *, user=None, word_count=3, speech=None):
         study_session=study,
         search_service=SearchService(content),
         speech_service=speech,
+        long_sentence_service=long_sentence_service,
+        dictionary_service=dictionary_service,
     )
     controller.start()
     return controller, window, content, user, speech
+
+
+def test_controller_opens_long_sentences_and_reuses_dictionary_lookup(qtbot):
+    long_sentence_service = Mock()
+    long_sentence_service.load.return_value = (
+        LongSentence(1, 1, "Although it was difficult, we continued.", (4,)),
+    )
+    dictionary_service = Mock()
+    dictionary_service.lookup.return_value = LookupResult(
+        query="Although",
+        normalized="although",
+        kind="word",
+        source="本地词典",
+        headword="although",
+        offline_translation="虽然；尽管",
+    )
+    controller, window, _content, _user, _speech = make_controller(
+        qtbot,
+        long_sentence_service=long_sentence_service,
+        dictionary_service=dictionary_service,
+    )
+
+    window.home_page.long_sentence_button.click()
+    assert window.stack.currentWidget() is window.long_sentence_page
+    assert window.long_sentence_page.sentence_label.text().startswith("Although")
+    long_sentence_service.load.assert_called_once_with()
+
+    window.long_sentence_page.sentence_label._activate_link("lookup:Although")
+    dictionary_service.lookup.assert_called_once_with("Although")
+    assert window.lookup_dialog.query_label.text() == "although"
+
+    window.long_sentence_page.back_button.click()
+    assert window.stack.currentWidget() is window.home_page
+
+
+def test_controller_shows_friendly_long_sentence_loading_error(qtbot):
+    service = Mock()
+    service.load.side_effect = ValueError("invalid fixture")
+    _controller, window, _content, _user, _speech = make_controller(
+        qtbot, long_sentence_service=service
+    )
+
+    window.home_page.long_sentence_button.click()
+
+    assert window.stack.currentWidget() is window.long_sentence_page
+    assert "暂时无法读取" in window.long_sentence_page.empty_state.text()
+    assert "invalid fixture" not in window.long_sentence_page.empty_state.text()
 
 
 def test_controller_connects_selected_list_modes_and_navigation(qtbot):

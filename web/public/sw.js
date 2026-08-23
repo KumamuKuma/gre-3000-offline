@@ -1,10 +1,11 @@
-const CACHE = "gre-3000-pwa-v20";
+const CACHE = "gre-3000-pwa-v21";
 const CORE = [
   "/",
   "/manifest.webmanifest",
   "/icon.svg",
   "/data/words.json",
-  "/data/click_dictionary.json?v=4",
+  "/data/long_sentences.json",
+  "/data/click_dictionary.json?v=5",
   "/ECDICT-LICENSE.txt",
   "/WORDNET-LICENSE.txt",
   "/COW-LICENSE.txt",
@@ -31,7 +32,11 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/signout-with-chatgpt") ||
     url.pathname.startsWith("/callback")
   ) return;
-  if (url.pathname === "/data/words.json" || url.pathname === "/data/click_dictionary.json") {
+  if (
+    url.pathname === "/data/words.json"
+    || url.pathname === "/data/long_sentences.json"
+    || url.pathname === "/data/click_dictionary.json"
+  ) {
     event.respondWith(
       fetch(event.request)
         .then((response) => {

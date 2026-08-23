@@ -14,6 +14,7 @@ from gre_vocab_app.services.search import SearchService
 from gre_vocab_app.services.speech import SpeechService
 from gre_vocab_app.services.study import StudySession
 from gre_vocab_app.services.dictionary import DictionaryService
+from gre_vocab_app.services.long_sentences import LongSentenceService
 from gre_vocab_app.services.translation import TranslationService
 from gre_vocab_app.ui.main_window import MainWindow
 
@@ -76,6 +77,7 @@ def bootstrap(paths: AppPaths) -> BootstrapResult:
             speech_service=speech,
             dictionary_service=DictionaryService(),
             translation_service=TranslationService(),
+            long_sentence_service=LongSentenceService(),
         )
         controller.start()
     except Exception:

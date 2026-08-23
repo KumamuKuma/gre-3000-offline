@@ -46,7 +46,7 @@ def translate_english_to_chinese(
     url = f"{TRANSLATE_ENDPOINT}?{urllib.parse.urlencode({'q': query, 'langpair': 'en|zh-CN'})}"
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "GRE3000Offline/0.8.3"},
+        headers={"User-Agent": "GRE3000Offline/0.9.0"},
     )
     with opener(request, timeout=12) as response:
         payload = json.loads(response.read().decode("utf-8"))
@@ -79,7 +79,7 @@ class TranslationService(QObject):
         url_query.addQueryItem("langpair", "en|zh-CN")
         url.setQuery(url_query)
         request = QNetworkRequest(url)
-        request.setRawHeader(b"User-Agent", b"GRE3000Offline/0.8.3")
+        request.setRawHeader(b"User-Agent", b"GRE3000Offline/0.9.0")
         reply = self._manager.get(request)
         self._replies[request_id] = reply
         timer = QTimer(reply)

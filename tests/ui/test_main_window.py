@@ -17,11 +17,16 @@ def test_main_window_exposes_word_list_navigation_and_find_signal(qtbot):
     assert window.stack.currentWidget() is window.word_list_page
     window.show_home()
     assert window.stack.currentWidget() is window.home_page
+    window.show_long_sentences()
+    assert window.stack.currentWidget() is window.long_sentence_page
+    window.show_home()
 
     with qtbot.waitSignal(window.wordListRequested):
         window.word_list_action.trigger()
     with qtbot.waitSignal(window.wordListRequested):
         window.home_page.word_list_button.click()
+    with qtbot.waitSignal(window.longSentencesRequested):
+        window.home_page.long_sentence_button.click()
     with qtbot.waitSignal(window.findRequested):
         window.find_shortcut.activated.emit()
 

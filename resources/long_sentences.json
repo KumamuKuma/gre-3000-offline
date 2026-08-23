@@ -1,0 +1,1068 @@
+{
+  "schema": "gre-long-sentences",
+  "version": 1,
+  "source": {
+    "title": "杨鹏阅读长难句",
+    "file_name": "杨鹏阅读长难句(2).pdf",
+    "file_sha256": "50b594880839f5733cfb07304706d4ca93e691a025590b768b0de0c8534d6a02",
+    "page_count": 44,
+    "missing_source_numbers": [
+      70
+    ]
+  },
+  "count": 131,
+  "sentences": [
+    {
+      "id": 1,
+      "source_number": 1,
+      "text": "That sex ratio will be favored which maximizes the number of descendants an individual will have and hence the number of gene copies transmitted.",
+      "source_pages": [
+        1
+      ]
+    },
+    {
+      "id": 2,
+      "source_number": 2,
+      "text": "(This is) A desire to throw over reality a light that never was might give way abruptly to the desire on the part of what we might consider a novelist-scientist to record exactly and concretely the structure and texture of a flower.",
+      "source_pages": [
+        1
+      ]
+    },
+    {
+      "id": 3,
+      "source_number": 3,
+      "text": "Hardy’s weakness derived from his apparent inability to control the comings and goings of these divergent impulses and from his unwillingness to cultivate and sustain the energetic and risky ones.",
+      "source_pages": [
+        1
+      ]
+    },
+    {
+      "id": 4,
+      "source_number": 4,
+      "text": "Virginia Woolf’s provocative statement about her intentions in writing Mrs. Dalloway has regularly been ignored by the critics, since it highlights an aspect of her literary interests very different from the traditional picture of the \"poetic\" novelist concerned with examining states of reverie and vision and with following the intricate pathways of individual consciousness.",
+      "source_pages": [
+        2
+      ]
+    },
+    {
+      "id": 5,
+      "source_number": 5,
+      "text": "As she put it in The Common Reader, \"It is safe to say that not a single law has been framed or one stone set upon another because of anything Chaucer said or wrote; and yet, as we read him, we are absorbing morality at every pore.\"",
+      "source_pages": [
+        2
+      ]
+    },
+    {
+      "id": 6,
+      "source_number": 6,
+      "text": "With the conclusion of a burst activity, the lactic acid level is high in the body fluids, leaving the large animal vulnerable to attack until the acid is reconverted, via oxidative metabolism, by the liver into glucose, which is then sent (in part) back to the muscles for glycogen resynthesis.",
+      "source_pages": [
+        2
+      ]
+    },
+    {
+      "id": 7,
+      "source_number": 7,
+      "text": "Although Gutman admits that forced separation by sale was frequent, he shows that the slaves’ preference, revealed most clearly on plantations where sale was infrequent, was very much for stable monogamy.",
+      "source_pages": [
+        3
+      ]
+    },
+    {
+      "id": 8,
+      "source_number": 8,
+      "text": "Gutman argues convincingly that the stability of the Black family encouraged the transmission of—and so was crucial in sustaining—the Black heritage of folklore, music, and religious expression from one generation to another, a heritage that slaves were continually fashioning out of their African and American experiences.",
+      "source_pages": [
+        3
+      ]
+    },
+    {
+      "id": 9,
+      "source_number": 9,
+      "text": "This preference for exogamy, Gutman suggests, may have derived from West African rules governing marriage, which, though they differed from one tribal group to another, all involved some kind of prohibition against unions with close kin.",
+      "source_pages": [
+        3
+      ]
+    },
+    {
+      "id": 10,
+      "source_number": 10,
+      "text": "His thesis works relatively well when applied to discrimination against Blacks in the United States, but his definition of racial prejudice as \"racially-based negative prejudgments against a group generally accepted as a race in any given region of ethnic competition,\" can be interpreted as also including hostility toward such ethnic groups as the Chinese in California and the Jews in medieval Europe.",
+      "source_pages": [
+        3
+      ]
+    },
+    {
+      "id": 11,
+      "source_number": 11,
+      "text": "Such variations in size, shape, chemistry, conduction speed, excitation threshold, and the like as had been demonstrated in nerve cells remained negligible in significance for any possible correlation with the manifold dimensions of mental experience.",
+      "source_pages": [
+        4
+      ]
+    },
+    {
+      "id": 12,
+      "source_number": 12,
+      "text": "It was possible to demonstrate by other methods refined structural differences among neuron types; however, proof was lacking that the quality of the impulse or its condition was influenced by these differences, which seemed instead to influence the developmental patterning of the neural circuits.",
+      "source_pages": [
+        4
+      ]
+    },
+    {
+      "id": 13,
+      "source_number": 13,
+      "text": "Although qualitative variance among nerve energies was never rigidly disproved, the doctrine was generally abandoned in favor of the opposing view, namely, that nerve impulses are essentially homogeneous in quality and are transmitted as \"common currency\" throughout the nervous system.",
+      "source_pages": [
+        4
+      ]
+    },
+    {
+      "id": 14,
+      "source_number": 14,
+      "text": "Other experiments revealed slight variations in the size, number, arrangement, and interconnection of the nerve cells, but as far as psychoneural correlations were concerned, the obvious similarities of these sensory fields to each other seemed much more remarkable than any of the minute differences.",
+      "source_pages": [
+        5
+      ]
+    },
+    {
+      "id": 15,
+      "source_number": 15,
+      "text": "Although some experiments show that, as an object becomes familiar, its internal representation becomes more holistic and the recognition process correspondingly more parallel, the weight of evidence seems to support the serial hypothesis, at least for objects that are not notably simple and familiar.",
+      "source_pages": [
+        5
+      ]
+    },
+    {
+      "id": 16,
+      "source_number": 16,
+      "text": "In large part as a consequence of the feminist movement, historians have focused a great deal of attention in recent years on determining more accurately the status of women in various periods.",
+      "source_pages": [
+        5
+      ]
+    },
+    {
+      "id": 17,
+      "source_number": 17,
+      "text": "If one begins by examining why ancients refer to Amazons, it becomes clear that ancient Greek descriptions of such societies were meant not so much to represent observed historical fact—real Amazonian societies—but rather to offer \"moral lessons\" on the supposed outcome of women’s rule in their own society.",
+      "source_pages": [
+        5,
+        6
+      ]
+    },
+    {
+      "id": 18,
+      "source_number": 18,
+      "text": "Thus, for instance, it may come as a shock to mathematicians to learn that the Schrodinger equation for the hydrogen atom is not a literally correct description of this atom, but only an approximation to a somewhat more correct equation taking account of spin, magnetic dipole, and relativistic effects; and that this corrected equation is itself only an imperfect approximation to an infinite set of quantum field-theoretical equations.",
+      "source_pages": [
+        6
+      ]
+    },
+    {
+      "id": 19,
+      "source_number": 19,
+      "text": "The physicist rightly dreads precise argument, since an argument that is convincing only if it is precise loses all its force if the assumptions on which it is based are slightly changed, whereas an argument that is convincing though imprecise may well be stable under small perturbations of its underlying assumptions.",
+      "source_pages": [
+        6
+      ]
+    },
+    {
+      "id": 20,
+      "source_number": 20,
+      "text": "However, as they gained cohesion, the Bluestockings came to regard themselves as a women’s group and to possess a sense of female solidarity lacking in the salonnieres, who remained isolated from one another by the primacy each held in her own salon.",
+      "source_pages": [
+        7
+      ]
+    },
+    {
+      "id": 21,
+      "source_number": 21,
+      "text": "As my own studies have advanced, I have been increasingly impressed with the functional similarities between insect and vertebrate societies and less so with the structural differences that seem, at first glance, to constitute such an immense gulf between them.",
+      "source_pages": [
+        7
+      ]
+    },
+    {
+      "id": 22,
+      "source_number": 22,
+      "text": "Although fiction assuredly springs from political circumstances, its authors react to those circumstances in ways other than ideological, and talking about novels and stories primarily as instruments of ideology circumvents much of the fictional enterprise.",
+      "source_pages": [
+        7
+      ]
+    },
+    {
+      "id": 23,
+      "source_number": 23,
+      "text": "Is this a defect, or are the authors working out of, or trying to forge, a different kind of aesthetic?",
+      "source_pages": [
+        8
+      ]
+    },
+    {
+      "id": 24,
+      "source_number": 24,
+      "text": "In addition, the style of some Black novels, like Jean Toomer’s Cane, verges on expressionism or surrealism; does this technique provide a counterpoint to the prevalent theme that portrays the fate against which Black heroes are pitted, a theme usually conveyed by more naturalistic modes of expression?",
+      "source_pages": [
+        8
+      ]
+    },
+    {
+      "id": 25,
+      "source_number": 25,
+      "text": "Black Fiction surveys a wide variety of novels, bringing to our attention in the process some fascinating and little-known works like James Weldon Johnson’s Autobiography of an Ex-Colored Man.",
+      "source_pages": [
+        8
+      ]
+    },
+    {
+      "id": 26,
+      "source_number": 26,
+      "text": "Although these molecules allow radiation at visible wavelengths, where most of the energy of sunlight is concentrated, to pass through, they absorb some of the longer-wavelength, infrared emissions radiated from the Earth’s surface, radiation that would otherwise be transmitted back into space.",
+      "source_pages": [
+        8
+      ]
+    },
+    {
+      "id": 27,
+      "source_number": 27,
+      "text": "The role those anthropologists ascribe to evolution is not of dictating the details of human behavior but one of imposing constraints—ways of feeling, thinking, and acting that \"come naturally\" in archetypal situations in any culture.",
+      "source_pages": [
+        9
+      ]
+    },
+    {
+      "id": 28,
+      "source_number": 28,
+      "text": "Which of the following most probably provides an appropriate analogy from human morphology for the \"details\" versus \"constraints\" distinction made in the passage in relation to human behavior?",
+      "source_pages": [
+        9
+      ]
+    },
+    {
+      "id": 29,
+      "source_number": 29,
+      "text": "A low number of algal cells in the presence of a high number of grazers suggested, but did not prove, that the grazers had removed most of the algae.",
+      "source_pages": [
+        9
+      ]
+    },
+    {
+      "id": 30,
+      "source_number": 30,
+      "text": "Perhaps the fact that many of these first studies considered only algae of a size that could be collected in a net (net phytoplankton), a practice that overlooked the smaller phytoplankton (nannoplankton) that we now know grazers are most likely to feed on, led to a de-emphasis of the role of grazers in subsequent research.",
+      "source_pages": [
+        9
+      ]
+    },
+    {
+      "id": 31,
+      "source_number": 31,
+      "text": "Studies by Hargrave and Geen estimated natural community grazing rates by measuring feeding rates of individual zooplankton species in the laboratory and then computing community grazing rates for field conditions using the known population density of grazers.",
+      "source_pages": [
+        10
+      ]
+    },
+    {
+      "id": 32,
+      "source_number": 32,
+      "text": "In the periods of peak zooplankton abundance, that is, in the late spring and in the summer, Haney recorded maximum daily community grazing rates, for nutrient-poor lakes and bog lakes, respectively, of 6.6 percent and 114 percent of daily phytoplankton production.",
+      "source_pages": [
+        10
+      ]
+    },
+    {
+      "id": 33,
+      "source_number": 33,
+      "text": "The hydrologic cycle, a major topic in this science, is the complete cycle of phenomena through which water passes, beginning as atmospheric water vapor, passing into liquid and solid form as precipitation, thence along and into the ground surface, and finally again returning to the form of atmospheric water vapor by means of evaporation and transpiration.",
+      "source_pages": [
+        10
+      ]
+    },
+    {
+      "id": 34,
+      "source_number": 34,
+      "text": "Only when a system possesses natural or artificial boundaries that associate the water within it with the hydrologic cycle may the entire system properly be termed hydrogeologic.",
+      "source_pages": [
+        11
+      ]
+    },
+    {
+      "id": 35,
+      "source_number": 35,
+      "text": "The historian Frederick J. Turner wrote in the 1890’s that the agrarian discontent that had been developing steadily in the United States since about 1870 had been precipitated by the closing of the internal frontier—that is, the depletion of available new land needed for further expansion of the American farming system.",
+      "source_pages": [
+        11
+      ]
+    },
+    {
+      "id": 36,
+      "source_number": 36,
+      "text": "In the early 1950’s, historians who studied preindustrial Europe (which we may define here as Europe in the period from roughly 1300 to 1800) began, for the first time in large numbers, to investigate more of the preindustrial European population than the 2 or 3 percent who comprised the political and social elite: the kings, generals, judges, nobles, bishops, and local magnates who had hitherto usually filled history books.",
+      "source_pages": [
+        11
+      ]
+    },
+    {
+      "id": 37,
+      "source_number": 37,
+      "text": "Historians such as Le Roy Ladurie have used the documents to extract case histories, which have illuminated the attitudes of different social groups (these attitudes include, but are not confined to, attitudes toward crime and the law) and have revealed how the authorities administered justice.",
+      "source_pages": [
+        11
+      ]
+    },
+    {
+      "id": 38,
+      "source_number": 38,
+      "text": "It can be inferred from the passage that a historian who wished to compare crime rates per thousand in a European city in one decade of the fifteenth century with crime rates in another decade of that century would probably be most aided by better information about which of the following?",
+      "source_pages": [
+        12
+      ]
+    },
+    {
+      "id": 39,
+      "source_number": 39,
+      "text": "My point is that its central consciousness—its profound understanding of class and gender as shaping influences on people’s lives—owes much to that earlier literary heritage, a heritage that, in general, has not been sufficiently valued by most contemporary literary critics.",
+      "source_pages": [
+        12
+      ]
+    },
+    {
+      "id": 40,
+      "source_number": 40,
+      "text": "Even the requirement that biomaterials processed from these materials be nontoxic to host tissue can be met by techniques derived from studying the reactions of tissue cultures to biomaterials or from short-term implants.",
+      "source_pages": [
+        12
+      ]
+    },
+    {
+      "id": 41,
+      "source_number": 41,
+      "text": "But achieving necessary matches in physical properties across interfaces between living and nonliving matter requires knowledge of which molecules control the bonding of cells to each other—an area that we have not yet explored thoroughly.",
+      "source_pages": [
+        13
+      ]
+    },
+    {
+      "id": 42,
+      "source_number": 42,
+      "text": "Islamic law is a phenomenon so different from all other forms of law—notwithstanding, of course, a considerable and inevitable number of coincidences with one or the other of them as far as subject matter and positive enactments are concerned—that its study is indispensable in order to appreciate adequately the full range of possible legal phenomena.",
+      "source_pages": [
+        13
+      ]
+    },
+    {
+      "id": 43,
+      "source_number": 43,
+      "text": "(Both Jewish law and canon law are more uniform than Islamic law.) Though historically there is a discernible break between Jewish law of the sovereign state of ancient Israel and of the Diaspora (the dispersion of Jewish people after the conquest of Israel), the spirit of the legal matter in later parts of the Old Testament is very close to that of the Talmud, one of the primary codifications of Jewish law in the Diaspora.",
+      "source_pages": [
+        13
+      ]
+    },
+    {
+      "id": 44,
+      "source_number": 44,
+      "text": "Islam, on the other hand, represented a radical breakaway from the Arab paganism that preceded it; Islamic law is the result of an examination, from a religious angle, (examination) of legal subject matter that was far from uniform, comprising as it did the various components of the laws of pre-Islamic Arabia and numerous legal elements taken over from the non-Arab peoples of the conquered territories.",
+      "source_pages": [
+        14
+      ]
+    },
+    {
+      "id": 45,
+      "source_number": 45,
+      "text": "One such novel idea is that (idea) of inserting into the chromosomes of plants discrete genes that are not a part of the plants’ natural constitution: specifically, the idea of inserting into nonleguminous plants the genes, if they can be identified and isolated, that fit the leguminous plants to be hosts for nitrogen-fixing bacteria. Hence, (there is) the intensified research on legumes.",
+      "source_pages": [
+        14
+      ]
+    },
+    {
+      "id": 46,
+      "source_number": 46,
+      "text": "It is one of nature’s great ironies that the availability of nitrogen in the soil frequently sets an upper limit on plant growth even though the plants’ leaves are bathed in a sea of nitrogen gas.",
+      "source_pages": [
+        15
+      ]
+    },
+    {
+      "id": 47,
+      "source_number": 47,
+      "text": "Unless they succeed, the yield gains of the Green Revolution will be largely lost even if the genes in legumes that equip those plants to enter into a symbiosis with nitrogen fixers are identified and isolated, and even if the transfer of those gene complexes, once they are found, becomes possible.",
+      "source_pages": [
+        15
+      ]
+    },
+    {
+      "id": 48,
+      "source_number": 48,
+      "text": "Its subject (to use Maynard Mack’s categories) is \"life-as-spectacle,\" for readers, diverted by its various incidents, observe its hero Odysseus primarily from without; the tragic Iliad, however, presents \"life-as-experience\": readers are asked to identify with the mind of Achilles, whose motivations render him a not particularly likable hero.",
+      "source_pages": [
+        15
+      ]
+    },
+    {
+      "id": 49,
+      "source_number": 49,
+      "text": "Most striking among the many asymmetries evident in an adult flatfish is eye placement: before maturity one eye migrates, so that in an adult flatfish both eyes are on the same side of the head.",
+      "source_pages": [
+        16
+      ]
+    },
+    {
+      "id": 50,
+      "source_number": 50,
+      "text": "A critique of Handlin’s interpretation of why legal slavery did not appear until the 1660’s suggests that assumptions about the relation between slavery and racial prejudice should be reexamined, and that explanations for the different treatment of Black slaves in North and South America should be expanded.",
+      "source_pages": [
+        16
+      ]
+    },
+    {
+      "id": 51,
+      "source_number": 51,
+      "text": "The best evidence for the layered-mantle thesis is the well-established fact that volcanic rocks found on oceanic islands, islands believed to result from mantle plumes arising from the lower mantle, are composed of material fundamentally different from that of the mid-ocean ridge system, whose source, most geologists contend, is the upper mantle.",
+      "source_pages": [
+        16
+      ]
+    },
+    {
+      "id": 52,
+      "source_number": 52,
+      "text": "Some geologists, however, on the basis of observations concerning mantle xenoliths, argue that the mantle is not layered, but that heterogeneity is created by fluids rich in \"incompatible elements\" (elements tending toward liquid rather than solid state) percolating upward and transforming portions of the upper mantle irregularly, according to the vagaries of the fluids’ pathways.",
+      "source_pages": [
+        17
+      ]
+    },
+    {
+      "id": 53,
+      "source_number": 53,
+      "text": "Fallois proposed that Proust had tried to begin a novel in 1908, abandoned it for what was to be a long demonstration of Saint-Beuve’s blindness to the real nature of great writing, found the essay giving rise to personal memories and fictional developments, and allowed these to take over in a steadily developing novel.",
+      "source_pages": [
+        17
+      ]
+    },
+    {
+      "id": 54,
+      "source_number": 54,
+      "text": "The very richness and complexity of the meaningful relationships that kept presenting and rearranging themselves on all levels, from abstract intelligence to profound dreamy feelings, made it difficult for Proust to set them out coherently.",
+      "source_pages": [
+        18
+      ]
+    },
+    {
+      "id": 55,
+      "source_number": 55,
+      "text": "But those of us who hoped, with Kolb, that Kolb’s newly published complete edition of Proust’s correspondence for 1909 would document the process in greater detail are disappointed.",
+      "source_pages": [
+        18
+      ]
+    },
+    {
+      "id": 56,
+      "source_number": 56,
+      "text": "Now we must also examine the culture as we Mexican Americans have experienced it, passing from a sovereign people to compatriots with newly arriving settlers to, finally, a conquered people—a charter minority on our own land.",
+      "source_pages": [
+        18
+      ]
+    },
+    {
+      "id": 57,
+      "source_number": 57,
+      "text": "It is possible to make specific complementary DNA’s (cDNA’s) that can serve as molecular probes to seek out the messenger RNA’s (mRNA’s) of the peptide hormones. If brain cells are making the hormones, the cells will contain these mRNA’s. If the products the brain cells make resemble the hormones but are not identical to them, then the cDNA’s should still bind to these mRNA’s, but should not bind as tightly as they would to mRNA’s for the true hormones.",
+      "source_pages": [
+        19
+      ]
+    },
+    {
+      "id": 58,
+      "source_number": 58,
+      "text": "The molecular approach to detecting peptide hormones using cDNA probes should also be much faster than the immunological method because it can take years of tedious purifications to isolate peptide hormones and then develop antiserums to them.",
+      "source_pages": [
+        19
+      ]
+    },
+    {
+      "id": 59,
+      "source_number": 59,
+      "text": "Nevertheless, researchers of the Pleistocene epoch have developed all sorts of more or less fanciful model schemes of how they would have arranged the Ice Age had they been in charge of events.",
+      "source_pages": [
+        20
+      ]
+    },
+    {
+      "id": 60,
+      "source_number": 60,
+      "text": "This succession was based primarily on a series of deposits and events not directly related to glacial and interglacial periods, rather than on the more usual modern method of studying biological remains found in interglacial beds themselves interstratified within glacial deposits.",
+      "source_pages": [
+        20
+      ]
+    },
+    {
+      "id": 61,
+      "source_number": 61,
+      "text": "There have been attempts to explain these taboos in terms of inappropriate social relationships either between those who are involved and those who are not simultaneously involved in the satisfaction of a bodily need, or between those already satiated and those who appear to be shamelessly gorging.",
+      "source_pages": [
+        20
+      ]
+    },
+    {
+      "id": 62,
+      "source_number": 62,
+      "text": "Many critics of Emily Bronte’s novel Wuthering Heights see its second part as a counterpoint that comments on, if it does not reverse, the first part, where a \"romantic\" reading receives more confirmation.",
+      "source_pages": [
+        21
+      ]
+    },
+    {
+      "id": 63,
+      "source_number": 63,
+      "text": "Granted that the presence of these elements need not argue an authorial awareness of novelistic construction comparable to that of Henry James, their presence does encourage attempts to unify the novel’s heterogeneous parts.",
+      "source_pages": [
+        21
+      ]
+    },
+    {
+      "id": 64,
+      "source_number": 64,
+      "text": "This is not because such an interpretation necessarily stiffens into a thesis (although rigidity in any interpretation of this or of any novel is always a danger), but because Wuthering Heights has recalcitrant elements of undeniable power that, ultimately, resist inclusion in an all-encompassing interpretation.",
+      "source_pages": [
+        21
+      ]
+    },
+    {
+      "id": 65,
+      "source_number": 65,
+      "text": "The isotopic composition of lead often varies from one source of common copper ore to another, with variations exceeding the measurement error; and preliminary studies indicate virtually uniform isotopic composition of the lead from a single copper-ore source.",
+      "source_pages": [
+        22
+      ]
+    },
+    {
+      "id": 66,
+      "source_number": 66,
+      "text": "More probable is bird transport, either externally, by accidental attachment of the seeds to feathers, or internally, by the swallowing of fruit and subsequent excretion of the seeds.",
+      "source_pages": [
+        22
+      ]
+    },
+    {
+      "id": 67,
+      "source_number": 67,
+      "text": "A long-held view of the history of English colonies that became the United States has been that England’s policy toward these colonies before 1763 was dictated by commercial interests and that a change to a more imperial policy, dominated by expansionist militarist objectives, generated the tensions that ultimately led to the American Revolution.",
+      "source_pages": [
+        22,
+        23
+      ]
+    },
+    {
+      "id": 68,
+      "source_number": 68,
+      "text": "It is not known how rare this resemblance is, or whether it is most often seen in inclusions of silicates such as garnet, whose crystallography is generally somewhat similar to that of diamond; but when present, the resemblance is regarded as compelling evidence that the diamonds and inclusions are truly cogenetic.",
+      "source_pages": [
+        23
+      ]
+    },
+    {
+      "id": 69,
+      "source_number": 69,
+      "text": "Even the \"radical\" critiques of this mainstream research model, such as the critique developed in Divided Society, attach the issue of ethnic assimilation too mechanically to factors of economic and social mobility and are thus unable to illuminate the cultural subordination of Puerto Ricans as a colonial minority.",
+      "source_pages": [
+        23
+      ]
+    },
+    {
+      "id": 70,
+      "source_number": 71,
+      "text": "Open acknowledgement of the existence of women’s oppression was too radical for the United States in the fifties, and Beauvoir’s conclusion, that change in women’s economic condition, though insufficient by itself, \"remains the basic factor\" in improving women’s situation, was particularly unacceptable.",
+      "source_pages": [
+        24
+      ]
+    },
+    {
+      "id": 71,
+      "source_number": 72,
+      "text": "Other theorists propose that the Moon was ripped out of the Earth’s rocky mantle by the Earth’s collision with another large celestial body after much of the Earth’s iron fell to its core.",
+      "source_pages": [
+        24
+      ]
+    },
+    {
+      "id": 72,
+      "source_number": 73,
+      "text": "However, recent scholarship has strongly suggested that those aspects of early New England culture that seem to have been most distinctly Puritan, such as the strong religious orientation and the communal impulse, were not even typical of New England as a whole, but were largely confined to the two colonies of Massachusetts and Connecticut.",
+      "source_pages": [
+        24
+      ]
+    },
+    {
+      "id": 73,
+      "source_number": 74,
+      "text": "Thus, what in contrast to the Puritan colonies appears to Davis to be peculiarly Southern—acquisitiveness, a strong interest in politics and the law, and a tendency to cultivate metropolitan cultural models—was not only more typically English than the cultural patterns exhibited by Puritan Massachusetts and Connecticut, but also almost certainly characteristic of most other early modern British colonies from Barbados north to Rhode Island and New Hampshire.",
+      "source_pages": [
+        25
+      ]
+    },
+    {
+      "id": 74,
+      "source_number": 75,
+      "text": "Portrayals of the folk of Mecklenburg County, North Carolina, whom he remembers from early childhood, of the jazz musicians and tenement roofs of his Harlem days, of Pittsburgh steelworkers, and his reconstruction of classical Greek myths in the guise of the ancient Black kingdom of Benin, attest to this.",
+      "source_pages": [
+        25
+      ]
+    },
+    {
+      "id": 75,
+      "source_number": 76,
+      "text": "A very specialized feeding adaptation in zooplankton is that of the tadpolelike appendicularian who lives in a walnut-sized (or smaller) balloon of mucus equipped with filters that capture and concentrate phytoplankton.",
+      "source_pages": [
+        26
+      ]
+    },
+    {
+      "id": 76,
+      "source_number": 77,
+      "text": "These historians, however, have analyzed less fully the development of specifically feminist ideas and activities during the same period.",
+      "source_pages": [
+        26
+      ]
+    },
+    {
+      "id": 77,
+      "source_number": 78,
+      "text": "Apparently most massive stars manage to lose sufficient material that their masses drop below the critical value of 1.4 M before they exhaust their nuclear fuel.",
+      "source_pages": [
+        26
+      ]
+    },
+    {
+      "id": 78,
+      "source_number": 79,
+      "text": "This is so even though armed forces operate in an ethos of institutional change oriented toward occupational equality and under the federal sanction of equal pay for equal work.",
+      "source_pages": [
+        27
+      ]
+    },
+    {
+      "id": 79,
+      "source_number": 80,
+      "text": "An impact (on Mars) capable of ejecting a fragment of the Martian surface into an Earth-intersecting orbit is even less probable than such an event on the Moon, in view of the Moon’s smaller size and closer proximity to Earth.",
+      "source_pages": [
+        27
+      ]
+    },
+    {
+      "id": 80,
+      "source_number": 81,
+      "text": "Not only are liver transplants never rejected, but they even induce a state of donor-specific unresponsiveness in which subsequent transplants of other organs, such as skin, from that donor are accepted permanently.",
+      "source_pages": [
+        27
+      ]
+    },
+    {
+      "id": 81,
+      "source_number": 82,
+      "text": "As rock interfaces are crossed, the elastic characteristics encountered (by seismic waves) generally change abruptly, which causes part of the energy to be reflected back to the surface, where it is recorded by seismic instruments.",
+      "source_pages": [
+        28
+      ]
+    },
+    {
+      "id": 82,
+      "source_number": 83,
+      "text": "While the new doctrine seems almost certainly correct, the one papyrus fragment raises the specter that another may be unearthed, showing, for instance, that it was a posthumous production of the Danaid tetralogy which bested Sophocles, and throwing the date once more into utter confusion.",
+      "source_pages": [
+        28
+      ]
+    },
+    {
+      "id": 83,
+      "source_number": 84,
+      "text": "The methods that a community devises to perpetuate itself come into being to preserve aspects of the cultural legacy that that community perceives as essential.",
+      "source_pages": [
+        28
+      ]
+    },
+    {
+      "id": 84,
+      "source_number": 85,
+      "text": "Traditionally, pollination by wind has been viewed as a reproductive process marked by random events in which the vagaries of the wind are compensated for by the generation of vast quantities of pollen, so that the ultimate production of new seeds is assured at the expense of producing much more pollen than is actually used.",
+      "source_pages": [
+        29
+      ]
+    },
+    {
+      "id": 85,
+      "source_number": 86,
+      "text": "Because the potential hazards pollen grains are subject to as they are transported over long distances are enormous, wind pollinated plants have, in the view above, compensated for the ensuing loss of pollen through happenstance by virtue of producing an amount of pollen that is one to three orders of magnitude greater than the amount produced by species pollinated by insects.",
+      "source_pages": [
+        29
+      ]
+    },
+    {
+      "id": 86,
+      "source_number": 87,
+      "text": "For example, the spiral arrangement of scale-bract complexes on ovule-bearing pine cones, where the female reproductive organs of conifers are located, is important to the production of airflow patterns that spiral over the cone’s surfaces, thereby passing airborne pollen from one scale to the next.",
+      "source_pages": [
+        30
+      ]
+    },
+    {
+      "id": 87,
+      "source_number": 88,
+      "text": "Friedrich Engels, however, predicted that women would be liberated from the \"social, legal, and economic subordination\" of the family by technological developments that made possible the recruitment of \"the whole female sex into public industry\".",
+      "source_pages": [
+        30
+      ]
+    },
+    {
+      "id": 88,
+      "source_number": 89,
+      "text": "It was not the change in office technology, but rather the separation of secretarial work, previously seen as an apprenticeship for beginning managers, from administrative work that in the 1880’s created a new class of \"dead-end\" jobs, thenceforth considered \"women’s work.\"",
+      "source_pages": [
+        30
+      ]
+    },
+    {
+      "id": 89,
+      "source_number": 90,
+      "text": "The increase in the numbers of married women employed outside the home in the twentieth century had less to do with the mechanization of housework and an increase in leisure time for these women than it did with their own economic necessity and with high marriage rates that shrank the available pool of single women workers, previously, in many cases, the only women employers would hire.",
+      "source_pages": [
+        31
+      ]
+    },
+    {
+      "id": 90,
+      "source_number": 91,
+      "text": "For one thing, no population can be driven entirely by density-independent factors all the time.",
+      "source_pages": [
+        31
+      ]
+    },
+    {
+      "id": 91,
+      "source_number": 92,
+      "text": "In order to understand the nature of the ecologist’s investigation, we may think of the density-dependent effects on growth parameters as the \"signal\" ecologists are trying to isolate and interpret, one that tends to make the population increase from relatively low values or decrease from relatively high ones, while the density-independent effects act to produce \"noise\" in the population dynamics.",
+      "source_pages": [
+        31
+      ]
+    },
+    {
+      "id": 92,
+      "source_number": 93,
+      "text": "But the play’s complex view of Black self-esteem and human solidarity as compatible is no more \"contradictory\" than Du Bois’ famous, well-considered ideal of ethnic self-awareness coexisting with human unity, or Fanon’s emphasis on an ideal internationalism that also accommodates national identities and roles.",
+      "source_pages": [
+        32
+      ]
+    },
+    {
+      "id": 93,
+      "source_number": 94,
+      "text": "In which of the following does the author of the passage reinforce his criticism of responses such as Isaacs’ to Raisin in the Sun?",
+      "source_pages": [
+        32
+      ]
+    },
+    {
+      "id": 94,
+      "source_number": 95,
+      "text": "Inheritors of some of the viewpoints of early twentieth-century Progressive historians such as Beard and Becker, these recent historians have put forward arguments that deserve evaluation.",
+      "source_pages": [
+        33
+      ]
+    },
+    {
+      "id": 95,
+      "source_number": 96,
+      "text": "Despite these vague categories, one should not claim unequivocally that hostility between recognizable classes cannot be legitimately observed.",
+      "source_pages": [
+        33
+      ]
+    },
+    {
+      "id": 96,
+      "source_number": 97,
+      "text": "Yet those who stress the achievement of a general consensus among the colonists cannot fully understand that consensus without understanding the conflicts that had to be overcome or repressed in order to reach it.",
+      "source_pages": [
+        33
+      ]
+    },
+    {
+      "id": 97,
+      "source_number": 98,
+      "text": "It can be inferred from the passage that the author would be most likely to agree with which of the following statements regarding socioeconomic class and support for the rebel and Loyalist causes during the American Revolutionary War?",
+      "source_pages": [
+        34
+      ]
+    },
+    {
+      "id": 98,
+      "source_number": 99,
+      "text": "She wished to discard the traditional methods and established vocabularies of such dance forms as ballet and to explore the internal sources of human expressiveness.",
+      "source_pages": [
+        34
+      ]
+    },
+    {
+      "id": 99,
+      "source_number": 100,
+      "text": "Although it has been possible to infer from the goods and services actually produced what manufacturers and servicing trades thought their customers wanted, only a study of relevant personal documents written by actual consumers will provide a precise picture of who wanted what.",
+      "source_pages": [
+        35
+      ]
+    },
+    {
+      "id": 100,
+      "source_number": 101,
+      "text": "With regard to this last question, we might note in passing that Thompson, while rightly restoring laboring people to the stage of eighteenth-century English history, has probably exaggerated the opposition of these people to the inroads of capitalist consumerism in general: for example, laboring people in eighteenth-century England readily shifted from home-brewed beer to standardized beer produced by huge, heavily capitalized urban breweries.",
+      "source_pages": [
+        35
+      ]
+    },
+    {
+      "id": 101,
+      "source_number": 102,
+      "text": "The correlation of carbon dioxide with temperature, of course, does not establish whether changes in atmospheric composition caused the warming and cooling trends or were caused by them.",
+      "source_pages": [
+        35
+      ]
+    },
+    {
+      "id": 102,
+      "source_number": 103,
+      "text": "Such philosophical concerns as the mind-body problem or, more generally, the nature of human knowledge, they believe, are basic human questions whose tentative philosophical solutions have served as the necessary foundations on which all other intellectual speculation has rested.",
+      "source_pages": [
+        36
+      ]
+    },
+    {
+      "id": 103,
+      "source_number": 104,
+      "text": "The idea of an autonomous discipline called \"philosophy,\" distinct from and sitting in judgment on such pursuits as theology and science turns out, on close examination, to be of quite recent origin.",
+      "source_pages": [
+        36
+      ]
+    },
+    {
+      "id": 104,
+      "source_number": 105,
+      "text": "They were fighting, albeit discreetly, to open the intellectual world to the new science and to liberate intellectual life from ecclesiastical philosophy and envisioned their work as contributing to the growth, not of philosophy, but of research in mathematics and physics.",
+      "source_pages": [
+        36
+      ]
+    },
+    {
+      "id": 105,
+      "source_number": 106,
+      "text": "But the recent discovery of detailed similarities in the skeletal structure of the flippers in all three groups undermines the attempt to explain away superficial resemblance as due to convergent evolution—the independent development of similarities between unrelated groups in response to similar environmental pressures.",
+      "source_pages": [
+        36
+      ]
+    },
+    {
+      "id": 106,
+      "source_number": 107,
+      "text": "Human genes contain too little information even to specify which hemisphere of the brain each of a human’s 10^11 neurons should occupy, let alone the hundreds of connections that each neuron makes.",
+      "source_pages": [
+        37
+      ]
+    },
+    {
+      "id": 107,
+      "source_number": 108,
+      "text": "For the woman who is a practitioner of feminist literary criticism, the subjectivity versus objectivity, or critic-as-artist-or-scientist, debate has special significance; for her, the question is not only academic, but political as well, and her definition will court special risks whichever side of the issue it favors.",
+      "source_pages": [
+        37
+      ]
+    },
+    {
+      "id": 108,
+      "source_number": 109,
+      "text": "If she defines feminist criticism as objective and scientific—a valid, verifiable, intellectual method that anyone, whether man or woman, can perform—the definition not only precludes the critic-as-artist approach, but may also impede accomplishment of the utilitarian political objectives of those who seek to change the academic establishment and its thinking, especially about sex roles.",
+      "source_pages": [
+        37
+      ]
+    },
+    {
+      "id": 109,
+      "source_number": 110,
+      "text": "These questions are political in the sense that the debate over them will inevitably be less an exploration of abstract matters in a spirit of disinterested inquiry than an academic power struggle in which the careers and professional fortunes of many women scholars—only now entering the academic profession in substantial numbers—will be at stake, and with them the chances for a distinctive contribution to humanistic understanding, a contribution that might be an important influence against sexism in our society.",
+      "source_pages": [
+        38
+      ]
+    },
+    {
+      "id": 110,
+      "source_number": 111,
+      "text": "Perhaps he believed that he could not criticize American foreign policy without endangering the support for civil rights that he had won from the federal government.",
+      "source_pages": [
+        38
+      ]
+    },
+    {
+      "id": 111,
+      "source_number": 112,
+      "text": "However, some broods possess a few snails of the opposing hand, and in predominantly sinistral broods, the incidence of dextrality is surprisingly high.",
+      "source_pages": [
+        38
+      ]
+    },
+    {
+      "id": 112,
+      "source_number": 113,
+      "text": "In experiments, an injection of cytoplasm from dextral eggs changes the pattern of sinistral eggs, but an injection from sinistral eggs does not influence dextral eggs.",
+      "source_pages": [
+        39
+      ]
+    },
+    {
+      "id": 113,
+      "source_number": 114,
+      "text": "Recently some scientists have concluded that meteorites found on Earth and long believed to have a Martian origin might actually have been blasted free of Mars’s gravity by the impact on Mars of other meteorites.",
+      "source_pages": [
+        39
+      ]
+    },
+    {
+      "id": 114,
+      "source_number": 115,
+      "text": "Under the force of this view, it was perhaps inevitable that the art of rhetoric should pass from the status of being regarded as of questionable worth (because although it might be both a source of pleasure and a means to urge people to right action, it might also be a means to distort truth and a source of misguided action) to the status of being wholly condemned.",
+      "source_pages": [
+        39
+      ]
+    },
+    {
+      "id": 115,
+      "source_number": 116,
+      "text": "None of these translations to screen and stage, however, dramatize the anarchy at the conclusion of A Connecticut Yankee, which ends with the violent overthrow of Morgan’s three-year-old progressive order and his return to the nineteenth century, where he apparently commits suicide after being labeled a lunatic for his incoherent babblings about drawbridges and battlements.",
+      "source_pages": [
+        39,
+        40
+      ]
+    },
+    {
+      "id": 116,
+      "source_number": 117,
+      "text": "Calculations of the density of alloys based on Bernal-type models of the alloy’s metal component agreed fairly well with the experimentally determined values from measurements on alloys consisting of a noble metal together with a metalloid, such as alloys of palladium and silicon, or alloys consisting of iron, phosphorus, and carbon, although small discrepancies remained.",
+      "source_pages": [
+        40
+      ]
+    },
+    {
+      "id": 117,
+      "source_number": 118,
+      "text": "And Walzer advocates as the means of eliminating this tyranny and of restoring genuine equality \"the abolition of the power of money outside its sphere\".",
+      "source_pages": [
+        40
+      ]
+    },
+    {
+      "id": 118,
+      "source_number": 119,
+      "text": "It is now established that the Milky Way is far more extended and of much greater mass than was hitherto thought.",
+      "source_pages": [
+        40
+      ]
+    },
+    {
+      "id": 119,
+      "source_number": 120,
+      "text": "Is it not tyrannical, in Pascal’s sense, to insist that those who excel in \"sensitivity\" or \"the ability to express compassion\" merit equal wealth with those who excel in qualities (such as \"the capacity for hard work\") essential in producing wealth?",
+      "source_pages": [
+        40
+      ]
+    },
+    {
+      "id": 120,
+      "source_number": 121,
+      "text": "Yet Walzer’s argument, however deficient, does point to one of the most serious weaknesses of capitalism—namely, that it brings to predominant positions in a society people who, no matter how legitimately they have earned their material rewards, often lack those other qualities that evoke affection or admiration.",
+      "source_pages": [
+        40,
+        41
+      ]
+    },
+    {
+      "id": 121,
+      "source_number": 122,
+      "text": "The appreciation of traditional oral American Indian literature has been limited, hampered by poor translations and by the difficulty, even in the rare culturally sensitive and aesthetically satisfying translation, of completely conveying the original’s verse structure, tone, and syntax.",
+      "source_pages": [
+        41
+      ]
+    },
+    {
+      "id": 122,
+      "source_number": 123,
+      "text": "Mores, which embodied each culture’s ideal principles for governing every citizen, were developed in the belief that the foundation of a community lies in the cultivation of individual powers to be placed in service to the community.",
+      "source_pages": [
+        41
+      ]
+    },
+    {
+      "id": 123,
+      "source_number": 124,
+      "text": "Only in the case of the February Revolution do we lack a useful description of participants that might characterize it in the light of what social history has taught us about the process of revolutionary mobilization.",
+      "source_pages": [
+        41
+      ]
+    },
+    {
+      "id": 124,
+      "source_number": 125,
+      "text": "As a consequence, it may prove difficult or impossible to establish for a successful revolution a comprehensive and trustworthy picture of those who participated, or to answer even the most basic questions one might pose concerning the social origins of the insurgents.",
+      "source_pages": [
+        42
+      ]
+    },
+    {
+      "id": 125,
+      "source_number": 126,
+      "text": "Anthropologists and others are on much firmer ground when they attempt to describe the cultural norms for a small homogeneous tribe or village than when they undertake the formidable task of discovering the norms that exist in a complex modern nation state composed of many disparate groups.",
+      "source_pages": [
+        42
+      ]
+    },
+    {
+      "id": 126,
+      "source_number": 127,
+      "text": "The Italian influence is likely, whatever Valdez’s immediate source: the Mexican carpas themselves are said to have originated from the theater pieces of a sixteenth-century Spanish writer inspired by encounters with Italian commedia dell’arte troupes on tour in Spain.",
+      "source_pages": [
+        42
+      ]
+    },
+    {
+      "id": 127,
+      "source_number": 128,
+      "text": "It has thus generally been by way of the emphasis on oral literary creativity that these Chicano writers, whose English language works are sometimes uninspired, developed the powerful and arresting language that characterized their Spanish-language works.",
+      "source_pages": [
+        43
+      ]
+    },
+    {
+      "id": 128,
+      "source_number": 129,
+      "text": "To measure them properly, monitoring equipment would have to be laid out on a grid at intervals of at most 50 kilometers, with sensors at each grid point lowered deep in the ocean and kept there for many months.",
+      "source_pages": [
+        43
+      ]
+    },
+    {
+      "id": 129,
+      "source_number": 130,
+      "text": "This declaration, which was echoed in the text of the Fourteenth Amendment, was designed primarily to counter the Supreme Court’s ruling in Dred Scott v. Sandford that Black people in the United States could be denied citizenship.",
+      "source_pages": [
+        43
+      ]
+    },
+    {
+      "id": 130,
+      "source_number": 131,
+      "text": "The broad language of the amendment strongly suggests that its framers were proposing to write into the Constitution not a laundry list of specific civil rights but a principle of equal citizenship that forbids organized society from treating any individual as a member of an inferior class.",
+      "source_pages": [
+        43
+      ]
+    },
+    {
+      "id": 131,
+      "source_number": 132,
+      "text": "This doctrine has broadened the application of the Fourteenth Amendment to other, nonracial forms of discrimination, for while some justices have refused to find any legislative classification other than race to be constitutionally disfavored, most have been receptive to arguments that at least some nonracial discriminations, sexual discrimination in particular, are \"suspect\" and deserve this heightened scrutiny by the courts.",
+      "source_pages": [
+        43
+      ]
+    }
+  ]
+}

@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from .home_page import HomePage
+from .long_sentence_page import LongSentencePage
 from .settings_dialog import SettingsDialog
 from .study_page import StudyPage
 from .lookup_dialog import LookupDialog
@@ -37,6 +38,7 @@ _QT_INT_MAX = 2**31 - 1
 class MainWindow(QMainWindow):
     homeRequested = Signal()
     wordListRequested = Signal()
+    longSentencesRequested = Signal()
     findRequested = Signal()
     closing = Signal(object)
 
@@ -52,9 +54,11 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         self.home_page = HomePage()
+        self.long_sentence_page = LongSentencePage()
         self.word_list_page = WordListPage()
         self.study_page = StudyPage()
         self.stack.addWidget(self.home_page)
+        self.stack.addWidget(self.long_sentence_page)
         self.stack.addWidget(self.word_list_page)
         self.stack.addWidget(self.study_page)
         self.setCentralWidget(self.stack)
@@ -93,6 +97,10 @@ class MainWindow(QMainWindow):
         self.home_action.triggered.connect(self.homeRequested.emit)
         self.word_list_action.triggered.connect(self.wordListRequested.emit)
         self.home_page.wordListRequested.connect(self.wordListRequested.emit)
+        self.home_page.longSentencesRequested.connect(
+            self.longSentencesRequested.emit
+        )
+        self.long_sentence_page.backRequested.connect(self.homeRequested.emit)
 
         self.find_shortcut = QShortcut(QKeySequence.StandardKey.Find, self)
         # Window scope keeps Ctrl+F global inside this product window while
@@ -113,6 +121,11 @@ class MainWindow(QMainWindow):
 
     def show_study(self) -> None:
         self.stack.setCurrentWidget(self.study_page)
+        self.home_action.setChecked(False)
+        self.word_list_action.setChecked(False)
+
+    def show_long_sentences(self) -> None:
+        self.stack.setCurrentWidget(self.long_sentence_page)
         self.home_action.setChecked(False)
         self.word_list_action.setChecked(False)
 

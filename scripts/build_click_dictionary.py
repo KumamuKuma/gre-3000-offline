@@ -683,7 +683,28 @@ def _rank(row: dict[str, str]) -> tuple[int, int, int, str]:
     return (min(score("frq"), score("bnc")), len(word), word.count(" "), word)
 
 
-def _target_tokens(words_path: Path) -> set[str]:
+def _long_sentence_tokens(sentences_path: Path) -> set[str]:
+    payload = json.loads(sentences_path.read_text(encoding="utf-8"))
+    sentences = payload.get("sentences")
+    if (
+        payload.get("schema") != "gre-long-sentences"
+        or payload.get("version") != 1
+        or not isinstance(sentences, list)
+        or payload.get("count") != len(sentences)
+    ):
+        raise ValueError("unsupported long-sentence data format")
+    return {
+        match.group(0).lower().replace("’", "'")
+        for sentence in sentences
+        if isinstance(sentence, dict)
+        for match in TOKEN.finditer(str(sentence.get("text", "")))
+    }
+
+
+def _target_tokens(
+    words_path: Path,
+    long_sentences_path: Path | None = None,
+) -> set[str]:
     payload = json.loads(words_path.read_text(encoding="utf-8"))
     fields = (
         "word",
@@ -691,12 +712,15 @@ def _target_tokens(words_path: Path) -> set[str]:
         "synonyms",
         "example_en",
     )
-    return {
+    targets = {
         match.group(0).lower().replace("’", "'")
         for word in payload["words"]
         for field in fields
         for match in TOKEN.finditer(str(word.get(field, "")))
     }
+    if long_sentences_path is not None:
+        targets.update(_long_sentence_tokens(long_sentences_path))
+    return targets
 
 
 def build_dictionary(
@@ -707,10 +731,11 @@ def build_dictionary(
     wordnet_path: Path | None = None,
     cow_path: Path | None = None,
     cow_overrides_path: Path | None = None,
+    long_sentences_path: Path | None = None,
 ) -> dict[str, int]:
     if cow_path is not None and wordnet_path is None:
         raise ValueError("Chinese Open Wordnet requires a WordNet 3.0 source")
-    targets = _target_tokens(words_path)
+    targets = _target_tokens(words_path, long_sentences_path)
     wordnet_senses = _wordnet_sense_index(wordnet_path)
     cow_translations = _cow_translation_index(cow_path)
     cow_translations.update(
@@ -884,6 +909,14 @@ def main() -> int:
         description="Build the compact offline click-to-lookup dictionary."
     )
     parser.add_argument("--words", required=True, type=Path)
+    parser.add_argument(
+        "--long-sentences",
+        type=Path,
+        help=(
+            "Optional gre-long-sentences v1 JSON. English tokens from every "
+            "sentence are added to the offline click-dictionary targets."
+        ),
+    )
     parser.add_argument("--ecdict", required=True, type=Path)
     parser.add_argument(
         "--wordnet",
@@ -937,6 +970,7 @@ def main() -> int:
         wordnet_path=args.wordnet,
         cow_path=cow_path,
         cow_overrides_path=cow_overrides_path,
+        long_sentences_path=args.long_sentences,
     )
     print(json.dumps(summary, ensure_ascii=False))
     return 0

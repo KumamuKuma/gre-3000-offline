@@ -23,6 +23,7 @@ from gre_vocab_app.services.cloud_sync import (
     upload_progress,
 )
 from gre_vocab_app.services.dictionary import DictionaryService
+from gre_vocab_app.services.long_sentences import LongSentenceService
 from gre_vocab_app.services.translation import TranslationService
 from gre_vocab_app.services.speech import ONLINE_VOICE_NAME
 from gre_vocab_app.ui.main_window import MainWindow
@@ -44,6 +45,7 @@ class ApplicationController:
         speech_service: Any,
         dictionary_service: Any | None = None,
         translation_service: Any | None = None,
+        long_sentence_service: Any | None = None,
     ):
         self.window = window
         self.content = content_repository
@@ -53,6 +55,8 @@ class ApplicationController:
         self.speech = speech_service
         self.dictionary = dictionary_service or DictionaryService()
         self.translation = translation_service or TranslationService()
+        self.long_sentences = long_sentence_service or LongSentenceService()
+        self._long_sentences_loaded = False
         self._translation_request_id: int | None = None
         self._detail_snapshot: SessionSnapshot | None = None
         self._detail_origin = "home"
@@ -107,6 +111,12 @@ class ApplicationController:
         study_page.selectionTranslationRequested.connect(
             self._lookup_selection
         )
+        self.window.long_sentence_page.lookupRequested.connect(
+            self._lookup_text
+        )
+        self.window.long_sentence_page.selectionTranslationRequested.connect(
+            self._lookup_selection
+        )
         self.window.lookup_dialog.translateRequested.connect(
             self._translate_lookup
         )
@@ -132,6 +142,7 @@ class ApplicationController:
 
         self.window.homeRequested.connect(self._show_home)
         self.window.wordListRequested.connect(self._open_word_list)
+        self.window.longSentencesRequested.connect(self._open_long_sentences)
         self.window.findRequested.connect(self._find_home)
         self.window.closing.connect(self._handle_close)
         self.window.enable_close_guard()
@@ -443,6 +454,23 @@ class ApplicationController:
         self._detail_snapshot = None
         self._refresh_word_list()
         self.window.show_word_list()
+
+    def _open_long_sentences(self) -> None:
+        self._clear_quiz_word_return()
+        self._detail_snapshot = None
+        if not self._long_sentences_loaded:
+            try:
+                sentences = self.long_sentences.load()
+            except (OSError, ValueError, json.JSONDecodeError) as error:
+                LOGGER.exception("Unable to read bundled long sentences")
+                self.window.long_sentence_page.set_error(
+                    "长难句内容暂时无法读取，请确认应用文件完整后重新打开。"
+                )
+                self._show_status(f"长难句内容暂时无法读取：{error}")
+            else:
+                self.window.long_sentence_page.set_sentences(sentences)
+            self._long_sentences_loaded = True
+        self.window.show_long_sentences()
 
     def _find_home(self) -> None:
         self._show_home()

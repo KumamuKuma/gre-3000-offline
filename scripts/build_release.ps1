@@ -84,6 +84,7 @@ $StagedAuditHtml = Join-Path $RepoRoot "build\audit\词库导入审计报告.htm
 $IconSvg = Join-Path $RepoRoot "resources\app.svg"
 $IconIco = Join-Path $RepoRoot "resources\app.ico"
 $ClickDictionary = Join-Path $RepoRoot "resources\click_dictionary.json"
+$LongSentences = Join-Path $RepoRoot "resources\long_sentences.json"
 $EcdictLicense = Join-Path $RepoRoot "resources\ECDICT-LICENSE.txt"
 $WordNetLicense = Join-Path $RepoRoot "resources\WORDNET-LICENSE.txt"
 $CowLicense = Join-Path $RepoRoot "resources\COW-LICENSE.txt"
@@ -113,7 +114,7 @@ $ExpectedOutputNames = @(
     "词库导入审计报告.html"
 )
 $SmokeProfile = Join-Path $RepoRoot "build\smoke-profile"
-$ReleaseVersion = "0.8.3"
+$ReleaseVersion = "0.9.0"
 $ExpectedTitle = "GRE 3000 Vocabulary Trainer"
 $Amd64Machine = "0x8664"
 $WindowsGuiSubsystem = "2"
@@ -124,6 +125,7 @@ foreach ($requiredFile in @(
     $Spec,
     $IconSvg,
     $ClickDictionary,
+    $LongSentences,
     $EcdictLicense,
     $WordNetLicense,
     $CowLicense,

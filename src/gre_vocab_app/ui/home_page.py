@@ -195,6 +195,7 @@ class HomePage(QWidget):
     machine7FilterChanged = Signal(bool)
     listCompletionAdjustmentRequested = Signal(str, int)
     wordListRequested = Signal()
+    longSentencesRequested = Signal()
     wordSelected = Signal(object)
 
     def __init__(self, parent: QWidget | None = None):
@@ -229,6 +230,13 @@ class HomePage(QWidget):
         hero_copy.addWidget(eyebrow)
         hero_copy.addWidget(title)
         hero_copy.addWidget(subtitle)
+        self.long_sentence_button = QPushButton("打开杨鹏阅读长难句  →")
+        self.long_sentence_button.setObjectName("heroActionButton")
+        self.long_sentence_button.setAccessibleName("打开杨鹏阅读长难句")
+        self.long_sentence_button.clicked.connect(
+            self.longSentencesRequested.emit
+        )
+        hero_copy.addWidget(self.long_sentence_button, 0, Qt.AlignLeft)
         hero_copy.addStretch(1)
         hero_layout.addLayout(hero_copy, 5)
 

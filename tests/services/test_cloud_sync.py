@@ -52,7 +52,7 @@ def test_cloud_sync_uploads_and_downloads_progress(monkeypatch):
         "schema": "gre-vocab-progress"
     }
     assert calls[0][0].headers["Authorization"] == f"Bearer {token}"
-    assert calls[0][0].headers["User-agent"] == "GRE-3000-Windows/0.8.3"
+    assert calls[0][0].headers["User-agent"] == "GRE-3000-Windows/0.9.0"
     assert calls[0][1] == 15
 
 

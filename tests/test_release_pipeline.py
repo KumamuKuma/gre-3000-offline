@@ -87,10 +87,12 @@ def test_release_bundles_the_offline_click_dictionary_and_license():
     spec = (ROOT / "pysidedeploy.spec").read_text(encoding="utf-8")
 
     assert '"resources\\click_dictionary.json"' in script
+    assert '"resources\\long_sentences.json"' in script
     assert '"resources\\ECDICT-LICENSE.txt"' in script
     assert '"resources\\WORDNET-LICENSE.txt"' in script
     assert '"resources\\COW-LICENSE.txt"' in script
     assert "resources/click_dictionary.json=gre_vocab_app/data/click_dictionary.json" in spec
+    assert "resources/long_sentences.json=gre_vocab_app/data/long_sentences.json" in spec
     assert "resources/ECDICT-LICENSE.txt=gre_vocab_app/data/ECDICT-LICENSE.txt" in spec
     assert "resources/WORDNET-LICENSE.txt=gre_vocab_app/data/WORDNET-LICENSE.txt" in spec
     assert "resources/COW-LICENSE.txt=gre_vocab_app/data/COW-LICENSE.txt" in spec
@@ -112,7 +114,7 @@ def test_release_script_embeds_and_verifies_windows_version_metadata():
         encoding="utf-8-sig"
     )
 
-    assert '$ReleaseVersion = "0.8.3"' in script
+    assert '$ReleaseVersion = "0.9.0"' in script
     assert '"--product-name=$ExpectedTitle"' in script
     assert '"--file-description=$ExpectedTitle"' in script
     assert '"--file-version=$ReleaseVersion"' in script

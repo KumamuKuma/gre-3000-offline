@@ -11,7 +11,7 @@ import {
 import { dictionaryEntryForDisplay } from "./dictionary-senses";
 
 type StudyMode = "reading" | "brief" | "recall" | "quiz";
-type Screen = "home" | "study" | "words" | "settings";
+type Screen = "home" | "study" | "sentences" | "words" | "settings";
 
 type SourceList = {
   key: string;
@@ -46,6 +46,19 @@ type ContentPayload = {
   record_count: number;
   lists: SourceList[];
   words: WordEntry[];
+};
+
+type LongSentence = {
+  id: number;
+  source_number: number;
+  text: string;
+  source_pages: number[];
+};
+
+type LongSentencePayload = {
+  schema: "gre-long-sentences";
+  version: 1;
+  sentences: LongSentence[];
 };
 
 type ListProgress = { completed_count: number; current_word_id: number | null };
@@ -495,6 +508,9 @@ export default function Home() {
   const [grePreviewWordId, setGrePreviewWordId] = useState<number | null>(null);
   const [selectionText, setSelectionText] = useState("");
   const [wordListWindow, setWordListWindow] = useState({ key: "", limit: WORD_LIST_BATCH_SIZE });
+  const [longSentences, setLongSentences] = useState<LongSentencePayload | null>(null);
+  const [longSentencesStatus, setLongSentencesStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [longSentenceIndex, setLongSentenceIndex] = useState(0);
   const importRef = useRef<HTMLInputElement>(null);
   const loadedSyncCode = useRef("");
   const firstCloudUploadNoticeShown = useRef(false);
@@ -505,6 +521,13 @@ export default function Home() {
     y: number;
     startedAt: number;
   } | null>(null);
+  const sentenceSwipeStart = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    startedAt: number;
+  } | null>(null);
+  const sentenceLookupBlockedUntil = useRef(0);
 
   useEffect(() => {
     fetch("/data/words.json")
@@ -550,7 +573,7 @@ export default function Home() {
         .then((registration) => registration.update())
         .catch(() => undefined);
     }
-    fetch("/data/click_dictionary.json?v=4", { cache: "no-store" })
+    fetch("/data/click_dictionary.json?v=5", { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
@@ -566,6 +589,33 @@ export default function Home() {
         navigator.serviceWorker.removeEventListener("controllerchange", reloadForWorkerUpdate);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    fetch("/data/long_sentences.json")
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((payload: LongSentencePayload) => {
+        const validSentences = Array.isArray(payload.sentences)
+          && payload.sentences.length > 0
+          && payload.sentences.every((sentence, index) => (
+            sentence.id === index + 1
+            && Number.isInteger(sentence.source_number)
+            && typeof sentence.text === "string"
+            && Boolean(sentence.text.trim())
+            && Array.isArray(sentence.source_pages)
+            && sentence.source_pages.length > 0
+            && sentence.source_pages.every((page) => Number.isInteger(page) && page > 0)
+          ));
+        if (payload.schema !== "gre-long-sentences" || payload.version !== 1 || !validSentences) {
+          throw new Error("长难句数据校验失败");
+        }
+        setLongSentences(payload);
+        setLongSentencesStatus("ready");
+      })
+      .catch(() => setLongSentencesStatus("error"));
   }, []);
 
   useEffect(() => {
@@ -635,6 +685,26 @@ export default function Home() {
   useEffect(() => {
     if (hydrated && progress) localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
   }, [hydrated, progress]);
+
+  useEffect(() => {
+    if (screen !== "sentences" || lookup || grePreviewWordId || !longSentences) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || window.getSelection()?.toString().trim()) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("button, a, input, select, textarea, [contenteditable='true']")) return;
+      event.preventDefault();
+      const delta = event.key === "ArrowRight" ? 1 : -1;
+      setLongSentenceIndex((current) => Math.max(0, Math.min(longSentences.sentences.length - 1, current + delta)));
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [grePreviewWordId, longSentences, lookup, screen]);
+
+  useEffect(() => {
+    if (screen !== "sentences") return;
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [longSentenceIndex, screen]);
 
   useEffect(() => {
     if (!hydrated || !data) return;
@@ -973,6 +1043,53 @@ export default function Home() {
     move(deltaX < 0 ? 1 : -1);
   }
 
+  function openLongSentences() {
+    if (!longSentences) {
+      setNotice(longSentencesStatus === "error" ? "长难句内容载入失败，请刷新后重试。" : "长难句内容正在载入，请稍候。");
+      return;
+    }
+    setLongSentenceIndex((current) => Math.max(0, Math.min(longSentences.sentences.length - 1, current)));
+    setScreen("sentences");
+  }
+
+  function moveLongSentence(delta: number) {
+    if (!longSentences) return;
+    setLongSentenceIndex((current) => Math.max(0, Math.min(longSentences.sentences.length - 1, current + delta)));
+  }
+
+  function startSentenceSwipe(event: PointerEvent<HTMLElement>) {
+    const target = event.target instanceof Element ? event.target : null;
+    if (event.pointerType === "mouse" || target?.closest("button, a, input, select, textarea, label")) {
+      sentenceSwipeStart.current = null;
+      return;
+    }
+    sentenceSwipeStart.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      startedAt: Date.now(),
+    };
+  }
+
+  function finishSentenceSwipe(event: PointerEvent<HTMLElement>) {
+    captureSelection(event);
+    const start = sentenceSwipeStart.current;
+    sentenceSwipeStart.current = null;
+    if (!start || start.pointerId !== event.pointerId) return;
+    if (window.getSelection()?.toString().trim()) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    const elapsed = Date.now() - start.startedAt;
+    if (
+      elapsed > 800
+      || Math.abs(deltaX) < 72
+      || Math.abs(deltaX) < Math.abs(deltaY) * 1.35
+    ) return;
+    event.preventDefault();
+    sentenceLookupBlockedUntil.current = Date.now() + 400;
+    moveLongSentence(deltaX < 0 ? 1 : -1);
+  }
+
   function cycleStar(word: WordEntry) {
     updateProgress((current) => {
       const stars = { ...current.stars };
@@ -1019,6 +1136,7 @@ export default function Home() {
   }
 
   function openLookup(queryText: string) {
+    if (screen === "sentences" && Date.now() < sentenceLookupBlockedUntil.current) return;
     const normalized = normalizeLookupQuery(queryText);
     if (!normalized) return;
     const greWord = wordByHeadword.get(normalized);
@@ -1237,6 +1355,7 @@ export default function Home() {
     ? dictionaryEntryForDisplay(lookup.offlineSenses, lookup.offlineTranslation)
     : { senses: [], summaryTranslation: "" };
   const displayedLookupSenses = displayedLookup.senses;
+  const activeLongSentence = longSentences?.sentences[longSentenceIndex] ?? null;
 
   return (
     <main className="app-shell">
@@ -1257,6 +1376,16 @@ export default function Home() {
             <h1>按自己的节奏，<br />把难词变成熟词。</h1>
             <p>保持原书 List 顺序，标注真正需要反复见面的词。</p>
           </div>
+
+          <button className="sentence-entry" onClick={openLongSentences}>
+            <span className="sentence-entry-icon">Aa</span>
+            <span>
+              <small>LONG SENTENCE READING</small>
+              <strong>杨鹏 GRE 长难句</strong>
+              <em>{longSentences ? `${longSentences.sentences.length} 句 · 一页一句 · 每词可查` : longSentencesStatus === "error" ? "内容载入失败，请刷新重试" : "正在载入内容…"}</em>
+            </span>
+            <b>进入 →</b>
+          </button>
 
           <div className="metric-row">
             <div className="metric"><strong>{data.record_count.toLocaleString()}</strong><span>词条</span></div>
@@ -1320,6 +1449,38 @@ export default function Home() {
             <span className="install-icon">＋</span>
             <div><strong>像 App 一样使用</strong><p>在 Safari 点“分享”→“添加到主屏幕”，首次打开后可离线学习。</p></div>
           </section>
+        </section>
+      )}
+
+      {screen === "sentences" && longSentences && activeLongSentence && (
+        <section className="page sentence-page">
+          <div className="study-meta sentence-meta">
+            <button onClick={() => setScreen("home")}>← 回首页</button>
+            <span>{longSentenceIndex + 1} / {longSentences.sentences.length}</span>
+          </div>
+          <div className="progress-track"><span style={{ width: `${((longSentenceIndex + 1) / longSentences.sentences.length) * 100}%` }} /></div>
+          <p className="swipe-hint">← 左右滑动切换句子 →</p>
+
+          <article
+            className="sentence-card"
+            onPointerDown={startSentenceSwipe}
+            onPointerUp={finishSentenceSwipe}
+            onPointerCancel={() => { sentenceSwipeStart.current = null; }}
+          >
+            <div className="sentence-flags">
+              <span>LONG SENTENCE</span>
+              <em>原书第 {activeLongSentence.source_number} 句</em>
+            </div>
+            <p className="sentence-source">PDF 第 {activeLongSentence.source_pages.join("、")} 页</p>
+            <p className="sentence-text"><LookupText text={activeLongSentence.text} onLookup={openLookup} /></p>
+            <div className="sentence-lookup-hint"><span>点词即查</span><p>点击任意英文单词，优先查看离线中文释义、英文义项、例句和常用词组；未收录词可主动联网翻译。</p></div>
+          </article>
+
+          <div className="sentence-actions">
+            <button onClick={() => moveLongSentence(-1)} disabled={longSentenceIndex === 0}>← 上一句</button>
+            <button className="next" onClick={() => moveLongSentence(1)} disabled={longSentenceIndex === longSentences.sentences.length - 1}>下一句 →</button>
+          </div>
+          <p className="sentence-keyboard-hint">电脑可用 ← → 方向键翻页</p>
         </section>
       )}
 
@@ -1646,7 +1807,7 @@ export default function Home() {
       )}
 
       <nav className="bottom-nav" aria-label="主导航">
-        <button className={screen === "home" || screen === "study" ? "active" : ""} onClick={() => setScreen("home")}><span>⌂</span>学习</button>
+        <button className={screen === "home" || screen === "study" || screen === "sentences" ? "active" : ""} onClick={() => setScreen("home")}><span>⌂</span>学习</button>
         <button className={screen === "words" ? "active" : ""} onClick={() => setScreen("words")}><span>≡</span>词表</button>
         <button className={screen === "settings" ? "active" : ""} onClick={() => setScreen("settings")}><span>⚙</span>设置</button>
       </nav>

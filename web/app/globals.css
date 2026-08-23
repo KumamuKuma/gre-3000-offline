@@ -113,6 +113,15 @@ button { color: inherit; }
 .sentence-flags em { padding: 5px 8px; color: var(--orange); background: var(--orange-soft); border-radius: 99px; font-size: 9px; font-style: normal; font-weight: 750; }
 .sentence-source { margin: 10px 0 0; color: var(--muted); font-size: 10px; }
 .sentence-text { margin: 30px 0 34px; color: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: clamp(23px, 6.4vw, 34px); line-height: 1.72; letter-spacing: -.012em; }
+.sentence-notes { margin-bottom: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.sentence-notes-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+.sentence-notes-heading span { color: var(--green); font-size: 10px; font-weight: 850; letter-spacing: .12em; }
+.sentence-notes-heading em { padding: 4px 8px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; background: rgba(255,255,255,.72); font-size: 9px; font-style: normal; font-weight: 750; }
+.sentence-notes-list { display: grid; gap: 10px; max-height: min(54dvh, 560px); padding-right: 5px; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #cfc6b7 transparent; scrollbar-width: thin; }
+.sentence-note { padding: 15px 16px; border: 1px solid #e8e1d5; border-radius: 15px; background: rgba(255,255,255,.72); }
+.sentence-note h2 { margin: 0; color: var(--orange); font-size: 11px; line-height: 1.6; letter-spacing: .05em; }
+.sentence-note p { margin: 8px 0 0; color: #3f4859; font-size: 13px; line-height: 1.9; }
+.sentence-note-text { display: block; overflow-wrap: anywhere; white-space: pre-wrap; }
 .sentence-lookup-hint { margin-top: auto; padding-top: 18px; border-top: 1px solid var(--line); }
 .sentence-lookup-hint span { color: var(--orange); font-size: 9px; font-weight: 850; letter-spacing: .13em; }
 .sentence-lookup-hint p { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
@@ -284,6 +293,9 @@ button.signout { padding: 0; border: 0; background: transparent; cursor: pointer
   .install-card { grid-column: 1 / -1; grid-row: 4; }
   .sentence-card { min-height: min(62vh, 590px); padding: 30px 32px; }
   .sentence-text { margin-top: 38px; font-size: clamp(29px, 4.8vw, 38px); }
+  .sentence-notes-list { max-height: min(58vh, 620px); }
+  .sentence-note { padding: 18px 20px; }
+  .sentence-note p { font-size: 14px; }
   .word-main small { max-width: 420px; }
   .lookup-backdrop { align-items: center; padding: 20px; }
   .lookup-sheet { max-height: min(86vh, 760px); border-radius: 25px; padding-bottom: 20px; }

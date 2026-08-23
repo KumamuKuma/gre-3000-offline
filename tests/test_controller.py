@@ -12,7 +12,7 @@ from gre_vocab_app.db.user import QueueState, UserRepository
 from gre_vocab_app.domain import BrowseOrder, SourceList, StudyMode, WordEntry
 from gre_vocab_app.services.search import SearchService
 from gre_vocab_app.services.dictionary import LookupResult
-from gre_vocab_app.services.long_sentences import LongSentence
+from gre_vocab_app.services.long_sentences import LongSentence, LongSentenceNote
 from gre_vocab_app.services.study import StudySession
 from gre_vocab_app.ui.main_window import MainWindow
 
@@ -306,7 +306,13 @@ def make_controller(
 def test_controller_opens_long_sentences_and_reuses_dictionary_lookup(qtbot):
     long_sentence_service = Mock()
     long_sentence_service.load.return_value = (
-        LongSentence(1, 1, "Although it was difficult, we continued.", (4,)),
+        LongSentence(
+            1,
+            1,
+            "Although it was difficult, we continued.",
+            (4,),
+            (LongSentenceNote("解释", "The difficult clause is concessive."),),
+        ),
     )
     dictionary_service = Mock()
     dictionary_service.lookup.return_value = LookupResult(
@@ -331,6 +337,10 @@ def test_controller_opens_long_sentences_and_reuses_dictionary_lookup(qtbot):
     window.long_sentence_page.sentence_label._activate_link("lookup:Although")
     dictionary_service.lookup.assert_called_once_with("Although")
     assert window.lookup_dialog.query_label.text() == "although"
+
+    dictionary_service.reset_mock()
+    window.long_sentence_page.note_labels[0]._activate_link("lookup:concessive")
+    dictionary_service.lookup.assert_called_once_with("concessive")
 
     window.long_sentence_page.back_button.click()
     assert window.stack.currentWidget() is window.home_page

@@ -143,6 +143,32 @@ QLabel#longSentenceText {
     font-size: 21px;
     font-weight: 560;
 }
+QLabel#longSentenceNotesHeading {
+    color: #334155;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 17px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+QFrame#longSentenceNoteCard {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 13px;
+}
+QLabel#longSentenceNoteLabel {
+    color: #4338ca;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 8px;
+    padding: 4px 9px;
+    font-size: 12px;
+    font-weight: 800;
+}
+QLabel#longSentenceNoteText {
+    color: #253047;
+    font-size: 15px;
+}
 QFrame#quizAutomationBar {
     background: #fff7ed;
     border: 1px solid #fed7aa;

@@ -31,8 +31,8 @@ def test_checked_in_click_dictionaries_are_identical_complete_version_two_data()
     payload = json.loads(native_bytes)
     assert payload["schema"] == "gre-click-dictionary"
     assert payload["version"] == 2
-    assert payload["entry_count"] == len(payload["entries"]) == 12_060
-    assert payload["target_count"] == 12_350
+    assert payload["entry_count"] == len(payload["entries"]) == 12_128
+    assert payload["target_count"] == 12_484
     assert payload["sources"] == [
         {"name": "ECDICT", "role": "词条与词性级中文汇总"},
         {"name": "Princeton WordNet 3.0", "role": "英文义项与例句"},
@@ -52,22 +52,22 @@ def test_checked_in_click_dictionaries_are_identical_complete_version_two_data()
         for sense in entry["senses"]
     ]
     examples = [example for sense in senses for example in sense["examples"]]
-    assert len(senses) == 33_291
-    assert len(examples) == 38_282
+    assert len(senses) == 33_433
+    assert len(examples) == 38_433
     assert all(sense["translation"] or sense["definition"] for sense in senses)
     assert all(example["text"] and example["source"] for example in examples)
     assert sum(
         bool(sense["translation"] and sense["definition"])
         for sense in senses
-    ) == 14_167
+    ) == 14_214
     assert sum(
         example["source"] == "Princeton WordNet 3.0"
         for example in examples
-    ) == 20_608
+    ) == 20_654
     assert sum(
         example["source"] == "释义语境（非语料例句）"
         for example in examples
-    ) == 17_674
+    ) == 17_779
 
     entries = payload["entries"]
     expected_curated_translations = {

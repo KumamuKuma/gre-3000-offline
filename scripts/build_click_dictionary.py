@@ -688,17 +688,42 @@ def _long_sentence_tokens(sentences_path: Path) -> set[str]:
     sentences = payload.get("sentences")
     if (
         payload.get("schema") != "gre-long-sentences"
-        or payload.get("version") != 1
+        or payload.get("version") != 2
         or not isinstance(sentences, list)
         or payload.get("count") != len(sentences)
     ):
         raise ValueError("unsupported long-sentence data format")
-    return {
-        match.group(0).lower().replace("’", "'")
-        for sentence in sentences
-        if isinstance(sentence, dict)
-        for match in TOKEN.finditer(str(sentence.get("text", "")))
-    }
+
+    tokens: set[str] = set()
+    for sentence in sentences:
+        if not isinstance(sentence, dict):
+            raise ValueError("unsupported long-sentence data format")
+        text = sentence.get("text")
+        notes = sentence.get("notes")
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("unsupported long-sentence data format")
+        if not isinstance(notes, list) or not notes:
+            raise ValueError("unsupported long-sentence data format")
+
+        fields = [text]
+        for note in notes:
+            if (
+                not isinstance(note, dict)
+                or set(note) != {"label", "text"}
+                or not isinstance(note.get("label"), str)
+                or not note["label"].strip()
+                or not isinstance(note.get("text"), str)
+                or not note["text"].strip()
+            ):
+                raise ValueError("unsupported long-sentence data format")
+            fields.extend((note["label"], note["text"]))
+
+        tokens.update(
+            match.group(0).lower().replace("’", "'")
+            for field in fields
+            for match in TOKEN.finditer(field)
+        )
+    return tokens
 
 
 def _target_tokens(
@@ -913,8 +938,9 @@ def main() -> int:
         "--long-sentences",
         type=Path,
         help=(
-            "Optional gre-long-sentences v1 JSON. English tokens from every "
-            "sentence are added to the offline click-dictionary targets."
+            "Optional gre-long-sentences v2 JSON. English tokens from every "
+            "sentence and annotation are added to the offline "
+            "click-dictionary targets."
         ),
     )
     parser.add_argument("--ecdict", required=True, type=Path)

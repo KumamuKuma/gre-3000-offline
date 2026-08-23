@@ -1,11 +1,11 @@
-const CACHE = "gre-3000-pwa-v21";
+const CACHE = "gre-3000-pwa-v22";
 const CORE = [
   "/",
   "/manifest.webmanifest",
   "/icon.svg",
   "/data/words.json",
-  "/data/long_sentences.json",
-  "/data/click_dictionary.json?v=5",
+  "/data/long_sentences.json?v=2",
+  "/data/click_dictionary.json?v=6",
   "/ECDICT-LICENSE.txt",
   "/WORDNET-LICENSE.txt",
   "/COW-LICENSE.txt",

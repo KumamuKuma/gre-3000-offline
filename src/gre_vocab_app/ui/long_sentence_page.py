@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtCore import QEvent, QTimer, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -15,12 +15,13 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from gre_vocab_app.services.long_sentences import LongSentence
+from gre_vocab_app.services.long_sentences import LongSentence, LongSentenceNote
 
 from .lookup_label import LookupLabel
 
@@ -71,6 +72,8 @@ class LongSentencePage(QWidget):
         self.reader = QScrollArea()
         self.reader.setObjectName("longSentenceReader")
         self.reader.setWidgetResizable(True)
+        self.reader.setFrameShape(QFrame.NoFrame)
+        self.reader.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         card = QFrame(objectName="longSentenceCard")
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(34, 30, 34, 30)
@@ -79,11 +82,10 @@ class LongSentencePage(QWidget):
         self.source_label.setObjectName("sourceBadge")
         self.source_label.setAlignment(Qt.AlignCenter)
         card_layout.addWidget(self.source_label, 0, Qt.AlignLeft)
-        card_layout.addStretch(1)
         self.sentence_label = LookupLabel()
         self.sentence_label.setObjectName("longSentenceText")
         self.sentence_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.sentence_label.setMinimumHeight(190)
+        self.sentence_label.setMinimumHeight(150)
         self.sentence_label.setToolTip(
             "点击单词优先查看离线释义；未收录词可联网翻译；"
             "拖动选择可翻译整段文字"
@@ -93,6 +95,18 @@ class LongSentencePage(QWidget):
             self.selectionTranslationRequested.emit
         )
         card_layout.addWidget(self.sentence_label)
+
+        self.notes_heading = QLabel("原书讲解")
+        self.notes_heading.setObjectName("longSentenceNotesHeading")
+        card_layout.addWidget(self.notes_heading)
+        self.notes_container = QWidget()
+        self.notes_container.setObjectName("longSentenceNotes")
+        self.notes_layout = QVBoxLayout(self.notes_container)
+        self.notes_layout.setContentsMargins(0, 0, 0, 0)
+        self.notes_layout.setSpacing(12)
+        card_layout.addWidget(self.notes_container)
+        self.note_labels: list[LookupLabel] = []
+        self.note_label_badges: list[QLabel] = []
         card_layout.addStretch(1)
         self.reader.setWidget(card)
         self.reader.hide()
@@ -211,6 +225,7 @@ class LongSentencePage(QWidget):
         sentence = self.current_sentence()
         total = len(self._sentences)
         if sentence is None:
+            self._render_notes(())
             self.position_label.setText("0 / 0")
             self.reader.hide()
             self.empty_state.show()
@@ -226,8 +241,62 @@ class LongSentencePage(QWidget):
             f"原书第 {sentence.source_number} 句 · PDF 第 {pages} {page_label}"
         )
         self.sentence_label.set_lookup_text(sentence.text)
+        self._render_notes(sentence.notes)
         self.reader.show()
         self.empty_state.hide()
         self.previous_button.setEnabled(self._index > 0)
         self.next_button.setEnabled(self._index + 1 < total)
         self._sync_shortcuts()
+        self._scroll_to_top()
+        QTimer.singleShot(0, self._scroll_to_top)
+
+    def _render_notes(self, notes: Sequence[LongSentenceNote]) -> None:
+        while self.notes_layout.count():
+            item = self.notes_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self.note_labels.clear()
+        self.note_label_badges.clear()
+
+        visible = bool(notes)
+        self.notes_heading.setVisible(visible)
+        self.notes_container.setVisible(visible)
+        if not visible:
+            return
+
+        for note in notes:
+            note_card = QFrame(objectName="longSentenceNoteCard")
+            note_layout = QVBoxLayout(note_card)
+            note_layout.setContentsMargins(18, 15, 18, 17)
+            note_layout.setSpacing(8)
+
+            label = QLabel(note.label)
+            label.setObjectName("longSentenceNoteLabel")
+            label.setAccessibleName(f"注释类型：{note.label}")
+            note_layout.addWidget(label, 0, Qt.AlignLeft)
+
+            text = LookupLabel()
+            text.setObjectName("longSentenceNoteText")
+            text.setAccessibleName(f"{note.label}注释")
+            text.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+            text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            text.setToolTip(
+                "点击英文单词优先查看离线释义；拖动选择可翻译整段文字"
+            )
+            text.set_lookup_text(note.text)
+            text.lookupRequested.connect(self.lookupRequested.emit)
+            text.selectionTranslationRequested.connect(
+                self.selectionTranslationRequested.emit
+            )
+            text.installEventFilter(self)
+            note_layout.addWidget(text)
+
+            note_card.installEventFilter(self)
+            self.notes_layout.addWidget(note_card)
+            self.note_label_badges.append(label)
+            self.note_labels.append(text)
+
+    def _scroll_to_top(self) -> None:
+        scroll_bar = self.reader.verticalScrollBar()
+        scroll_bar.setValue(scroll_bar.minimum())

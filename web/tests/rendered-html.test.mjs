@@ -224,7 +224,7 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.ok(studyScreen.indexOf('className="study-actions"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="quiz-retry study-retry"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="study-jumps"') > studyScreen.indexOf('className="word-card"'));
-  assert.match(worker, /gre-3000-pwa-v21/);
+  assert.match(worker, /gre-3000-pwa-v22/);
   assert.match(worker, /data\/words\.json/);
   assert.match(worker, /data\/click_dictionary\.json/);
   assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);
@@ -232,8 +232,8 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.ok(worker.includes("WORDNET-LICENSE.txt"));
   assert.ok(worker.includes("COW-LICENSE.txt"));
   assert.equal(clickDictionary.version, 2);
-  assert.equal(clickDictionary.entry_count, 12_060);
-  assert.equal(clickDictionary.target_count, 12_350);
+  assert.equal(clickDictionary.entry_count, 12_128);
+  assert.equal(clickDictionary.target_count, 12_484);
   assert.deepEqual(clickDictionary.sources.map(({ name }) => name), [
     "ECDICT",
     "Princeton WordNet 3.0",
@@ -241,14 +241,14 @@ test("contains all study modes, offline support, and progress transfer", async (
     "项目内 COW 已审核修正",
   ]);
   const dictionarySenses = Object.values(clickDictionary.entries).flatMap((entry) => entry.senses);
-  assert.equal(dictionarySenses.length, 33_291);
-  assert.equal(dictionarySenses.filter((sense) => sense.translation && sense.definition).length, 14_167);
-  assert.match(page, /click_dictionary\.json\?v=5/);
-  assert.match(page, /click_dictionary\.json\?v=5", \{ cache: "no-store" \}/);
+  assert.equal(dictionarySenses.length, 33_433);
+  assert.equal(dictionarySenses.filter((sense) => sense.translation && sense.definition).length, 14_214);
+  assert.match(page, /click_dictionary\.json\?v=6/);
+  assert.match(page, /click_dictionary\.json\?v=6", \{ cache: "no-store" \}/);
   assert.match(page, /addEventListener\("controllerchange", reloadForWorkerUpdate\)/);
   assert.match(page, /registration\.update\(\)/);
   assert.match(page, /window\.location\.reload\(\)/);
-  assert.match(worker, /click_dictionary\.json\?v=5/);
+  assert.match(worker, /click_dictionary\.json\?v=6/);
   assert.match(worker, /url\.pathname === "\/data\/click_dictionary\.json"/);
   assert.match(worker, /fetch\(event\.request\)[\s\S]*caches\.match\(event\.request\)/);
   assert.match(page, /payload\.version !== 2/);
@@ -290,7 +290,7 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.match(completeRoundSource, /study_star_current_word_id: String\(firstScopeWordId\)/);
   assert.match(styles, /touch-action:\s*pan-y/);
   assert.match(translateRoute, /MAX_CHARS = 500/);
-  assert.match(translateRoute, /GRE3000Offline-Web\/0\.9\.0/);
+  assert.match(translateRoute, /GRE3000Offline-Web\/0\.9\.1/);
   assert.match(translateRoute, /cache-control": "private, no-store/);
 });
 
@@ -319,21 +319,36 @@ test("quiz choices keep their GRE word identity and open a non-answering preview
   assert.match(styles, /\.gre-preview/);
 });
 
-test("long sentence reader reuses offline lookup and supports safe keyboard and swipe paging", async () => {
-  const [page, styles, worker] = await Promise.all([
+test("long sentence reader shows every ordered note with lookup and safe paging", async () => {
+  const [page, styles, worker, sentenceContent] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
     readFile(new URL("public/sw.js", root), "utf8"),
+    readFile(new URL("public/data/long_sentences.json", root), "utf8"),
   ]);
+  const sentenceData = JSON.parse(sentenceContent);
 
   assert.match(page, /"sentences"/);
-  assert.match(page, /fetch\("\/data\/long_sentences\.json"\)/);
+  assert.match(page, /fetch\("\/data\/long_sentences\.json\?v=2", \{ cache: "no-store" \}\)/);
   assert.match(page, /payload\.schema !== "gre-long-sentences"/);
+  assert.match(page, /payload\.version !== 2/);
+  assert.match(page, /payload\.count !== payload\.sentences\?\.length/);
+  assert.match(page, /Array\.isArray\(sentence\.notes\)/);
+  assert.match(page, /sentence\.notes\.length > 0/);
+  assert.match(page, /Object\.keys\(note\)\.length === 2/);
   assert.match(page, /setLongSentencesStatus\("error"\)/);
   assert.match(page, /长难句内容载入失败，请刷新后重试/);
   assert.match(page, /杨鹏 GRE 长难句/);
   assert.match(page, /一页一句 · 每词可查/);
   assert.match(page, /<LookupText text=\{activeLongSentence\.text\} onLookup=\{openLookup\} \/>/);
+  assert.match(page, /activeLongSentence\.notes\.map\(\(note, index\) =>/);
+  assert.match(page, /<LookupText text=\{note\.label\} onLookup=\{openLookup\} \/>/);
+  assert.match(page, /<LookupText className="sentence-note-text" text=\{note\.text\} onLookup=\{openLookup\} \/>/);
+  const noteMarkup = page.slice(
+    page.indexOf('className="sentence-notes"'),
+    page.indexOf('className="sentence-lookup-hint"'),
+  );
+  assert.doesNotMatch(noteMarkup, /\.sort\(/);
   assert.match(page, /原书第 \{activeLongSentence\.source_number\} 句/);
   assert.match(page, /startSentenceSwipe/);
   assert.match(page, /finishSentenceSwipe/);
@@ -344,10 +359,27 @@ test("long sentence reader reuses offline lookup and supports safe keyboard and 
   assert.match(page, /左右滑动切换句子/);
   assert.match(styles, /\.sentence-entry/);
   assert.match(styles, /\.sentence-card \{[^}]*touch-action:\s*pan-y/);
+  assert.match(styles, /\.sentence-notes-list \{[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.sentence-note-text \{[^}]*white-space:\s*pre-wrap/);
   assert.match(styles, /\.sentence-actions/);
-  assert.match(worker, /"\/data\/long_sentences\.json"/);
+  assert.match(worker, /gre-3000-pwa-v22/);
+  assert.match(worker, /"\/data\/long_sentences\.json\?v=2"/);
   assert.match(worker, /url\.pathname === "\/data\/long_sentences\.json"/);
   assert.equal(worker.match(/\/data\/long_sentences\.json/g)?.length, 2);
+  assert.equal(sentenceData.schema, "gre-long-sentences");
+  assert.equal(sentenceData.version, 2);
+  assert.equal(sentenceData.count, sentenceData.sentences.length);
+  assert.ok(sentenceData.sentences.every((sentence) => (
+    Array.isArray(sentence.notes)
+    && sentence.notes.length > 0
+    && sentence.notes.every((note) => (
+      Object.keys(note).sort().join(",") === "label,text"
+      && typeof note.label === "string"
+      && Boolean(note.label.trim())
+      && typeof note.text === "string"
+      && Boolean(note.text.trim())
+    ))
+  )));
 });
 
 test("combines the persisted machine 7 filter with List and star scopes", async () => {

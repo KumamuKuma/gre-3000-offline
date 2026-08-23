@@ -360,6 +360,6 @@ test("translation endpoint preserves the webpage response contract", async () =>
   assert.equal(response.headers["access-control-allow-origin"], DEFAULT_ALLOWED_ORIGIN);
   assert.match(requests[0].url, /langpair=en%7Czh-CN/);
   assert.match(requests[0].url, /q=prudent\+and\+restrained/);
-  assert.equal(requests[0].init.headers["user-agent"], "GRE3000Offline-Web/0.9.0");
+  assert.equal(requests[0].init.headers["user-agent"], "GRE3000Offline-Web/0.9.1");
   assert.equal(decodeEntities("&quot;word&quot; &#x26; &#38;"), '"word" & &');
 });

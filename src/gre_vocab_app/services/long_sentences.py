@@ -8,6 +8,14 @@ from gre_vocab_app.paths import PACKAGE_ROOT
 
 
 @dataclass(frozen=True, slots=True)
+class LongSentenceNote:
+    """One labelled annotation copied from the source book."""
+
+    label: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
 class LongSentence:
     """One reviewed sentence from the source book."""
 
@@ -15,6 +23,7 @@ class LongSentence:
     source_number: int
     text: str
     source_pages: tuple[int, ...]
+    notes: tuple[LongSentenceNote, ...] = ()
 
 
 class LongSentenceService:
@@ -43,7 +52,7 @@ class LongSentenceService:
             raise ValueError("long sentence data must be a JSON object")
         if (
             payload.get("schema") != "gre-long-sentences"
-            or payload.get("version") != 1
+            or payload.get("version") != 2
         ):
             raise ValueError("unsupported long sentence data format")
         records = payload.get("sentences")
@@ -59,6 +68,7 @@ class LongSentenceService:
             source_number = record.get("source_number", sentence_id)
             text = record.get("text")
             source_pages = record.get("source_pages")
+            raw_notes = record.get("notes")
             if type(sentence_id) is not int or sentence_id != index:
                 raise ValueError("sentence ids must be consecutive from 1")
             if type(source_number) is not int or source_number <= 0:
@@ -71,6 +81,27 @@ class LongSentenceService:
                 raise ValueError(f"sentence {index} has no source pages")
             if any(type(page) is not int or page <= 0 for page in source_pages):
                 raise ValueError(f"sentence {index} has invalid source pages")
+            if not isinstance(raw_notes, list) or not raw_notes:
+                raise ValueError(f"sentence {index} has no notes")
+
+            notes: list[LongSentenceNote] = []
+            for note_index, note in enumerate(raw_notes, start=1):
+                if not isinstance(note, dict) or set(note) != {"label", "text"}:
+                    raise ValueError(
+                        f"sentence {index} note {note_index} must contain "
+                        "only label and text"
+                    )
+                label = note["label"]
+                note_text = note["text"]
+                if not isinstance(label, str) or not label.strip():
+                    raise ValueError(
+                        f"sentence {index} note {note_index} has no label"
+                    )
+                if not isinstance(note_text, str) or not note_text.strip():
+                    raise ValueError(
+                        f"sentence {index} note {note_index} has no text"
+                    )
+                notes.append(LongSentenceNote(label=label, text=note_text))
 
             normalized_text = " ".join(text.split())
             normalized_pages = tuple(dict.fromkeys(source_pages))
@@ -80,6 +111,7 @@ class LongSentenceService:
                     source_number=source_number,
                     text=normalized_text,
                     source_pages=normalized_pages,
+                    notes=tuple(notes),
                 )
             )
             source_numbers.add(source_number)

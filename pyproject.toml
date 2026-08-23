@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gre-vocab-offline"
-version = "0.9.0"
+version = "0.9.1"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "PySide6>=6.8,<7",
@@ -17,6 +17,7 @@ dependencies = [
 dev = [
   "pytest>=8,<10",
   "pytest-qt>=4.4,<5",
+  "pypdf>=6,<7",
 ]
 
 [tool.setuptools.packages.find]

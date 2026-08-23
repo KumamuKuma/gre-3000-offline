@@ -48,16 +48,23 @@ type ContentPayload = {
   words: WordEntry[];
 };
 
+type LongSentenceNote = {
+  label: string;
+  text: string;
+};
+
 type LongSentence = {
   id: number;
   source_number: number;
   text: string;
   source_pages: number[];
+  notes: LongSentenceNote[];
 };
 
 type LongSentencePayload = {
   schema: "gre-long-sentences";
-  version: 1;
+  version: 2;
+  count: number;
   sentences: LongSentence[];
 };
 
@@ -573,7 +580,7 @@ export default function Home() {
         .then((registration) => registration.update())
         .catch(() => undefined);
     }
-    fetch("/data/click_dictionary.json?v=5", { cache: "no-store" })
+    fetch("/data/click_dictionary.json?v=6", { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
@@ -592,7 +599,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetch("/data/long_sentences.json")
+    fetch("/data/long_sentences.json?v=2", { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
@@ -608,8 +615,26 @@ export default function Home() {
             && Array.isArray(sentence.source_pages)
             && sentence.source_pages.length > 0
             && sentence.source_pages.every((page) => Number.isInteger(page) && page > 0)
+            && Array.isArray(sentence.notes)
+            && sentence.notes.length > 0
+            && sentence.notes.every((note) => (
+              note !== null
+              && typeof note === "object"
+              && Object.keys(note).length === 2
+              && Object.keys(note).every((key) => key === "label" || key === "text")
+              && typeof note.label === "string"
+              && Boolean(note.label.trim())
+              && typeof note.text === "string"
+              && Boolean(note.text.trim())
+            ))
           ));
-        if (payload.schema !== "gre-long-sentences" || payload.version !== 1 || !validSentences) {
+        if (
+          payload.schema !== "gre-long-sentences"
+          || payload.version !== 2
+          || !Number.isInteger(payload.count)
+          || payload.count !== payload.sentences?.length
+          || !validSentences
+        ) {
           throw new Error("长难句数据校验失败");
         }
         setLongSentences(payload);
@@ -1473,6 +1498,20 @@ export default function Home() {
             </div>
             <p className="sentence-source">PDF 第 {activeLongSentence.source_pages.join("、")} 页</p>
             <p className="sentence-text"><LookupText text={activeLongSentence.text} onLookup={openLookup} /></p>
+            <section className="sentence-notes" aria-label="原书完整注释">
+              <div className="sentence-notes-heading">
+                <span>原书完整注释</span>
+                <em>{activeLongSentence.notes.length} 项</em>
+              </div>
+              <div className="sentence-notes-list">
+                {activeLongSentence.notes.map((note, index) => (
+                  <section className="sentence-note" key={`${activeLongSentence.id}-${index}-${note.label}`}>
+                    <h2><LookupText text={note.label} onLookup={openLookup} /></h2>
+                    <p><LookupText className="sentence-note-text" text={note.text} onLookup={openLookup} /></p>
+                  </section>
+                ))}
+              </div>
+            </section>
             <div className="sentence-lookup-hint"><span>点词即查</span><p>点击任意英文单词，优先查看离线中文释义、英文义项、例句和常用词组；未收录词可主动联网翻译。</p></div>
           </article>
 

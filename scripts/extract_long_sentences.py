@@ -8,10 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import fitz
+from pypdf import PdfReader
 
 
 SCHEMA = "gre-long-sentences"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SOURCE_TITLE = "杨鹏阅读长难句"
 EXPECTED_FILE_SHA256 = (
     "50b594880839f5733cfb07304706d4ca93e691a025590b768b0de0c8534d6a02"
@@ -25,9 +26,23 @@ EXPECTED_SOURCE_NUMBERS = tuple(
 )
 
 DIFFICULTY_MARKER = re.compile(
-    r"[（(][ \t]*(?:难度系数[ \t]*)?[0-9][0-9+\- \t]*"
-    r"(?:，下同)?[ \t]*(?:[）)]|(?=\n))"
+    r"[（(]\s*(?:难度系数\s*)?[0-9][0-9+\-\s]*"
+    r"(?:，下同)?\s*(?:[）)]|(?=\n))"
 )
+
+NOTE_HEADING = re.compile(
+    r"(?m)^(?:"
+    r"(?P<named>难句类型|难免类型|译文|解释|意群训练|训练)\s*[：:；;]\s*"
+    r"|(?P<point>[A-Z])\s*[、．.]\s*"
+    r"|(?P<lower>[a-z])(?=[\u3400-\u9fff])"
+    r"|(?P<number>[1-9一二三四五六七八九十])\s*[、．]\s*"
+    r")"
+)
+
+NOTE_LABEL_NORMALIZATION = {
+    "难免类型": "难句类型",
+    "训练": "意群训练",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +92,17 @@ def _read_pages(document: fitz.Document) -> tuple[str, tuple[PageText, ...]]:
         cursor += len(text)
         pages.append(PageText(index + 1, text, start, cursor))
     return "".join(combined_parts), tuple(pages)
+
+
+def _read_unicode_pages(pdf_path: Path) -> str:
+    """Read annotations through the PDF's complete ToUnicode mapping."""
+
+    reader = PdfReader(str(pdf_path))
+    parts: list[str] = []
+    for page_number, page in enumerate(reader.pages, 1):
+        text = page.extract_text(extraction_mode="layout") or ""
+        parts.append(_strip_page_footer(text, page_number))
+    return "\n\n".join(parts)
 
 
 def _marker_pattern(source_number: int) -> re.Pattern[str]:
@@ -167,6 +193,187 @@ def _raw_sentence(block: str, source_number: int) -> str:
         else difficulty_markers[0]
     )
     return block[: marker.start()]
+
+
+def _annotation_text(block: str, source_number: int) -> str:
+    if source_number in {119, 129}:
+        ending = (
+            "hitherto thought."
+            if source_number == 119
+            else "kept there for many months."
+        )
+        match = re.match(
+            rf"\s*.*?{re.escape(ending)}",
+            block,
+            flags=re.DOTALL,
+        )
+        if not match:
+            raise ValueError(
+                f"could not locate annotation start for source sentence "
+                f"{source_number}"
+            )
+        return block[match.end() :]
+
+    markers = list(DIFFICULTY_MARKER.finditer(block))
+    if not markers:
+        raise ValueError(
+            f"difficulty marker after source sentence {source_number} was not found "
+            "in the Unicode text layer"
+        )
+    marker = markers[1] if source_number == 63 else markers[0]
+    return block[marker.start() :]
+
+
+def _logical_note_text(text: str) -> str:
+    lines = [
+        re.sub(r"[ \t\u00a0]+", " ", line).strip()
+        for line in text.replace("\r\n", "\n").replace("\r", "\n").splitlines()
+    ]
+    return "\n".join(line for line in lines if line)
+
+
+def _clean_note_text(text: str) -> str:
+    cleaned = re.sub(r"\s+", " ", text).strip()
+    cleaned = re.sub(
+        r"(?<=[\u3400-\u9fff]) (?=[\u3400-\u9fff])",
+        "",
+        cleaned,
+    )
+    cleaned = re.sub(r"\s+([，。；：？！、）》”])", r"\1", cleaned)
+    cleaned = re.sub(r"([《（“])\s+", r"\1", cleaned)
+    return cleaned
+
+
+def _audit_key(text: str) -> str:
+    return re.sub(r"\s+", "", text)
+
+
+def _split_first_line(text: str) -> tuple[str, str]:
+    first, separator, rest = text.partition("\n")
+    return first, rest if separator else ""
+
+
+def _prefix_notes(
+    text: str,
+    source_number: int,
+) -> list[tuple[str, str, str]]:
+    if not text.strip():
+        return []
+
+    if source_number in {2, 25}:
+        first, rest = _split_first_line(text)
+        first_label = {
+            2: "难句类型",
+            25: "补充",
+        }[source_number]
+        notes = [(first_label, first, first)]
+        if rest.strip():
+            notes.append(("译文", rest, rest))
+        return notes
+
+    if source_number == 45:
+        lines = text.splitlines()
+        translation_start = next(
+            (
+                index
+                for index, line in enumerate(lines)
+                if line.startswith("这其中的一个新颖思想")
+            ),
+            None,
+        )
+        if translation_start is None or translation_start == 0:
+            raise ValueError("source sentence 45 translation boundary was not found")
+        supplement = "\n".join(lines[:translation_start])
+        translation = "\n".join(lines[translation_start:])
+        return [
+            ("补充", supplement, supplement),
+            ("译文", translation, translation),
+        ]
+
+    if source_number == 5:
+        lines = text.splitlines()
+        if len(lines) < 4:
+            raise ValueError("source sentence 5 annotation layout changed")
+        type_text = lines[0]
+        translation_end = next(
+            (
+                index
+                for index, line in enumerate(lines[1:], 1)
+                if "每一个毛孔都充满了道德" in line
+            ),
+            None,
+        )
+        if translation_end is None or translation_end + 1 >= len(lines):
+            raise ValueError("source sentence 5 translation boundary was not found")
+        translation = "\n".join(lines[1 : translation_end + 1])
+        explanation = "\n".join(lines[translation_end + 1 :])
+        return [
+            ("难句类型", type_text, type_text),
+            ("译文", translation, translation),
+            ("解释", explanation, explanation),
+        ]
+
+    return [("译文", text, text)]
+
+
+def _parse_notes(
+    annotation_text: str,
+    source_number: int,
+) -> tuple[list[dict[str, str]], int]:
+    logical = _logical_note_text(annotation_text)
+    if not logical:
+        raise ValueError(f"source sentence {source_number} has no annotations")
+
+    drafts: list[tuple[str, str, str]] = []
+    remaining = logical
+    difficulty = DIFFICULTY_MARKER.match(remaining)
+    if difficulty:
+        marker_text = difficulty.group(0)
+        drafts.append(("难度", marker_text, marker_text))
+        remaining = remaining[difficulty.end() :].lstrip("\n")
+
+    headings = list(NOTE_HEADING.finditer(remaining))
+    prefix_end = headings[0].start() if headings else len(remaining)
+    prefix = remaining[:prefix_end].rstrip("\n")
+    drafts.extend(_prefix_notes(prefix, source_number))
+
+    for index, heading in enumerate(headings):
+        section_end = (
+            headings[index + 1].start()
+            if index + 1 < len(headings)
+            else len(remaining)
+        )
+        raw_label = (
+            heading.group("named")
+            or heading.group("point")
+            or heading.group("lower")
+            or heading.group("number")
+        )
+        label = NOTE_LABEL_NORMALIZATION.get(raw_label, raw_label)
+        if heading.group("lower"):
+            label = label.upper()
+        body = remaining[heading.end() : section_end].rstrip("\n")
+        source = remaining[heading.start() : section_end].rstrip("\n")
+        drafts.append((label, body, source))
+
+    notes: list[dict[str, str]] = []
+    covered_sources: list[str] = []
+    for label, body, source in drafts:
+        clean_label = _clean_note_text(label)
+        clean_body = _clean_note_text(body)
+        if not clean_label or not clean_body:
+            raise ValueError(
+                f"source sentence {source_number} produced an empty note: "
+                f"{label!r} / {body!r}"
+            )
+        notes.append({"label": clean_label, "text": clean_body})
+        covered_sources.append(source)
+
+    if _audit_key(logical) != _audit_key("".join(covered_sources)):
+        raise ValueError(
+            f"source sentence {source_number} annotation coverage audit failed"
+        )
+    return notes, len(_audit_key(logical))
 
 
 _PUNCTUATION_TRANSLATION = str.maketrans(
@@ -296,8 +503,22 @@ def extract(pdf_path: Path) -> dict[str, object]:
             )
         document_text, pages = _read_pages(document)
 
+    unicode_text = _read_unicode_pages(pdf_path)
+    unicode_markers = _find_markers(unicode_text)
+    unicode_blocks: dict[int, str] = {}
+    for index, marker in enumerate(unicode_markers):
+        next_start = (
+            unicode_markers[index + 1].start
+            if index + 1 < len(unicode_markers)
+            else len(unicode_text)
+        )
+        unicode_blocks[marker.source_number] = unicode_text[
+            marker.content_start : next_start
+        ]
+
     markers = _find_markers(document_text)
     sentences: list[dict[str, object]] = []
+    total_annotation_characters = 0
     for index, marker in enumerate(markers):
         next_start = (
             markers[index + 1].start
@@ -308,6 +529,14 @@ def extract(pdf_path: Path) -> dict[str, object]:
         raw_sentence = _raw_sentence(block, marker.source_number)
         text = _clean_sentence(raw_sentence, marker.source_number)
         sentence_end = marker.content_start + len(raw_sentence)
+        notes, annotation_characters = _parse_notes(
+            _annotation_text(
+                unicode_blocks[marker.source_number],
+                marker.source_number,
+            ),
+            marker.source_number,
+        )
+        total_annotation_characters += annotation_characters
         sentences.append(
             {
                 "id": index + 1,
@@ -318,8 +547,12 @@ def extract(pdf_path: Path) -> dict[str, object]:
                     start=marker.start,
                     end=sentence_end,
                 ),
+                "notes": notes,
             }
         )
+
+    note_counts = [len(sentence["notes"]) for sentence in sentences]
+    total_notes = sum(note_counts)
 
     return {
         "schema": SCHEMA,
@@ -330,6 +563,20 @@ def extract(pdf_path: Path) -> dict[str, object]:
             "file_sha256": file_sha256,
             "page_count": EXPECTED_PAGE_COUNT,
             "missing_source_numbers": sorted(MISSING_SOURCE_NUMBERS),
+            "notes_extraction": (
+                "Embedded PDF Unicode text layer with rendered-page review"
+            ),
+            "notes_review": (
+                "Windows Simplified Chinese OCR and 4x rendered-page spot checks"
+            ),
+            "notes_audit": {
+                "coverage_percent": 100,
+                "source_characters": total_annotation_characters,
+                "note_count": total_notes,
+                "sentences_with_notes": len(note_counts),
+                "minimum_notes_per_sentence": min(note_counts),
+                "maximum_notes_per_sentence": max(note_counts),
+            },
         },
         "count": len(sentences),
         "sentences": sentences,
@@ -353,6 +600,15 @@ def main() -> int:
     print(
         f"Wrote {payload['count']} sentences to {args.output} "
         f"from {payload['source']['page_count']} pages."
+    )
+    audit = payload["source"]["notes_audit"]
+    print(
+        "Annotation audit: "
+        f"{audit['coverage_percent']}% coverage, "
+        f"{audit['source_characters']} source characters, "
+        f"{audit['note_count']} notes, "
+        f"{audit['minimum_notes_per_sentence']}.."
+        f"{audit['maximum_notes_per_sentence']} notes per sentence."
     )
     return 0
 

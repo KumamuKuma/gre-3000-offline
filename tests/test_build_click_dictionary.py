@@ -145,10 +145,20 @@ def test_adds_long_sentence_words_to_click_dictionary_targets(tmp_path):
         json.dumps(
             {
                 "schema": "gre-long-sentences",
-                "version": 1,
+                "version": 2,
                 "count": 1,
                 "sentences": [
-                    {"id": 1, "source_number": 1, "text": "Arduous work can abate."}
+                    {
+                        "id": 1,
+                        "source_number": 1,
+                        "text": "Arduous work can abate.",
+                        "notes": [
+                            {
+                                "label": "Mnemonic",
+                                "text": "Resilient learners persist.",
+                            }
+                        ],
+                    }
                 ],
             }
         ),
@@ -175,6 +185,10 @@ def test_adds_long_sentence_words_to_click_dictionary_targets(tmp_path):
                 {"word": "arduous", "translation": "adj. 艰巨的"},
                 {"word": "work", "translation": "n. 工作"},
                 {"word": "can", "translation": "aux. 能够"},
+                {"word": "mnemonic", "translation": "n. 助记符"},
+                {"word": "resilient", "translation": "adj. 坚韧的"},
+                {"word": "learners", "translation": "n. 学习者"},
+                {"word": "persist", "translation": "v. 坚持"},
             ]
         )
     output = tmp_path / "dictionary.json"
@@ -187,8 +201,17 @@ def test_adds_long_sentence_words_to_click_dictionary_targets(tmp_path):
     )
 
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert summary["targets"] == 4
-    assert set(payload["entries"]) == {"abate", "arduous", "can", "work"}
+    assert summary["targets"] == 8
+    assert set(payload["entries"]) == {
+        "abate",
+        "arduous",
+        "can",
+        "learners",
+        "mnemonic",
+        "persist",
+        "resilient",
+        "work",
+    }
 
 
 def test_rejects_inconsistent_long_sentence_data(tmp_path):
@@ -199,7 +222,7 @@ def test_rejects_inconsistent_long_sentence_data(tmp_path):
         json.dumps(
             {
                 "schema": "gre-long-sentences",
-                "version": 1,
+                "version": 2,
                 "count": 2,
                 "sentences": [{"id": 1, "text": "Only one."}],
             }

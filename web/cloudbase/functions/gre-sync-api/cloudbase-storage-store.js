@@ -114,7 +114,9 @@ export function createCloudBaseStorageStore(
     const fileID = await fileIdForPath(cloudPath);
     let result;
     try {
-      result = await cloud.downloadFile({ fileID });
+      // Progress is mutable: the CDN URL can keep returning an older object
+      // after a successful upload. Read the signed COS origin URL instead.
+      result = await cloud.downloadFile({ fileID, urlType: "COS_URL" });
     } catch (error) {
       if (isMissingFile(error)) return null;
       throw error;

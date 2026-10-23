@@ -24,6 +24,7 @@ from gre_vocab_app.domain import (
 )
 
 from .lookup_label import LookupLabel
+from .word_note import WordNote
 
 
 _CIRCLED_SENSE_NUMBERS = {
@@ -110,6 +111,8 @@ class WordDetail(QWidget):
         self.phonetic_label = self._label(object_name="phonetic")
         word_layout.addWidget(self.phonetic_label)
         root.addWidget(word_card)
+        self.word_note = WordNote()
+        root.addWidget(self.word_note)
 
         self.reveal_button = QPushButton("点击显示简义")
         self.reveal_button.setObjectName("revealButton")
@@ -299,6 +302,7 @@ class WordDetail(QWidget):
         in_machine7: bool = False,
     ) -> None:
         self._word = word
+        self.word_note.set_word(word.headword)
         self._mode = StudyMode(mode)
         self._root_families = tuple(root_families)
         self._lookalikes = tuple(lookalikes)

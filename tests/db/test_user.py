@@ -565,3 +565,28 @@ def test_pending_word_annotation_write_is_visible_and_retries(tmp_path):
     with UserRepository(path) as reopened:
         assert reopened.star_rating(7) == 3
         assert reopened.list_completion_count("list1") == 1
+
+def test_word_notes_migrate_v4_persist_retry_and_clear(tmp_path):
+    path = tmp_path / "notes.db"
+    with UserRepository(path) as repo:
+        repo.set_star_rating(1, 3)
+    with sqlite3.connect(path) as db:
+        db.execute("drop table word_notes")
+        db.execute("pragma user_version=4")
+    with UserRepository(path) as repo:
+        assert repo.star_rating(1) == 3
+        assert repo.word_note("inevitable") == ""
+        with sqlite3.connect(path) as lock:
+            lock.execute("begin immediate")
+            assert not repo.set_word_note(" INEVITABLE ", "联想\n词根 <b>文字</b> 🐻")
+            assert repo.word_note("inevitable") == "联想\n词根 <b>文字</b> 🐻"
+            assert repo.has_pending_writes
+        assert repo.flush_pending()
+    with UserRepository(path) as repo:
+        assert repo.word_note("INEVITABLE") == "联想\n词根 <b>文字</b> 🐻"
+        repo.set_word_note("inevitable", "")
+        assert repo.word_notes() == {}
+        repo.set_word_note("another", "记忆")
+        repo.clear_all()
+    with UserRepository(path) as repo:
+        assert repo.word_notes() == {}

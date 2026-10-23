@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Self, Sequence
 
 from .schema import USER_SCHEMA_VERSION
+from gre_vocab_app.word_notes import note_key, validate_notes
 
 
 USER_SCHEMA = """
@@ -76,6 +77,10 @@ create table list_progress(
 
 
 _EXPECTED_SCHEMA = {
+    "word_notes": (
+        ("headword", "TEXT", 0, None, 1),
+        ("note", "TEXT", 1, None, 0),
+    ),
     "settings": (
         ("key", "TEXT", 0, None, 1),
         ("value", "TEXT", 1, None, 0),
@@ -181,6 +186,11 @@ class UserRepository:
                 self._migrate_2_to_3()
             elif version == 3:
                 self._migrate_3_to_4()
+            elif version == 4:
+                self._run_migration(
+                    "create table word_notes(headword text primary key, note text not null);",
+                    target_version=5,
+                )
             else:  # pragma: no cover - guarded by the version bounds above
                 raise UserSchemaError(f"no migration from user schema {version}")
             version += 1
@@ -286,6 +296,7 @@ class UserRepository:
         return cls._decode_queue(name, encoded, position, seed)
 
     def _load_state(self) -> None:
+        self._notes = validate_notes(dict(self.db.execute("select headword, note from word_notes")))
         self._settings = {
             str(row[0]): str(row[1])
             for row in self.db.execute("select key, value from settings")
@@ -502,6 +513,16 @@ class UserRepository:
                 """,
                 values,
             )
+        elif kind == "note":
+            headword, note = values
+            if note:
+                self.db.execute(
+                    "insert into word_notes(headword, note) values(?, ?) "
+                    "on conflict(headword) do update set note=excluded.note",
+                    values,
+                )
+            else:
+                self.db.execute("delete from word_notes where headword=?", (headword,))
         elif kind == "list_completion":
             self.db.execute(
                 """
@@ -530,6 +551,7 @@ class UserRepository:
                 "session_queue",
                 "seen_events",
                 "word_annotations",
+                "word_notes",
                 "list_progress",
             ):
                 self.db.execute(f"delete from {table}")
@@ -629,6 +651,23 @@ class UserRepository:
     def star_rating(self, word_id: int) -> int:
         word_id = self._annotation_word_id(word_id)
         return self._annotations.get(word_id, (0, ""))[0]
+
+    def word_note(self, headword: str) -> str:
+        return self._notes.get(note_key(headword), "")
+
+    def word_notes(self) -> dict[str, str]:
+        return dict(self._notes)
+
+    def set_word_note(self, headword: str, text: str) -> bool:
+        key = note_key(headword)
+        validate_notes({key: text})
+        if self._notes.get(key, "") == text:
+            return self.flush_pending()
+        if text:
+            self._notes[key] = text
+        else:
+            self._notes.pop(key, None)
+        return self._enqueue(_Mutation("note", (key, text)))
 
     def _set_annotation(self, word_id: int, star_rating: int) -> bool:
         word_id = self._annotation_word_id(word_id)
@@ -811,6 +850,7 @@ class UserRepository:
         self._seen_event_ids.clear()
         self._queues.clear()
         self._annotations.clear()
+        self._notes.clear()
         self._list_progress.clear()
         self._pending = [_Mutation("clear", ())]
         return self.flush_pending()

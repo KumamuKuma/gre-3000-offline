@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from gre_vocab_app.word_notes import validate_notes
+
 
 PROGRESS_SCHEMA = "gre-vocab-progress"
 PROGRESS_VERSION = 1
@@ -31,6 +33,7 @@ class ProgressFormatError(ValueError):
 class ImportSummary:
     star_count: int
     list_count: int
+    note_count: int = 0
 
 
 def export_progress(user: Any, content: Any) -> dict[str, Any]:
@@ -61,6 +64,7 @@ def export_progress(user: Any, content: Any) -> dict[str, Any]:
         "version": PROGRESS_VERSION,
         "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "stars": stars,
+        "notes": user.word_notes(),
         "lists": lists,
         "settings": settings,
     }
@@ -85,6 +89,13 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
         int(word_id) for word_id in content.ids_in_source_order()
     }
     source_lists = {str(item.key): item for item in content.source_lists()}
+
+    notes = None
+    if "notes" in document:
+        try:
+            notes = validate_notes(document["notes"])
+        except ValueError as error:
+            raise ProgressFormatError(str(error)) from error
 
     raw_stars = _require_mapping(document.get("stars"), "stars")
     stars: dict[int, int] = {}
@@ -214,6 +225,9 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
         if not valid_filter:
             raise ProgressFormatError("星级筛选设置无效。")
 
+    if notes is not None:
+        for headword in user.word_notes().keys() | notes.keys():
+            user.set_word_note(headword, notes.get(headword, ""))
     for word_id in valid_word_ids:
         desired = stars.get(word_id, 0)
         if int(user.star_rating(word_id)) != desired:
@@ -237,4 +251,4 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
     for key, value in settings.items():
         user.save_setting(key, value)
 
-    return ImportSummary(star_count=len(stars), list_count=len(parsed_lists))
+    return ImportSummary(star_count=len(stars), list_count=len(parsed_lists), note_count=len(user.word_notes()))

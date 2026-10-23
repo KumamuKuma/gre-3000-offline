@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$OutputDirectory = ""
 )
@@ -102,6 +102,9 @@ $StagedInstructions = Join-Path $ReleaseCandidateDirectory "使用说明.txt"
 $OutputsDirectory = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     Join-Path $RepoRoot "outputs"
 }
+elseif ([System.IO.Path]::IsPathRooted($OutputDirectory)) {
+    [System.IO.Path]::GetFullPath($OutputDirectory)
+}
 else {
     [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $OutputDirectory))
 }
@@ -114,7 +117,7 @@ $ExpectedOutputNames = @(
     "词库导入审计报告.html"
 )
 $SmokeProfile = Join-Path $RepoRoot "build\smoke-profile"
-$ReleaseVersion = "0.9.1"
+$ReleaseVersion = "0.10.0"
 $ExpectedTitle = "GRE 3000 Vocabulary Trainer"
 $Amd64Machine = "0x8664"
 $WindowsGuiSubsystem = "2"
@@ -222,6 +225,18 @@ try {
     $specEncoding = [System.Text.UTF8Encoding]::new($false)
     $specSnapshot = [System.IO.File]::ReadAllText($Spec, $specEncoding)
     try {
+        # Some Python distributions require a companion PEM beside ssl.py.
+        # Preserve that TLS configuration inside the standalone runtime.
+        $sslModulePath = (& $Python -c "import ssl; print(ssl.__file__)").Trim()
+        $sslCompanion = Join-Path (Split-Path -Parent $sslModulePath) "codex-rejected-cas.pem"
+        if (Test-Path -LiteralPath $sslCompanion -PathType Leaf) {
+            $runtimeSupport = Join-Path $RepoRoot "build\runtime-support"
+            New-Item -ItemType Directory -Force -Path $runtimeSupport | Out-Null
+            Copy-Item -LiteralPath $sslCompanion -Destination $runtimeSupport -Force
+            $runtimeExtra = " --include-data-files=build/runtime-support/codex-rejected-cas.pem=codex-rejected-cas.pem"
+            $deploySpec = [regex]::Replace($specSnapshot, '(?m)^(extra_args[^\r\n]*)', ('$1' + $runtimeExtra))
+            [System.IO.File]::WriteAllText($Spec, $deploySpec, $specEncoding)
+        }
         Invoke-External -Label "ASCII Qt runtime onefile build" -FilePath $Deploy -ArgumentList @(
             "-c", $Spec, "--extra-modules=Sql", "-f", "-v"
         )

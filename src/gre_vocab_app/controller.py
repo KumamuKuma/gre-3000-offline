@@ -7,7 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
 
 from gre_vocab_app.domain import BrowseOrder, SessionSnapshot, StudyMode, WordEntry
 from gre_vocab_app.progress_transfer import (
@@ -28,6 +28,7 @@ from gre_vocab_app.services.translation import TranslationService
 from gre_vocab_app.services.speech import ONLINE_VOICE_NAME
 from gre_vocab_app.ui.main_window import MainWindow
 from gre_vocab_app.ui.word_list_page import WordListRow
+from gre_vocab_app.ui.word_note import WordNoteDialog
 
 
 LOGGER = logging.getLogger(__name__)
@@ -75,6 +76,13 @@ class ApplicationController:
         home = self.window.home_page
         study_page = self.window.study_page
         settings = self.window.settings_dialog
+        for widget in (
+            study_page.word_detail.word_note,
+            self.window.lookup_dialog.word_note,
+        ):
+            widget.load_note = self.user.word_note
+            widget.editRequested.connect(self._edit_word_note)
+        self.window.word_list_page.noteRequested.connect(self._edit_word_note)
 
         home.searchRequested.connect(self._search_home)
         home.listStudyRequested.connect(self._open_list_study)
@@ -611,6 +619,16 @@ class ApplicationController:
             self._show_status(f"内置词典暂时无法读取：{error}")
             return
         self.window.lookup_dialog.show_result(result)
+
+    def _edit_word_note(self, headword: str) -> None:
+        dialog = WordNoteDialog(headword, self.user.word_note(headword), self.window)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        saved = self.user.set_word_note(headword, dialog.editor.toPlainText())
+        self.window.study_page.word_detail.word_note.refresh()
+        self.window.lookup_dialog.word_note.refresh()
+        self._show_status("备注已保存，将随学习进度同步。" if saved else "备注暂存于内存，正在等待写入本机。")
+        self._report_persistence_issue()
 
     def _lookup_selection(self, text: str) -> None:
         cleaned = " ".join(str(text).split()).strip()

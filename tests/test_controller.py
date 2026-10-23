@@ -90,6 +90,17 @@ class FakeUser:
         self.stars = {}
         self.review_counts = {}
         self.completions = {}
+        self.notes = {}
+
+    def word_note(self, word):
+        return self.notes.get(word.lower(), "")
+
+    def word_notes(self):
+        return dict(self.notes)
+
+    def set_word_note(self, word, text):
+        self.notes[word.lower()] = text
+        return True
 
     def load_setting(self, key):
         return self.settings.get(key)
@@ -195,6 +206,7 @@ class FakeUser:
         self.stars.clear()
         self.review_counts.clear()
         self.completions.clear()
+        self.notes.clear()
 
 
 def test_controller_migrates_old_list_scopes_without_changing_normal_study():

@@ -243,3 +243,36 @@ def test_progress_import_rejects_invalid_machine7_anchor(tmp_path, value):
 
     with pytest.raises(ProgressFormatError, match="机经 7.0 学习当前位置"):
         import_progress(user, content_repository, payload)
+
+def test_notes_round_trip_deletion_and_legacy_import(tmp_path):
+    content = FakeContent()
+    with UserRepository(tmp_path / "notes-source.db") as source, UserRepository(tmp_path / "notes-target.db") as target:
+        source.set_word_note("INEVITABLE", "inevitable = 不可避免\n联想 🐻")
+        source.set_word_note("outside-corpus", "长难句词汇也可以备注")
+        payload = export_progress(source, content)
+        summary = import_progress(target, content, payload)
+        assert summary.note_count == 2
+        assert target.word_notes() == source.word_notes()
+        legacy = dict(payload)
+        del legacy["notes"]
+        import_progress(target, content, legacy)
+        assert target.word_note("inevitable")
+        source.set_word_note("inevitable", "")
+        import_progress(target, content, export_progress(source, content))
+        assert target.word_note("inevitable") == ""
+        assert target.word_note("outside-corpus")
+
+
+@pytest.mark.parametrize("notes", [None, [], {"Word": "记忆"}, {"word": 7}, {"word": "字" * 4001}, {"": "记忆"}])
+def test_invalid_notes_rejected_before_changing_any_progress(tmp_path, notes):
+    content = FakeContent()
+    with UserRepository(tmp_path / "invalid-notes.db") as repo:
+        repo.set_star_rating(1, 3)
+        repo.set_word_note("existing", "保留")
+        payload = export_progress(repo, content)
+        payload["stars"] = {}
+        payload["notes"] = notes
+        with pytest.raises(ProgressFormatError):
+            import_progress(repo, content, payload)
+        assert repo.star_rating(1) == 3
+        assert repo.word_note("existing") == "保留"

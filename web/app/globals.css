@@ -315,3 +315,9 @@ button.signout { padding: 0; border: 0; background: transparent; cursor: pointer
 }
 
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+
+.word-note { margin: 16px 0; padding: 12px 14px; border: 1px solid #d8e2db; border-radius: 12px; background: #f5f8f4; }
+.word-note summary { cursor: pointer; color: #325b47; font-weight: 650; font-size: 14px; }
+.word-note textarea { display: block; width: 100%; box-sizing: border-box; margin: 12px 0 8px; padding: 12px; min-height: 112px; border: 1px solid #bdccbf; border-radius: 8px; background: white; color: #24372a; font: inherit; font-size: 16px; line-height: 1.65; resize: vertical; }
+.word-note textarea:focus { outline: 2px solid #688c70; outline-offset: 2px; }
+.word-note small { display: block; color: #65746a; line-height: 1.6; }

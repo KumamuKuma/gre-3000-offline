@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from gre_vocab_app.services.dictionary import DictionarySense, LookupResult
 
 from .lookup_label import LookupLabel
+from .word_note import WordNote
 
 
 _TRANSLATION_PART_OF_SPEECH = re.compile(
@@ -76,6 +77,8 @@ class LookupDialog(QDialog):
         details = QVBoxLayout(content)
         details.setContentsMargins(0, 0, 0, 0)
         details.setSpacing(12)
+        self.word_note = WordNote()
+        details.addWidget(self.word_note)
         self.primary_title = QLabel()
         self.primary_title.setObjectName("sectionTitle")
         self.translation_label = self._detail_label("lookupTranslation")
@@ -159,6 +162,7 @@ class LookupDialog(QDialog):
 
     def show_result(self, result: LookupResult) -> None:
         self._result = result
+        self.word_note.set_word(result.headword or result.normalized or result.query)
         self.query_label.setText(result.headword or result.query)
         self.phonetic_label.setText(result.phonetic)
         self.phonetic_label.setVisible(bool(result.phonetic))

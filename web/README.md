@@ -27,3 +27,5 @@ npm test
 ```
 
 词库数据由仓库根目录的 `scripts/export_web_data.py` 从已审核 SQLite 数据库生成。
+
+单词备注支持多行记忆方法；四种学习模式、GRE 词条预览和点词词典均共用备注。网页输入后自动保存到本机，并随现有加密进度同步。JSON 导入导出包含 notes 字段，与 Windows 双向兼容；旧进度未提供 notes 字段时保留已有备注。

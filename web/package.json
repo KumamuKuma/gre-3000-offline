@@ -1,6 +1,6 @@
 {
   "name": "gre-3000-pwa",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -10,7 +10,7 @@
     "build": "vinext build",
     "build:cloudbase": "vite build --config vite.cloudbase.config.ts",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern cloudbase-dist",
     "db:generate": "drizzle-kit generate"
   },

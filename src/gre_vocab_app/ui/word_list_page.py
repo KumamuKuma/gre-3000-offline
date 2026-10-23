@@ -41,6 +41,7 @@ class WordListPage(QWidget):
     starRatingRequested = Signal(int, int)
     searchRequested = Signal(str)
     machine7FilterChanged = Signal(bool)
+    noteRequested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -59,7 +60,7 @@ class WordListPage(QWidget):
         eyebrow.setObjectName("eyebrow")
         title = QLabel("完整词表")
         title.setObjectName("pageTitle")
-        subtitle = QLabel("按原书顺序浏览；单词只保留 0–3 星标注。")
+        subtitle = QLabel("按原书顺序浏览；支持 0–3 星标注和个人备注。")
         subtitle.setObjectName("muted")
         header_copy.addWidget(eyebrow)
         header_copy.addWidget(title)
@@ -130,6 +131,11 @@ class WordListPage(QWidget):
         self.star_button.clicked.connect(self._advance_star)
         actions.addWidget(self.open_button)
         actions.addWidget(self.star_button)
+        self.note_button = QPushButton("单词备注")
+        self.note_button.setObjectName("outlineButton")
+        self.note_button.setMinimumHeight(40)
+        self.note_button.clicked.connect(self._edit_note)
+        actions.addWidget(self.note_button)
         root.addWidget(actions_bar)
         self._update_actions()
 
@@ -317,6 +323,12 @@ class WordListPage(QWidget):
         enabled = current is not None
         self.open_button.setEnabled(enabled)
         self.star_button.setEnabled(enabled)
+        self.note_button.setEnabled(enabled)
+
+    def _edit_note(self) -> None:
+        row = self._current_row_data()
+        if row is not None:
+            self.noteRequested.emit(row.word.headword)
 
     def _emit_selected_item(self, item: QTableWidgetItem) -> None:
         row = self._row_data(item.row())

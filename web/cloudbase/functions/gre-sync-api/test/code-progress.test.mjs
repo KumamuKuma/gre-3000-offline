@@ -279,6 +279,24 @@ test("CloudBase storage refuses to overwrite an existing object with another aut
   assert.equal(backend.value().authHash, AUTH_HASH);
 });
 
+test("progress updates and deletions read the newest object even when the CDN retains an older version", async () => {
+  const initial = {
+    authHash: AUTH_HASH,
+    ciphertext: ENCRYPTED.ciphertext,
+    nonce: ENCRYPTED.nonce,
+    updatedAt: UPDATED_AT,
+  };
+  const backend = cloudStorage(initial);
+  const originDownload = backend.client.downloadFile;
+  backend.client.downloadFile = async (options) => options.urlType === "COS_URL"
+    ? originDownload(options)
+    : { fileContent: Buffer.from(JSON.stringify(initial)) };
+  const store = createCloudBaseStorageStore(backend.client);
+  const next = { ...initial, ciphertext: "Newest_encrypted_progress_1234567890", updatedAt: "2026-10-23T11:00:00.000Z" };
+  assert.equal(await store.upsert({ spaceId: SPACE_ID, ...next }), true);
+  assert.deepEqual(await store.get(SPACE_ID), next);
+});
+
 test("CloudBase gateway CORS preflight allows the static website and auth header", async () => {
   let routed = false;
   const handle = createCloudBaseApiHandler({

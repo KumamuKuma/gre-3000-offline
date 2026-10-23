@@ -9,6 +9,7 @@ import {
   validateSyncCode,
 } from "./sync-code";
 import { dictionaryEntryForDisplay } from "./dictionary-senses";
+import { MAX_NOTE_LENGTH, WordNotes, noteKey, normalizeNotes, setWordNote } from "./word-notes";
 
 type StudyMode = "reading" | "brief" | "recall" | "quiz";
 type Screen = "home" | "study" | "sentences" | "words" | "settings";
@@ -74,6 +75,7 @@ type Progress = {
   version: 1;
   exported_at?: string;
   stars: Record<string, number>;
+  notes: WordNotes;
   lists: Record<string, ListProgress>;
   settings: Record<string, string>;
 };
@@ -297,6 +299,7 @@ function defaultProgress(data: ContentPayload): Progress {
     schema: "gre-vocab-progress",
     version: 1,
     stars: {},
+    notes: {},
     lists: Object.fromEntries(
       data.lists.map((item) => [
         item.key,
@@ -318,7 +321,7 @@ function defaultProgress(data: ContentPayload): Progress {
   };
 }
 
-function normalizeProgress(value: unknown, data: ContentPayload): Progress {
+function normalizeProgress(value: unknown, data: ContentPayload, existingNotes: WordNotes = {}): Progress {
   if (!value || typeof value !== "object") throw new Error("进度文件不是对象");
   const raw = value as Partial<Progress>;
   if (raw.schema !== "gre-vocab-progress" || raw.version !== 1) {
@@ -379,6 +382,8 @@ function normalizeProgress(value: unknown, data: ContentPayload): Progress {
     schema: "gre-vocab-progress",
     version: 1,
     stars,
+    notes: raw.notes === undefined ? existingNotes : normalizeNotes(raw.notes),
+    exported_at: typeof raw.exported_at === "string" && Number.isFinite(Date.parse(raw.exported_at)) ? raw.exported_at : undefined,
     lists,
     settings: {
       study_list: list,
@@ -751,7 +756,7 @@ export default function Home() {
             const localTime = Date.parse(local?.exported_at ?? "1970-01-01");
             const cloudTime = Date.parse(result.updated_at ?? "1970-01-01");
             return cloudTime >= localTime
-              ? { ...imported, exported_at: result.updated_at }
+              ? { ...imported, notes: Object.hasOwn(decoded as object, "notes") ? imported.notes : local?.notes ?? {}, exported_at: result.updated_at ?? undefined }
               : local;
           });
         }
@@ -901,6 +906,10 @@ export default function Home() {
 
   function setSetting(key: string, value: string) {
     updateProgress((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
+  }
+
+  function saveWordNote(word: string, text: string) {
+    updateProgress((current) => ({ ...current, notes: setWordNote(current.notes, word, text) }));
   }
 
   function selectMode(nextMode: StudyMode) {
@@ -1306,7 +1315,7 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (!file || !data) return;
     file.text()
-      .then((text) => normalizeProgress(JSON.parse(text), data))
+      .then((text) => normalizeProgress(JSON.parse(text), data, progress?.notes))
       .then((imported) => {
         setProgress(imported);
         setNotice("学习进度导入成功。");
@@ -1572,6 +1581,7 @@ export default function Home() {
               <button className="star-button" onClick={() => cycleStar(activeWord)} aria-label="修改星级">{starText(progress.stars[String(activeWord.id)] ?? 0)}</button>
             </div>
             <div className="word-title-row"><div><h1><LookupQuery text={activeWord.word} onLookup={openLookup} /></h1><p>{activeWord.phonetic}</p></div><button className="speak" onClick={() => speak(activeWord.word)} aria-label="朗读单词">▶</button></div>
+            <WordNote key={noteKey(activeWord.word)} word={activeWord.word} text={progress.notes[noteKey(activeWord.word)] ?? ""} onChange={saveWordNote} />
 
             {mode === "recall" && !answerVisible && <button className="reveal" onClick={() => setAnswerVisible(true)}>想一想，然后点击揭晓</button>}
 
@@ -1745,6 +1755,7 @@ export default function Home() {
               <button onClick={() => setLookup(null)} aria-label="关闭词典">×</button>
             </header>
             <span className="lookup-source">{lookup.source}</span>
+            <WordNote key={noteKey(lookup.headword || lookup.normalized)} word={lookup.headword || lookup.normalized} text={progress.notes[noteKey(lookup.headword || lookup.normalized)] ?? ""} onChange={saveWordNote} />
             {lookup.greTranslation && (
               <section className="lookup-dictionary-section lookup-gre">
                 <h3>GRE 3000 已审核释义</h3>
@@ -1842,6 +1853,8 @@ export default function Home() {
             openLookup(queryText);
           }}
           onSpeak={speak}
+          note={progress.notes[noteKey(grePreviewWord.word)] ?? ""}
+          onNoteChange={saveWordNote}
         />
       )}
 
@@ -1854,6 +1867,19 @@ export default function Home() {
   );
 }
 
+function WordNote({ word, text, onChange }: { word: string; text: string; onChange: (word: string, text: string) => void }) {
+  if (!word || [...noteKey(word)].length > 500) return null;
+  return (
+    <details className="word-note" onPointerDown={(event) => event.stopPropagation()}>
+      <summary>{text ? "我的备注 · 编辑" : "添加备注"}</summary>
+      <label>
+        <textarea aria-label={`${word} 的备注`} value={text} maxLength={MAX_NOTE_LENGTH} rows={4} placeholder="写下联想、词根拆解或自己的记忆方法……" onChange={(event) => onChange(word, event.target.value)} />
+      </label>
+      <small>{[...text].length} / {MAX_NOTE_LENGTH} 字 · 自动保存到本机，随学习进度同步；清空可删除</small>
+    </details>
+  );
+}
+
 function Relation({ title, ids, wordMap, onOpen, onLookup }: { title: string; ids: number[]; wordMap: Map<number, WordEntry>; onOpen: (id: number) => void; onLookup: (word: string) => void }) {
   const unique = [...new Set(ids)].filter((id) => wordMap.has(id));
   if (!unique.length) return null;
@@ -1862,7 +1888,7 @@ function Relation({ title, ids, wordMap, onOpen, onLookup }: { title: string; id
   );
 }
 
-function GreWordPreview({ word, wordMap, closeLabel, onClose, onOpen, onLookup, onSpeak }: { word: WordEntry; wordMap: Map<number, WordEntry>; closeLabel: string; onClose: () => void; onOpen: (id: number) => void; onLookup: (word: string) => void; onSpeak: (text: string) => void }) {
+function GreWordPreview({ word, wordMap, closeLabel, onClose, onOpen, onLookup, onSpeak, note, onNoteChange }: { word: WordEntry; wordMap: Map<number, WordEntry>; closeLabel: string; onClose: () => void; onOpen: (id: number) => void; onLookup: (word: string) => void; onSpeak: (text: string) => void; note: string; onNoteChange: (word: string, text: string) => void }) {
   return (
     <div className="lookup-backdrop gre-preview-backdrop" onClick={onClose}>
       <section className="lookup-sheet gre-preview" role="dialog" aria-modal="true" aria-label={`${word.word} 的 GRE 词条`} onClick={(event) => event.stopPropagation()}>
@@ -1876,6 +1902,7 @@ function GreWordPreview({ word, wordMap, closeLabel, onClose, onOpen, onLookup, 
           <button onClick={onClose} aria-label={closeLabel}>×</button>
         </header>
         {word.machine7 && <div className="gre-preview-priority">机经 7.0 重点词</div>}
+        <WordNote key={noteKey(word.word)} word={word.word} text={note} onChange={onNoteChange} />
         <div className="lookup-meaning">{word.definition_zh}</div>
         <div className="lookup-definition"><LookupText text={word.definition_en} onLookup={onLookup} /></div>
         {word.synonyms && <div className="detail-line"><span>近义词</span><p><LookupText text={word.synonyms} onLookup={onLookup} /></p></div>}

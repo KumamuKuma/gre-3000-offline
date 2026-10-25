@@ -91,6 +91,31 @@ class FakeUser:
         self.review_counts = {}
         self.completions = {}
         self.notes = {}
+        self.marks = {}
+        self.recent = []
+
+    def recent_marked_ids(self):
+        return tuple(self.recent)
+
+    def set_recent_marked_ids(self, values):
+        self.recent = list(values)
+        return True
+
+    def record_recent_marked(self, word_id):
+        self.recent = [word_id] + [value for value in self.recent if value != word_id]
+        self.recent = self.recent[:30]
+        return True
+
+    def mark_count(self, word):
+        return self.marks.get(word.lower(), "0")
+
+    def word_marks(self):
+        return dict(self.marks)
+
+    def adjust_mark_count(self, word, delta):
+        from gre_vocab_app.word_marks import adjust_count
+        self.marks[word.lower()] = adjust_count(self.mark_count(word), delta)
+        return True
 
     def word_note(self, word):
         return self.notes.get(word.lower(), "")
@@ -207,6 +232,8 @@ class FakeUser:
         self.review_counts.clear()
         self.completions.clear()
         self.notes.clear()
+        self.marks.clear()
+        self.recent.clear()
 
 
 def test_controller_migrates_old_list_scopes_without_changing_normal_study():
@@ -1000,3 +1027,72 @@ def test_window_close_after_repository_shutdown_does_not_prompt(qtbot, tmp_path,
 
     assert window.close() is True
     assert prompts == []
+
+
+def test_controller_mark_adjustment_and_jumps_keep_quiz_state_and_sort(qtbot):
+    controller, window, content, user, _speech = make_controller(qtbot, word_count=60)
+    user.marks['word3'] = '10'
+    window.home_page.mark_sort_checkbox.setChecked(True)
+    assert user.load_setting('study_sort') == 'marks_desc'
+    window.home_page.start_button.click()
+    assert window.study_page.snapshot.word.id == 3
+    controller._set_mode(StudyMode.QUIZ)
+    controller._answer_quiz(0)
+    before = window.study_page.snapshot
+    window.study_page.word_detail.word_marks.increase.click()
+    assert user.mark_count('word3') == '11'
+    assert window.study_page.snapshot.quiz_selected_index == before.quiz_selected_index
+    assert window.study_page.snapshot.word.id == 3
+    window.study_page.word_detail.word_marks.decrease.click()
+    assert user.mark_count('word3') == '10'
+    window.study_page.jump_buttons[20].click()
+    assert window.study_page.snapshot.index == 20
+    assert window.study_page.snapshot.quiz_selected_index is None
+    window.study_page.jump_buttons[-10].click()
+    assert window.study_page.snapshot.index == 10
+    window.study_page.jump_buttons[-20].click()
+    assert window.study_page.snapshot.index == 0
+    assert not window.study_page.jump_buttons[-10].isEnabled()
+
+
+def test_recent_marks_door_is_live_and_restores_original_quiz(qtbot):
+    controller, window, _content, user, _speech = make_controller(qtbot, word_count=60)
+    controller._open_study('list1')
+    controller._set_mode(StudyMode.QUIZ)
+    controller._jump(20)
+    controller._answer_quiz(0)
+    normal_study = controller.study
+    original = window.study_page.snapshot
+    controller._adjust_word_mark('word2', 1)
+    controller._adjust_word_mark('word3', 1)
+    assert user.recent_marked_ids() == (3, 2)
+    window.recent_marks_action.trigger()
+    assert controller.study is not normal_study
+    assert window.study_page.snapshot.word.id == 3
+    controller._set_mode(StudyMode.RECALL)
+    controller._toggle_answer()
+    controller._adjust_word_mark('word2', 1)
+    assert controller.study._ids == (2, 3)
+    assert window.study_page.snapshot.word.id == 3
+    assert window.study_page.snapshot.index == 1
+    assert window.study_page.snapshot.answer_visible
+    controller._adjust_word_mark('word2', -1)
+    assert controller.study._ids == (2, 3)
+    controller._adjust_word_mark('word3', -1)
+    assert user.mark_count('word3') == '0'
+    assert controller.study._ids == (2, 3)
+    window.study_page.back_button.click()
+    assert controller.study is normal_study
+    restored = window.study_page.snapshot
+    assert (restored.word.id, restored.mode, restored.quiz_selected_index) == (original.word.id, original.mode, original.quiz_selected_index)
+    assert user.load_setting('study_mode') == original.mode.value
+
+
+def test_recent_marks_door_opens_empty_and_returns_home(qtbot):
+    controller, window, _content, _user, _speech = make_controller(qtbot, word_count=4)
+    window.recent_marks_action.trigger()
+    assert window.study_page.snapshot is None
+    assert not window.study_page.empty_recent_label.isHidden()
+    window.study_page.back_button.click()
+    assert controller._recent_state is None
+    assert window.stack.currentWidget() is window.home_page

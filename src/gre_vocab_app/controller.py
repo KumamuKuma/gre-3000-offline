@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import json
+import random
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -70,12 +71,24 @@ class ApplicationController:
         self._secondary_voice_name: str | None = None
         self._quiz_wrong_star_up_enabled = False
         self._quiz_correct_star_down_enabled = False
+        self._recent_state = None
         self._connect()
 
     def _connect(self) -> None:
         home = self.window.home_page
         study_page = self.window.study_page
         settings = self.window.settings_dialog
+        self._mark_widgets = (
+            study_page.word_detail.word_marks,
+            self.window.lookup_dialog.word_marks,
+            self.window.word_list_page.word_marks,
+        )
+        for widget in self._mark_widgets:
+            widget.load_count = self.user.mark_count
+            widget.adjustmentRequested.connect(self._adjust_word_mark)
+        home.markSortChanged.connect(self._select_mark_sort)
+        study_page.jumpRequested.connect(self._jump)
+        self.window.recentMarksRequested.connect(self._open_recent_marks)
         for widget in (
             study_page.word_detail.word_note,
             self.window.lookup_dialog.word_note,
@@ -241,6 +254,8 @@ class ApplicationController:
         return self.user.load_setting("study_machine7_only") == "1"
 
     def _configure_home_scope(self) -> None:
+        self._leave_recent_marks(show_origin=False)
+        self.window.home_page.set_mark_sort(self.user.load_setting("study_sort") == "marks_desc")
         home = self.window.home_page
         home.set_source_lists(
             self._source_lists,
@@ -412,6 +427,88 @@ class ApplicationController:
         self._refresh_selected_list_counts()
         self._report_persistence_issue()
 
+    def _select_mark_sort(self, enabled: bool) -> None:
+        self.user.save_setting("study_sort", "marks_desc" if enabled else "source")
+        self._report_persistence_issue()
+
+    def _adjust_word_mark(self, headword: str, delta: int) -> None:
+        self.user.adjust_mark_count(headword, delta)
+        if delta > 0:
+            from gre_vocab_app.word_notes import note_key
+            word = next((item for item in self._all_words if note_key(item.headword) == note_key(headword)), None)
+            if word is not None:
+                self.user.record_recent_marked(word.id)
+        if self._recent_state is not None:
+            snapshot = self.study.refresh_recent(self.user.recent_marked_ids())
+            if self._detail_snapshot is None:
+                self._render_recent(snapshot)
+        for widget in self._mark_widgets:
+            widget.refresh()
+        self._report_persistence_issue()
+
+    def _render_recent(self, snapshot) -> None:
+        if snapshot is None:
+            self.window.study_page.render_empty_recent()
+        else:
+            self.window.study_page.render(snapshot)
+            self.window.study_page.back_button.setText("退出最近标记")
+        self.window.show_study()
+
+    def _open_recent_marks(self) -> None:
+        if self._recent_state is not None:
+            self._detail_snapshot = None
+            self._clear_quiz_word_return()
+            self._render_recent(self.study.refresh_recent(self.user.recent_marked_ids()))
+            return
+        self._recent_state = {
+            "study": self.study,
+            "mode_setting": self.user.load_setting("study_mode") or "reading",
+            "page": self.window.stack.currentWidget(),
+            "context": (self._detail_snapshot, self._detail_origin, self._quiz_word_return_active,
+                        self._quiz_word_return_snapshot, self._quiz_word_return_origin),
+            "settings": self.window.settings_dialog.isVisible(),
+            "lookup": self.window.lookup_dialog._result if self.window.lookup_dialog.isVisible() else None,
+        }
+        self.window.settings_dialog.hide()
+        self.window.lookup_dialog.hide()
+        self._detail_snapshot = None
+        self._clear_quiz_word_return()
+        self.study = type(self.study)(self.content, self.user, random.Random())
+        self._render_recent(self.study.start_recent(self.user.recent_marked_ids()))
+
+    def _leave_recent_marks(self, *, show_origin: bool) -> None:
+        if self._recent_state is None:
+            return
+        state = self._recent_state
+        self._recent_state = None
+        self.window.lookup_dialog.hide()
+        self.window.settings_dialog.hide()
+        self.study = state["study"]
+        self.user.save_setting("study_mode", state["mode_setting"])
+        (self._detail_snapshot, self._detail_origin, self._quiz_word_return_active,
+         self._quiz_word_return_snapshot, self._quiz_word_return_origin) = state["context"]
+        if not show_origin:
+            return
+        page = state["page"]
+        if page is self.window.study_page:
+            snapshot = self._detail_snapshot or self.study.current()
+            snapshot = replace(snapshot, star_rating=self.user.star_rating(snapshot.word.id))
+            if self._detail_snapshot is not None:
+                self._detail_snapshot = snapshot
+            self.window.study_page.render(snapshot)
+            self.window.show_study()
+        elif page is self.window.word_list_page:
+            self._refresh_word_list()
+            self.window.show_word_list()
+        elif page is self.window.home_page:
+            self.window.show_home()
+        else:
+            self.window.stack.setCurrentWidget(page)
+        if state["lookup"] is not None:
+            self.window.lookup_dialog.show_result(state["lookup"])
+        if state["settings"]:
+            self.window.show_settings()
+
     def _select_word_list_machine7_filter(self, enabled: bool) -> None:
         self.user.save_setting(
             "word_list_machine7_only", "1" if bool(enabled) else "0"
@@ -452,18 +549,21 @@ class ApplicationController:
         self.window.word_list_page.set_words(self._word_list_rows())
 
     def _show_home(self) -> None:
+        self._leave_recent_marks(show_origin=False)
         self._clear_quiz_word_return()
         self._detail_snapshot = None
         self._refresh_stats()
         self.window.show_home()
 
     def _open_word_list(self) -> None:
+        self._leave_recent_marks(show_origin=False)
         self._clear_quiz_word_return()
         self._detail_snapshot = None
         self._refresh_word_list()
         self.window.show_word_list()
 
     def _open_long_sentences(self) -> None:
+        self._leave_recent_marks(show_origin=False)
         self._clear_quiz_word_return()
         self._detail_snapshot = None
         if not self._long_sentences_loaded:
@@ -507,6 +607,7 @@ class ApplicationController:
         *,
         machine7_only: bool = False,
     ) -> None:
+        self._leave_recent_marks(show_origin=False)
         if isinstance(source_scope, str):
             start_kwargs = {"source_section": source_scope}
         elif isinstance(source_scope, Sequence) and not isinstance(
@@ -523,6 +624,7 @@ class ApplicationController:
                 BrowseOrder.SOURCE,
                 star_ratings=star_ratings,
                 machine7_only=machine7_only,
+                marks_desc=self.user.load_setting("study_sort") == "marks_desc",
                 **start_kwargs,
             )
         except (KeyError, ValueError, RuntimeError) as error:
@@ -660,6 +762,9 @@ class ApplicationController:
         )
 
     def _back_from_study(self) -> None:
+        if self._recent_state is not None and self._detail_snapshot is None and not self._quiz_word_return_active:
+            self._leave_recent_marks(show_origin=True)
+            return
         if self._quiz_word_return_active and self._detail_origin == "quiz_word":
             previous = self._quiz_word_return_snapshot
             origin = self._quiz_word_return_origin
@@ -726,6 +831,17 @@ class ApplicationController:
         snapshot = self.study.first()
         self.window.study_page.render(snapshot)
         if snapshot.word.id != before.word.id and self._auto_speak_enabled:
+            self._speak(snapshot.word.headword)
+        self._refresh_stats()
+        self._report_persistence_issue()
+
+    def _jump(self, delta: int) -> None:
+        if self._detail_snapshot is not None:
+            return
+        before = self.study.current()
+        snapshot = self.study.jump(delta)
+        self.window.study_page.render(snapshot)
+        if self._auto_speak_enabled and before.word.id != snapshot.word.id:
             self._speak(snapshot.word.headword)
         self._refresh_stats()
         self._report_persistence_issue()

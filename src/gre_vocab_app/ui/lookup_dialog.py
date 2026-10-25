@@ -20,6 +20,7 @@ from gre_vocab_app.services.dictionary import DictionarySense, LookupResult
 
 from .lookup_label import LookupLabel
 from .word_note import WordNote
+from .word_marks import WordMarks
 
 
 _TRANSLATION_PART_OF_SPEECH = re.compile(
@@ -78,6 +79,8 @@ class LookupDialog(QDialog):
         details.setContentsMargins(0, 0, 0, 0)
         details.setSpacing(12)
         self.word_note = WordNote()
+        self.word_marks = WordMarks()
+        details.addWidget(self.word_marks)
         details.addWidget(self.word_note)
         self.primary_title = QLabel()
         self.primary_title.setObjectName("sectionTitle")
@@ -163,6 +166,7 @@ class LookupDialog(QDialog):
     def show_result(self, result: LookupResult) -> None:
         self._result = result
         self.word_note.set_word(result.headword or result.normalized or result.query)
+        self.word_marks.set_word((result.headword or result.normalized or result.query) if result.gre_word_id is not None else "")
         self.query_label.setText(result.headword or result.query)
         self.phonetic_label.setText(result.phonetic)
         self.phonetic_label.setVisible(bool(result.phonetic))

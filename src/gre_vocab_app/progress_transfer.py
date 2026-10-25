@@ -5,11 +5,14 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from gre_vocab_app.word_notes import validate_notes
+from gre_vocab_app.word_marks import validate_marks
 
 
 PROGRESS_SCHEMA = "gre-vocab-progress"
 PROGRESS_VERSION = 1
 _SYNC_SETTING_KEYS = (
+    "study_sort",
+    "study_marks_current_word_id",
     "study_list",
     "study_lists",
     "study_star_lists",
@@ -34,6 +37,7 @@ class ImportSummary:
     star_count: int
     list_count: int
     note_count: int = 0
+    mark_count: int = 0
 
 
 def export_progress(user: Any, content: Any) -> dict[str, Any]:
@@ -65,6 +69,8 @@ def export_progress(user: Any, content: Any) -> dict[str, Any]:
         "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "stars": stars,
         "notes": user.word_notes(),
+        "marks": user.word_marks(),
+        "recent_marks": list(user.recent_marked_ids()),
         "lists": lists,
         "settings": settings,
     }
@@ -91,6 +97,19 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
     source_lists = {str(item.key): item for item in content.source_lists()}
 
     notes = None
+    marks = None
+    recent_marks = None
+    if "recent_marks" in document:
+        recent_marks = document["recent_marks"]
+        if (not isinstance(recent_marks, list) or len(recent_marks) > 30
+            or any(type(value) is not int or value not in valid_word_ids for value in recent_marks)
+            or len(set(recent_marks)) != len(recent_marks)):
+            raise ProgressFormatError("最近标记包含无效、重复或过多的单词编号。")
+    if "marks" in document:
+        try:
+            marks = validate_marks(document["marks"])
+        except ValueError as error:
+            raise ProgressFormatError(str(error)) from error
     if "notes" in document:
         try:
             notes = validate_notes(document["notes"])
@@ -133,6 +152,12 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
         if key not in _SYNC_SETTING_KEYS or not isinstance(value, str):
             raise ProgressFormatError("settings 包含不受支持的设置。")
         settings[key] = value
+    if settings.get("study_sort", "source") not in {"source", "marks_desc"}:
+        raise ProgressFormatError("学习排序无效。")
+    if "study_marks_current_word_id" in settings:
+        anchor = settings["study_marks_current_word_id"]
+        if anchor not in {str(word_id) for word_id in valid_word_ids}:
+            raise ProgressFormatError("标记排序学习位置无效。")
     if "study_mode" in settings and settings["study_mode"] not in {
         "reading",
         "brief",
@@ -228,6 +253,11 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
     if notes is not None:
         for headword in user.word_notes().keys() | notes.keys():
             user.set_word_note(headword, notes.get(headword, ""))
+    if marks is not None:
+        for headword in user.word_marks().keys() | marks.keys():
+            user.set_mark_count(headword, marks.get(headword, "0"))
+    if recent_marks is not None:
+        user.set_recent_marked_ids(recent_marks)
     for word_id in valid_word_ids:
         desired = stars.get(word_id, 0)
         if int(user.star_rating(word_id)) != desired:
@@ -251,4 +281,4 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
     for key, value in settings.items():
         user.save_setting(key, value)
 
-    return ImportSummary(star_count=len(stars), list_count=len(parsed_lists), note_count=len(user.word_notes()))
+    return ImportSummary(star_count=len(stars), list_count=len(parsed_lists), note_count=len(user.word_notes()), mark_count=len(user.word_marks()))

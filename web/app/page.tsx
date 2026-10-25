@@ -10,6 +10,7 @@ import {
 } from "./sync-code";
 import { dictionaryEntryForDisplay } from "./dictionary-senses";
 import { MAX_NOTE_LENGTH, WordNotes, noteKey, normalizeNotes, setWordNote } from "./word-notes";
+import { WordMarks as WordMarkCounts, adjustMarkCount, getMarkCount, normalizeMarks, normalizeRecentMarks, rememberMarkedWord, sortByMarks } from "./word-marks";
 
 type StudyMode = "reading" | "brief" | "recall" | "quiz";
 type Screen = "home" | "study" | "sentences" | "words" | "settings";
@@ -76,6 +77,8 @@ type Progress = {
   exported_at?: string;
   stars: Record<string, number>;
   notes: WordNotes;
+  marks: WordMarkCounts;
+  recent_marks: number[];
   lists: Record<string, ListProgress>;
   settings: Record<string, string>;
 };
@@ -136,6 +139,7 @@ type LookupView = {
 };
 
 const STORAGE_KEY = "gre-vocab-progress-v1";
+type RecentReturn = { screen: Screen; wordId: number | null; ids: number[]; revealed: boolean; selected: number | null; attempts: number; mode: StudyMode; lookup: LookupView | null; preview: number | null };
 const SYNC_CODE_STORAGE_KEY = "gre-vocab-sync-code-v1";
 const SYNC_TIMEOUT_MS = 12_000;
 const WORD_LIST_BATCH_SIZE = 80;
@@ -300,6 +304,8 @@ function defaultProgress(data: ContentPayload): Progress {
     version: 1,
     stars: {},
     notes: {},
+    marks: {},
+    recent_marks: [],
     lists: Object.fromEntries(
       data.lists.map((item) => [
         item.key,
@@ -311,6 +317,7 @@ function defaultProgress(data: ContentPayload): Progress {
       study_lists: "all",
       study_star_lists: "all",
       study_filter: "all",
+      study_sort: "source",
       study_machine7_only: "0",
       word_list_machine7_only: "0",
       study_mode: "reading",
@@ -321,7 +328,7 @@ function defaultProgress(data: ContentPayload): Progress {
   };
 }
 
-function normalizeProgress(value: unknown, data: ContentPayload, existingNotes: WordNotes = {}): Progress {
+function normalizeProgress(value: unknown, data: ContentPayload, existingNotes: WordNotes = {}, existingMarks: WordMarkCounts = {}, existingRecent: number[] = []): Progress {
   if (!value || typeof value !== "object") throw new Error("进度文件不是对象");
   const raw = value as Partial<Progress>;
   if (raw.schema !== "gre-vocab-progress" || raw.version !== 1) {
@@ -383,6 +390,8 @@ function normalizeProgress(value: unknown, data: ContentPayload, existingNotes: 
     version: 1,
     stars,
     notes: raw.notes === undefined ? existingNotes : normalizeNotes(raw.notes),
+    marks: raw.marks === undefined ? existingMarks : normalizeMarks(raw.marks),
+    recent_marks: raw.recent_marks === undefined ? existingRecent : normalizeRecentMarks(raw.recent_marks, validIds),
     exported_at: typeof raw.exported_at === "string" && Number.isFinite(Date.parse(raw.exported_at)) ? raw.exported_at : undefined,
     lists,
     settings: {
@@ -391,6 +400,8 @@ function normalizeProgress(value: unknown, data: ContentPayload, existingNotes: 
       study_star_lists: starScope,
       ...starWordSetting,
       ...machine7WordSetting,
+      ...(validIds.has(Number(settings.study_marks_current_word_id)) && String(Number(settings.study_marks_current_word_id)) === settings.study_marks_current_word_id ? { study_marks_current_word_id: settings.study_marks_current_word_id } : {}),
+      study_sort: settings.study_sort === "marks_desc" ? "marks_desc" : "source",
       study_filter: filter,
       study_machine7_only: settings.study_machine7_only === "1" ? "1" : "0",
       word_list_machine7_only: settings.word_list_machine7_only === "1" ? "1" : "0",
@@ -503,6 +514,8 @@ export default function Home() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [screen, setScreen] = useState<Screen>("home");
+  const [recentMode, setRecentMode] = useState(false);
+  const recentReturn = useRef<RecentReturn | null>(null);
   const [activeWordId, setActiveWordId] = useState<number | null>(null);
   const [studySessionWordIds, setStudySessionWordIds] = useState<number[]>([]);
   const [answerVisible, setAnswerVisible] = useState(false);
@@ -756,7 +769,7 @@ export default function Home() {
             const localTime = Date.parse(local?.exported_at ?? "1970-01-01");
             const cloudTime = Date.parse(result.updated_at ?? "1970-01-01");
             return cloudTime >= localTime
-              ? { ...imported, notes: Object.hasOwn(decoded as object, "notes") ? imported.notes : local?.notes ?? {}, exported_at: result.updated_at ?? undefined }
+              ? { ...imported, notes: Object.hasOwn(decoded as object, "notes") ? imported.notes : local?.notes ?? {}, marks: Object.hasOwn(decoded as object, "marks") ? imported.marks : local?.marks ?? {}, recent_marks: Object.hasOwn(decoded as object, "recent_marks") ? imported.recent_marks : local?.recent_marks ?? [], exported_at: result.updated_at ?? undefined }
               : local;
           });
         }
@@ -831,21 +844,31 @@ export default function Home() {
     () => machine7Only ? scopeWords.filter((word) => word.machine7) : scopeWords,
     [machine7Only, scopeWords],
   );
+  const marksDesc = progress?.settings.study_sort === "marks_desc";
   const eligibleStudyQueue = useMemo(() => {
     if (!progress) return [];
-    if (allStarsSelected) return studyBaseWords;
-    return studyBaseWords.filter((word) => selectedStarRatings.includes(progress.stars[String(word.id)] ?? 0));
-  }, [allStarsSelected, progress, selectedStarRatings, studyBaseWords]);
+    const words = allStarsSelected ? studyBaseWords : studyBaseWords.filter((word) => selectedStarRatings.includes(progress.stars[String(word.id)] ?? 0));
+    return marksDesc ? sortByMarks(words, progress.marks) : words;
+  }, [allStarsSelected, marksDesc, progress, selectedStarRatings, studyBaseWords]);
+  const recentWords = useMemo(() => (progress?.recent_marks ?? []).map(id => wordMap.get(id)).filter((word): word is WordEntry => Boolean(word)), [progress?.recent_marks, wordMap]);
   const studyQueue = useMemo(() => {
+    if (recentMode) return recentWords;
     if (screen !== "study" || !studySessionWordIds.length) return eligibleStudyQueue;
     return studySessionWordIds
       .map((wordId) => wordMap.get(wordId))
       .filter((word): word is WordEntry => Boolean(word));
-  }, [eligibleStudyQueue, screen, studySessionWordIds, wordMap]);
-  const isFullListStudy = allStarsSelected && !machine7Only;
-  const activeWord = activeWordId ? wordMap.get(activeWordId) ?? null : null;
+  }, [eligibleStudyQueue, recentMode, recentWords, screen, studySessionWordIds, wordMap]);
+  const isFullListStudy = allStarsSelected && !machine7Only && !recentMode;
+  const activeWord = recentMode ? recentWords.find(word => word.id === activeWordId) ?? recentWords[0] ?? null : activeWordId ? wordMap.get(activeWordId) ?? null : null;
   const grePreviewWord = grePreviewWordId ? wordMap.get(grePreviewWordId) ?? null : null;
   const activeQueueIndex = activeWord ? studyQueue.findIndex((word) => word.id === activeWord.id) : -1;
+  useEffect(() => {
+    if (!recentMode || recentWords.some(word => word.id === activeWordId)) return;
+    setActiveWordId(recentWords[0]?.id ?? null);
+    setQuizSelected(null);
+    setQuizAttemptCount(0);
+    setAnswerVisible(mode === "reading" || mode === "brief");
+  }, [activeWordId, mode, recentMode, recentWords]);
 
   const starCounts = useMemo(() => {
     const counts = [0, 0, 0, 0];
@@ -874,7 +897,7 @@ export default function Home() {
     }
     return `已选 ${selectedListKeys.length} 个 List`;
   }, [data, selectedListKeys]);
-  const studySelectionLabel = machine7Only
+  const studySelectionLabel = recentMode ? "最近标记 · 实时更新" : machine7Only
     ? `${studyScopeLabel} · 机经 7.0 重点`
     : studyScopeLabel;
 
@@ -910,6 +933,47 @@ export default function Home() {
 
   function saveWordNote(word: string, text: string) {
     updateProgress((current) => ({ ...current, notes: setWordNote(current.notes, word, text) }));
+  }
+
+  function changeWordMark(word: string, delta: number) {
+    const entry = wordByHeadword.get(normalizeLookupQuery(word));
+    updateProgress((current) => ({ ...current, marks: adjustMarkCount(current.marks, word, delta), recent_marks: delta > 0 && entry ? rememberMarkedWord(current.recent_marks, entry.id) : current.recent_marks }));
+  }
+
+  function openRecent() {
+    if (recentMode) return;
+    recentReturn.current = { screen, wordId: activeWordId, ids: studySessionWordIds, revealed: answerVisible, selected: quizSelected, attempts: quizAttemptCount, mode, lookup, preview: grePreviewWordId };
+    setRecentMode(true);
+    setScreen("study");
+    setActiveWordId(recentWords[0]?.id ?? null);
+    setAnswerVisible(mode === "reading" || mode === "brief");
+    setQuizSelected(null);
+    setQuizAttemptCount(0);
+    setLookup(null);
+    setGrePreviewWordId(null);
+    setSelectionText("");
+  }
+
+  function exitRecent(destination?: Screen) {
+    const previous = recentReturn.current;
+    setRecentMode(false);
+    recentReturn.current = null;
+    if (previous) {
+      setScreen(destination ?? previous.screen);
+      setActiveWordId(previous.wordId);
+      setStudySessionWordIds(previous.ids);
+      setAnswerVisible(previous.revealed);
+      setQuizSelected(previous.selected);
+      setQuizAttemptCount(previous.attempts);
+      setSetting("study_mode", previous.mode);
+      setLookup(destination ? null : previous.lookup);
+      setGrePreviewWordId(destination ? null : previous.preview);
+    } else setScreen(destination ?? "home");
+  }
+
+  function navigate(next: Screen) {
+    if (recentMode) exitRecent(next);
+    else setScreen(next);
   }
 
   function selectMode(nextMode: StudyMode) {
@@ -973,7 +1037,7 @@ export default function Home() {
       return;
     }
     const singleList = selectedListKeys.length === 1 ? selectedListKeys[0] : null;
-    const saved = machine7Only
+    const saved = marksDesc ? Number(progress.settings.study_marks_current_word_id) : machine7Only
       ? Number(progress.settings.study_machine7_current_word_id)
       : isFullListStudy && singleList
         ? progress.lists[singleList]?.current_word_id
@@ -981,7 +1045,9 @@ export default function Home() {
     const candidate = eligibleStudyQueue.find((word) => word.id === saved) ?? eligibleStudyQueue[0];
     setStudySessionWordIds(eligibleStudyQueue.map((word) => word.id));
     setActiveWordId(candidate.id);
-    if (machine7Only) {
+    if (marksDesc) {
+      setSetting("study_marks_current_word_id", String(candidate.id));
+    } else if (machine7Only) {
       setSetting("study_machine7_current_word_id", String(candidate.id));
     } else if (!isFullListStudy || !singleList) {
       setSetting("study_star_current_word_id", String(candidate.id));
@@ -994,7 +1060,7 @@ export default function Home() {
 
   function openWord(word: WordEntry) {
     setStudySessionWordIds(
-      (data?.words ?? []).filter((candidate) => candidate.list === word.list).map((candidate) => candidate.id),
+      (marksDesc ? sortByMarks((data?.words ?? []).filter((candidate) => candidate.list === word.list), progress?.marks ?? {}) : (data?.words ?? []).filter((candidate) => candidate.list === word.list)).map((candidate) => candidate.id),
     );
     setActiveWordId(word.id);
     setListScope([word.list]);
@@ -1012,9 +1078,13 @@ export default function Home() {
     setAnswerVisible(mode === "reading" || mode === "brief");
     setQuizSelected(null);
     setQuizAttemptCount(0);
+    if (recentMode) {
+      if (next.id !== activeWord.id && progress?.settings.auto_speak === "1") speak(next.word);
+      return;
+    }
     updateProgress((current) => ({
       ...current,
-      ...(isFullListStudy && selectedListKeys.length === 1
+      ...(isFullListStudy && selectedListKeys.length === 1 && !marksDesc
         ? {
             lists: {
               ...current.lists,
@@ -1024,7 +1094,7 @@ export default function Home() {
         : {
             settings: {
               ...current.settings,
-              [machine7Only ? "study_machine7_current_word_id" : "study_star_current_word_id"]: String(next.id),
+              [marksDesc ? "study_marks_current_word_id" : machine7Only ? "study_machine7_current_word_id" : "study_star_current_word_id"]: String(next.id),
             },
           }),
     }));
@@ -1291,7 +1361,9 @@ export default function Home() {
         ? current.settings
         : {
             ...current.settings,
-            study_star_current_word_id: String(firstScopeWordId),
+            ...(marksDesc
+              ? { study_marks_current_word_id: String(firstScopeWordId) }
+              : { study_star_current_word_id: String(firstScopeWordId) }),
           },
     }));
     setNotice(`${studyScopeLabel} 已完成一轮，所选 List 次数均已增加。`);
@@ -1315,7 +1387,7 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (!file || !data) return;
     file.text()
-      .then((text) => normalizeProgress(JSON.parse(text), data, progress?.notes))
+      .then((text) => normalizeProgress(JSON.parse(text), data, progress?.notes, progress?.marks, progress?.recent_marks))
       .then((imported) => {
         setProgress(imported);
         setNotice("学习进度导入成功。");
@@ -1394,7 +1466,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <button className="brand" onClick={() => setScreen("home")} aria-label="返回首页">
+        <button className="brand" onClick={() => navigate("home")} aria-label="返回首页">
           <span className="brand-mark">G</span>
           <span><strong>GRE 3000 Vocabulary Trainer</strong><small>原书词序 · 离线可用</small></span>
         </button>
@@ -1402,6 +1474,8 @@ export default function Home() {
       </header>
 
       {notice && <button className="notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
+      <button className="recent-gate" aria-label={recentMode ? "退出最近标记" : "打开最近标记"} onClick={() => recentMode ? exitRecent() : openRecent()}>{recentMode ? "退出最近标记 ↩" : `最近标记 ${progress.recent_marks.length}/30`}</button>
+      {screen === "study" && recentMode && !activeWord && <section className="page"><h1>最近标记</h1><p>还没有添加过标记的单词。给任意 GRE 单词点击 +1 后，就会出现在这里。</p><button onClick={() => exitRecent()}>返回原位置</button></section>}
 
       {screen === "home" && (
         <section className="page home-page">
@@ -1446,6 +1520,10 @@ export default function Home() {
               </div>
             </details>
 
+            <span className="field-label">学习顺序</span>
+            <button className={marksDesc ? "mark-sort active" : "mark-sort"} aria-pressed={marksDesc} onClick={() => setSetting("study_sort", marksDesc ? "source" : "marks_desc")}>
+              {marksDesc ? "✓ 按累计标记次数倒序" : "按累计标记次数倒序"}<small>进入学习时排序，同次数保留原书顺序</small>
+            </button>
             <span className="field-label">词库范围</span>
             <div className="filter-row priority-filter" role="group" aria-label="机经 7.0 重点词筛选">
               <button className={!machine7Only ? "filter active" : "filter"} aria-pressed={!machine7Only} onClick={() => setSetting("study_machine7_only", "0")}>全部单词 <small>{scopeWords.length}</small></button>
@@ -1535,7 +1613,7 @@ export default function Home() {
       {screen === "study" && activeWord && (
         <section className="page study-page">
           <div className="study-meta">
-            <button onClick={() => setScreen("home")}>← 退出</button>
+            <button onClick={() => recentMode ? exitRecent() : setScreen("home")}>{recentMode ? "← 返回原位置" : "← 退出"}</button>
             <span>{studySelectionLabel} · {Math.max(activeQueueIndex + 1, 1)} / {studyQueue.length}</span>
           </div>
           <div className="progress-track"><span style={{ width: `${Math.max(3, ((activeQueueIndex + 1) / Math.max(studyQueue.length, 1)) * 100)}%` }} /></div>
@@ -1557,10 +1635,15 @@ export default function Home() {
             </div>
           </div>
 
+          <div className="quick-jumps" aria-label="快速翻词">
+            {[-20, -10, 10, 20].map((step) => <button key={step} disabled={step < 0 ? activeQueueIndex <= 0 : activeQueueIndex >= studyQueue.length - 1} onClick={() => move(step)}>{step < 0 ? `后退 ${-step} 词` : `前进 ${step} 词`}</button>)}
+          </div>
+          {marksDesc && !recentMode && <p className="list-hint">累计标记倒序 · 本轮顺序固定，重新进入时按最新次数排序</p>}
+          {recentMode && <p className="list-hint">最近添加的 30 个不同单词 · +1 时实时移到最前，−1 不改变先后 · 退出后回到原位置</p>}
           <div className="study-actions">
             <button onClick={() => move(-1)} disabled={activeQueueIndex === 0}>← 上一词</button>
             {activeQueueIndex >= studyQueue.length - 1
-              ? isFullListStudy
+              ? recentMode ? <button className="finish" onClick={() => exitRecent()}>退出最近标记</button> : isFullListStudy
                 ? <button className="finish" onClick={completeRound}>完成本轮</button>
                 : <button className="finish" onClick={() => { setNotice(`${studySelectionLabel} 的筛选学习已完成。`); setScreen("home"); }}>完成筛选学习</button>
               : <button className="next" onClick={() => move(1)}>下一词 →</button>}
@@ -1582,6 +1665,7 @@ export default function Home() {
             </div>
             <div className="word-title-row"><div><h1><LookupQuery text={activeWord.word} onLookup={openLookup} /></h1><p>{activeWord.phonetic}</p></div><button className="speak" onClick={() => speak(activeWord.word)} aria-label="朗读单词">▶</button></div>
             <WordNote key={noteKey(activeWord.word)} word={activeWord.word} text={progress.notes[noteKey(activeWord.word)] ?? ""} onChange={saveWordNote} />
+            <WordMarks word={activeWord.word} count={getMarkCount(progress.marks, activeWord.word)} onAdjust={changeWordMark} />
 
             {mode === "recall" && !answerVisible && <button className="reveal" onClick={() => setAnswerVisible(true)}>想一想，然后点击揭晓</button>}
 
@@ -1755,6 +1839,7 @@ export default function Home() {
               <button onClick={() => setLookup(null)} aria-label="关闭词典">×</button>
             </header>
             <span className="lookup-source">{lookup.source}</span>
+            {lookup.greWordId && <WordMarks word={lookup.headword || lookup.normalized} count={getMarkCount(progress.marks, lookup.headword || lookup.normalized)} onAdjust={changeWordMark} />}
             <WordNote key={noteKey(lookup.headword || lookup.normalized)} word={lookup.headword || lookup.normalized} text={progress.notes[noteKey(lookup.headword || lookup.normalized)] ?? ""} onChange={saveWordNote} />
             {lookup.greTranslation && (
               <section className="lookup-dictionary-section lookup-gre">
@@ -1855,16 +1940,27 @@ export default function Home() {
           onSpeak={speak}
           note={progress.notes[noteKey(grePreviewWord.word)] ?? ""}
           onNoteChange={saveWordNote}
+          markCount={getMarkCount(progress.marks, grePreviewWord.word)}
+          onMarkAdjust={changeWordMark}
         />
       )}
 
       <nav className="bottom-nav" aria-label="主导航">
-        <button className={screen === "home" || screen === "study" || screen === "sentences" ? "active" : ""} onClick={() => setScreen("home")}><span>⌂</span>学习</button>
-        <button className={screen === "words" ? "active" : ""} onClick={() => setScreen("words")}><span>≡</span>词表</button>
-        <button className={screen === "settings" ? "active" : ""} onClick={() => setScreen("settings")}><span>⚙</span>设置</button>
+        <button className={screen === "home" || screen === "study" || screen === "sentences" ? "active" : ""} onClick={() => navigate("home")}><span>⌂</span>学习</button>
+        <button className={screen === "words" ? "active" : ""} onClick={() => navigate("words")}><span>≡</span>词表</button>
+        <button className={screen === "settings" ? "active" : ""} onClick={() => navigate("settings")}><span>⚙</span>设置</button>
       </nav>
     </main>
   );
+}
+
+function WordMarks({ word, count, onAdjust }: { word: string; count: string; onAdjust: (word: string, delta: number) => void }) {
+  if (!word || [...noteKey(word)].length > 500) return null;
+  return <div className="word-marks" onPointerDown={(event) => event.stopPropagation()}>
+    <span>累计标记：<strong>{count}</strong> 次</span>
+    <button aria-label="累计标记减一" disabled={count === "0"} onClick={() => onAdjust(word, -1)}>−1</button>
+    <button aria-label="累计标记加一" onClick={() => onAdjust(word, 1)}>+1</button>
+  </div>;
 }
 
 function WordNote({ word, text, onChange }: { word: string; text: string; onChange: (word: string, text: string) => void }) {
@@ -1888,7 +1984,7 @@ function Relation({ title, ids, wordMap, onOpen, onLookup }: { title: string; id
   );
 }
 
-function GreWordPreview({ word, wordMap, closeLabel, onClose, onOpen, onLookup, onSpeak, note, onNoteChange }: { word: WordEntry; wordMap: Map<number, WordEntry>; closeLabel: string; onClose: () => void; onOpen: (id: number) => void; onLookup: (word: string) => void; onSpeak: (text: string) => void; note: string; onNoteChange: (word: string, text: string) => void }) {
+function GreWordPreview({ word, wordMap, closeLabel, onClose, onOpen, onLookup, onSpeak, note, onNoteChange, markCount, onMarkAdjust }: { word: WordEntry; wordMap: Map<number, WordEntry>; closeLabel: string; onClose: () => void; onOpen: (id: number) => void; onLookup: (word: string) => void; onSpeak: (text: string) => void; note: string; onNoteChange: (word: string, text: string) => void; markCount: string; onMarkAdjust: (word: string, delta: number) => void }) {
   return (
     <div className="lookup-backdrop gre-preview-backdrop" onClick={onClose}>
       <section className="lookup-sheet gre-preview" role="dialog" aria-modal="true" aria-label={`${word.word} 的 GRE 词条`} onClick={(event) => event.stopPropagation()}>
@@ -1903,6 +1999,7 @@ function GreWordPreview({ word, wordMap, closeLabel, onClose, onOpen, onLookup, 
         </header>
         {word.machine7 && <div className="gre-preview-priority">机经 7.0 重点词</div>}
         <WordNote key={noteKey(word.word)} word={word.word} text={note} onChange={onNoteChange} />
+        <WordMarks word={word.word} count={markCount} onAdjust={onMarkAdjust} />
         <div className="lookup-meaning">{word.definition_zh}</div>
         <div className="lookup-definition"><LookupText text={word.definition_en} onLookup={onLookup} /></div>
         {word.synonyms && <div className="detail-line"><span>近义词</span><p><LookupText text={word.synonyms} onLookup={onLookup} /></p></div>}

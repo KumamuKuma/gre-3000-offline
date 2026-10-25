@@ -77,6 +77,7 @@ class SessionSnapshot:
     list_keys: tuple[str, ...] = ()
     list_label: str = ""
     machine7_only: bool = False
+    marks_desc: bool = False
     can_complete_round: bool = False
     root_families: tuple[RootFamily, ...] = ()
     lookalikes: tuple[RelatedWord, ...] = ()

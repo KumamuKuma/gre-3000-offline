@@ -11,6 +11,7 @@ from typing import Any, Self, Sequence
 
 from .schema import USER_SCHEMA_VERSION
 from gre_vocab_app.word_notes import note_key, validate_notes
+from gre_vocab_app.word_marks import adjust_count, validate_marks
 
 
 USER_SCHEMA = """
@@ -77,6 +78,10 @@ create table list_progress(
 
 
 _EXPECTED_SCHEMA = {
+    "word_marks": (
+        ("headword", "TEXT", 0, None, 1),
+        ("count", "TEXT", 1, None, 0),
+    ),
     "word_notes": (
         ("headword", "TEXT", 0, None, 1),
         ("note", "TEXT", 1, None, 0),
@@ -191,6 +196,11 @@ class UserRepository:
                     "create table word_notes(headword text primary key, note text not null);",
                     target_version=5,
                 )
+            elif version == 5:
+                self._run_migration(
+                    "create table word_marks(headword text primary key, count text not null);",
+                    target_version=6,
+                )
             else:  # pragma: no cover - guarded by the version bounds above
                 raise UserSchemaError(f"no migration from user schema {version}")
             version += 1
@@ -296,6 +306,7 @@ class UserRepository:
         return cls._decode_queue(name, encoded, position, seed)
 
     def _load_state(self) -> None:
+        self._marks = validate_marks(dict(self.db.execute("select headword, count from word_marks")))
         self._notes = validate_notes(dict(self.db.execute("select headword, note from word_notes")))
         self._settings = {
             str(row[0]): str(row[1])
@@ -523,6 +534,15 @@ class UserRepository:
                 )
             else:
                 self.db.execute("delete from word_notes where headword=?", (headword,))
+        elif kind == "mark":
+            headword, count = values
+            if count != "0":
+                self.db.execute(
+                    "insert into word_marks(headword, count) values(?, ?) "
+                    "on conflict(headword) do update set count=excluded.count", values,
+                )
+            else:
+                self.db.execute("delete from word_marks where headword=?", (headword,))
         elif kind == "list_completion":
             self.db.execute(
                 """
@@ -552,6 +572,7 @@ class UserRepository:
                 "seen_events",
                 "word_annotations",
                 "word_notes",
+                "word_marks",
                 "list_progress",
             ):
                 self.db.execute(f"delete from {table}")
@@ -654,6 +675,50 @@ class UserRepository:
 
     def word_note(self, headword: str) -> str:
         return self._notes.get(note_key(headword), "")
+
+    def mark_count(self, headword: str) -> str:
+        return self._marks.get(note_key(headword), "0")
+
+    def word_marks(self) -> dict[str, str]:
+        return dict(self._marks)
+
+    def set_mark_count(self, headword: str, count: str) -> bool:
+        key = note_key(headword)
+        validate_marks({key: count})
+        if self._marks.get(key, "0") == count:
+            return self.flush_pending()
+        if count == "0":
+            self._marks.pop(key, None)
+        else:
+            self._marks[key] = count
+        return self._enqueue(_Mutation("mark", (key, count)))
+
+    def adjust_mark_count(self, headword: str, delta: int) -> bool:
+        return self.set_mark_count(headword, adjust_count(self.mark_count(headword), delta))
+
+    def recent_marked_ids(self) -> tuple[int, ...]:
+        try:
+            values = json.loads(self.load_setting("_recent_marked_word_ids") or "[]")
+            self._validate_recent_marks(values)
+            return tuple(values)
+        except (TypeError, ValueError):
+            return ()
+
+    @staticmethod
+    def _validate_recent_marks(values) -> None:
+        if (not isinstance(values, (list, tuple)) or len(values) > 30
+            or any(type(value) is not int or value <= 0 for value in values)
+            or len(set(values)) != len(values)):
+            raise ValueError("最近标记必须包含最多 30 个不重复的单词编号。")
+
+    def set_recent_marked_ids(self, values) -> bool:
+        self._validate_recent_marks(values)
+        return self.save_setting("_recent_marked_word_ids", json.dumps(list(values)))
+
+    def record_recent_marked(self, word_id: int) -> bool:
+        return self.set_recent_marked_ids(
+            (word_id, *(value for value in self.recent_marked_ids() if value != word_id))[:30]
+        )
 
     def word_notes(self) -> dict[str, str]:
         return dict(self._notes)
@@ -851,6 +916,7 @@ class UserRepository:
         self._queues.clear()
         self._annotations.clear()
         self._notes.clear()
+        self._marks.clear()
         self._list_progress.clear()
         self._pending = [_Mutation("clear", ())]
         return self.flush_pending()

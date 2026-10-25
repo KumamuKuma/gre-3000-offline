@@ -321,3 +321,14 @@ button.signout { padding: 0; border: 0; background: transparent; cursor: pointer
 .word-note textarea { display: block; width: 100%; box-sizing: border-box; margin: 12px 0 8px; padding: 12px; min-height: 112px; border: 1px solid #bdccbf; border-radius: 8px; background: white; color: #24372a; font: inherit; font-size: 16px; line-height: 1.65; resize: vertical; }
 .word-note textarea:focus { outline: 2px solid #688c70; outline-offset: 2px; }
 .word-note small { display: block; color: #65746a; line-height: 1.6; }
+
+.word-marks { display: flex; align-items: center; gap: 8px; margin: 12px 0; padding: 10px 12px; border: 1px solid #ded7c8; border-radius: 12px; background: #faf6ec; }
+.word-marks span { flex: 1; min-width: 0; overflow-wrap: anywhere; color: #69532d; font-size: 14px; }
+.word-marks button { flex: 0 0 46px; min-height: 40px; border: 1px solid #d4bf95; border-radius: 8px; background: white; color: #6e5220; font-weight: 700; }
+.word-marks button:disabled, .quick-jumps button:disabled { opacity: .4; cursor: default; }
+.quick-jumps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
+.quick-jumps button { min-height: 40px; padding: 7px 2px; background: #fff; border: 1px solid #d7ded9; border-radius: 8px; font-size: 12px; color: #3c5545; white-space: nowrap; }
+.mark-sort { display: block; width: 100%; text-align: left; padding: 12px 14px; margin: 10px 0 14px; border: 1px solid #ded7c8; border-radius: 12px; background: #faf9f5; color: #69532d; font-weight: 650; }
+.mark-sort.active { border-color: #b28c45; background: #fff3d7; }
+.mark-sort small { display: block; margin-top: 4px; font-weight: 400; font-size: 12px; color: #7e745f; }
+.recent-gate { position: fixed; z-index: 150; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); max-width: 52vw; min-height: 42px; padding: 10px 16px; border: 1px solid #d1b36f; border-radius: 24px; background: #fff1cc; color: #654c1c; box-shadow: 0 4px 14px #28382c22; font-weight: 700; font-size: 13px; }

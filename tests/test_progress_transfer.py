@@ -276,3 +276,70 @@ def test_invalid_notes_rejected_before_changing_any_progress(tmp_path, notes):
             import_progress(repo, content, payload)
         assert repo.star_rating(1) == 3
         assert repo.word_note("existing") == "保留"
+
+
+def test_marks_round_trip_preserves_precision_sort_anchor_and_legacy(tmp_path):
+    content = FakeContent()
+    with UserRepository(tmp_path / 'marks-source.db') as source, UserRepository(tmp_path / 'marks-target.db') as target:
+        source.set_mark_count('word1', '900719925474099312345678901234567890')
+        source.set_mark_count('outside-corpus', '2')
+        source.save_setting('study_sort', 'marks_desc')
+        source.save_setting('study_marks_current_word_id', '2')
+        payload = export_progress(source, content)
+        summary = import_progress(target, content, payload)
+        assert summary.mark_count == 2
+        assert target.word_marks() == source.word_marks()
+        assert target.load_setting('study_sort') == 'marks_desc'
+        assert target.load_setting('study_marks_current_word_id') == '2'
+        del payload['marks']
+        import_progress(target, content, payload)
+        assert target.word_marks() == source.word_marks()
+        source.set_mark_count('word1', '0')
+        import_progress(target, content, export_progress(source, content))
+        assert target.mark_count('word1') == '0'
+        assert target.mark_count('outside-corpus') == '2'
+
+
+@pytest.mark.parametrize('marks', [None, [], {'word1': 3}, {'word1': '-1'}, {'word1': '01'}, {'word1': '1\n'}])
+def test_invalid_mark_import_cannot_change_existing_progress(tmp_path, marks):
+    with UserRepository(tmp_path / 'invalid-marks.db') as user:
+        user.set_star_rating(1, 3)
+        user.set_mark_count('word1', '9')
+        payload = export_progress(user, FakeContent())
+        payload['stars'] = {}
+        payload['marks'] = marks
+        with pytest.raises(ProgressFormatError):
+            import_progress(user, FakeContent(), payload)
+        assert user.star_rating(1) == 3
+        assert user.mark_count('word1') == '9'
+
+
+def test_recent_mark_progress_round_trip_and_legacy_preservation(tmp_path):
+    content = FakeContent()
+    with UserRepository(tmp_path / 'recent-source.db') as source, UserRepository(tmp_path / 'recent-target.db') as target:
+        source.set_recent_marked_ids([3, 1, 5])
+        source.set_mark_count('word3', '1')
+        source.set_mark_count('word1', '100')
+        payload = export_progress(source, content)
+        import_progress(target, content, payload)
+        assert target.recent_marked_ids() == (3, 1, 5)
+        del payload['recent_marks']
+        import_progress(target, content, payload)
+        assert target.recent_marked_ids() == (3, 1, 5)
+        payload['recent_marks'] = []
+        import_progress(target, content, payload)
+        assert target.recent_marked_ids() == ()
+
+
+@pytest.mark.parametrize('recent', [None, [1, 1], [999], [True], list(range(1, 32))])
+def test_invalid_recent_mark_import_changes_nothing(tmp_path, recent):
+    with UserRepository(tmp_path / 'bad-recent.db') as user:
+        user.set_star_rating(1, 3)
+        user.set_recent_marked_ids([1])
+        payload = export_progress(user, FakeContent())
+        payload['stars'] = {}
+        payload['recent_marks'] = recent
+        with pytest.raises(ProgressFormatError):
+            import_progress(user, FakeContent(), payload)
+        assert user.star_rating(1) == 3
+        assert user.recent_marked_ids() == (1,)

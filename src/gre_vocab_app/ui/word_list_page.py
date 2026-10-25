@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from gre_vocab_app.domain import WordEntry
+from .word_marks import WordMarks
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +88,8 @@ class WordListPage(QWidget):
         )
         filter_row.addWidget(self.machine7_only_checkbox)
         root.addLayout(filter_row)
+        self.word_marks = WordMarks()
+        root.addWidget(self.word_marks)
 
         self.empty_state = QLabel("词表为空。")
         self.empty_state.setObjectName("emptyState")
@@ -324,6 +327,7 @@ class WordListPage(QWidget):
         self.open_button.setEnabled(enabled)
         self.star_button.setEnabled(enabled)
         self.note_button.setEnabled(enabled)
+        self.word_marks.set_word(current.word.headword if current else "")
 
     def _edit_note(self) -> None:
         row = self._current_row_data()

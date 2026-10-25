@@ -193,6 +193,7 @@ class HomePage(QWidget):
     listScopeChanged = Signal(object)
     starFiltersChanged = Signal(object)
     machine7FilterChanged = Signal(bool)
+    markSortChanged = Signal(bool)
     listCompletionAdjustmentRequested = Signal(str, int)
     wordListRequested = Signal()
     longSentencesRequested = Signal()
@@ -289,7 +290,7 @@ class HomePage(QWidget):
 
         study_hint = QLabel(
             "List 和星级都可以多选，并可仅学习机经 7.0 重点词；"
-            "所选单词始终按原书词序合并。"
+            "也可按累计标记次数倒序学习。"
         )
         study_hint.setObjectName("sectionHint")
         study_layout.addWidget(study_hint, 1, 0, 1, 3)
@@ -331,6 +332,10 @@ class HomePage(QWidget):
             self._machine7_filter_toggled
         )
         study_layout.addWidget(self.machine7_only_checkbox, 4, 0, 1, 3)
+        self.mark_sort_checkbox = QCheckBox("按累计标记次数倒序（进入学习时排序）")
+        self.mark_sort_checkbox.setToolTip("次数相同保留原书词序；学习中增减标记不会移动当前词")
+        self.mark_sort_checkbox.toggled.connect(self.markSortChanged.emit)
+        study_layout.addWidget(self.mark_sort_checkbox, 5, 0, 1, 3)
 
         progress_row = QHBoxLayout()
         self.list_meta_label = QLabel("请选择 List")
@@ -361,7 +366,7 @@ class HomePage(QWidget):
             lambda: self._emit_completion_adjustment(1)
         )
         progress_row.addWidget(self.increase_rounds_button)
-        study_layout.addLayout(progress_row, 5, 0, 1, 3)
+        study_layout.addLayout(progress_row, 6, 0, 1, 3)
         root.addWidget(study_card)
         self.set_star_counts({})
 
@@ -415,6 +420,10 @@ class HomePage(QWidget):
     def set_stats(self, total: int, completed_rounds: int) -> None:
         self.total_value.setText(f"{total:,}")
         self.rounds_value.setText(f"{completed_rounds:,}")
+
+    def set_mark_sort(self, enabled: bool) -> None:
+        with QSignalBlocker(self.mark_sort_checkbox):
+            self.mark_sort_checkbox.setChecked(enabled)
 
     def set_source_lists(
         self,

@@ -31,6 +31,7 @@ class StudyPage(QWidget):
     nextRequested = Signal()
     firstRequested = Signal()
     lastRequested = Signal()
+    jumpRequested = Signal(int)
     finishRequested = Signal()
     modeRequested = Signal(object)
     answerToggleRequested = Signal()
@@ -126,8 +127,25 @@ class StudyPage(QWidget):
         study_actions.addStretch(1)
         study_actions.addWidget(self.next_button)
         root.addWidget(self.study_action_bar)
+        self.quick_jump_bar = QWidget()
+        jumps = QHBoxLayout(self.quick_jump_bar)
+        jumps.setContentsMargins(0, 0, 0, 0)
+        self.jump_buttons = {}
+        for step in (-20, -10, 10, 20):
+            label = f"后退 {abs(step)} 词" if step < 0 else f"前进 {step} 词"
+            button = QPushButton(label)
+            button.setObjectName("outlineButton")
+            button.setMinimumHeight(36)
+            button.clicked.connect(lambda _checked=False, delta=step: self.jumpRequested.emit(delta))
+            self.jump_buttons[step] = button
+            jumps.addWidget(button)
+        root.addWidget(self.quick_jump_bar)
 
         root.addWidget(self.word_detail, 1)
+        self.empty_recent_label = QLabel("还没有添加过标记的单词。给任意 GRE 单词点击 +1 后，就会出现在这里。")
+        self.empty_recent_label.setWordWrap(True)
+        self.empty_recent_label.hide()
+        root.addWidget(self.empty_recent_label, 1)
 
         self.boundary_navigation_bar = QFrame(objectName="navigationBar")
         navigation = QHBoxLayout(self.boundary_navigation_bar)
@@ -228,12 +246,36 @@ class StudyPage(QWidget):
             return True
         return super().eventFilter(watched, event)
 
+    def render_empty_recent(self) -> None:
+        self.snapshot = None
+        self.position_label.setText("最近标记 · 0 词")
+        self.back_button.setText("退出最近标记")
+        self.word_detail.hide()
+        self.study_action_bar.hide()
+        self.quick_jump_bar.hide()
+        self.boundary_navigation_bar.hide()
+        self.quiz_automation_bar.hide()
+        self.empty_recent_label.show()
+        for button in self.mode_group.buttons():
+            button.setEnabled(False)
+        self._sync_shortcut_state()
+
     def render(self, snapshot: SessionSnapshot) -> None:
+        self.back_button.setText("退出最近标记" if snapshot.list_label.startswith("最近标记") else "返回")
+        self.empty_recent_label.hide()
+        self.word_detail.show()
+        self.study_action_bar.show()
+        self.quick_jump_bar.show()
+        self.boundary_navigation_bar.show()
+        for button in self.mode_group.buttons():
+            button.setEnabled(True)
         self.snapshot = snapshot
         prefix = f"{snapshot.list_label} · " if snapshot.list_label else ""
         self.position_label.setText(
             f"{prefix}{snapshot.index + 1:,} / {snapshot.total:,}"
         )
+        if snapshot.marks_desc:
+            self.position_label.setText(self.position_label.text() + " · 标记倒序")
         scope_label = (
             "筛选" if snapshot.star_filters or snapshot.machine7_only else "List"
         )
@@ -242,6 +284,8 @@ class StudyPage(QWidget):
         self.last_button.setText(f"到{scope_label}结尾")
         self.last_button.setAccessibleName(f"前往当前{scope_label}的最后一个单词")
         self.previous_button.setEnabled(not snapshot.at_start)
+        for step, button in self.jump_buttons.items():
+            button.setEnabled(not (snapshot.at_start if step < 0 else snapshot.at_end))
         self.first_button.setEnabled(not snapshot.at_start)
         self.last_button.setEnabled(not snapshot.at_end)
         if snapshot.can_complete_round:

@@ -39,6 +39,7 @@ class MainWindow(QMainWindow):
     homeRequested = Signal()
     wordListRequested = Signal()
     longSentencesRequested = Signal()
+    recentMarksRequested = Signal()
     findRequested = Signal()
     closing = Signal(object)
 
@@ -90,6 +91,10 @@ class MainWindow(QMainWindow):
         self.home_action.setChecked(True)
         self.toolbar.addAction(self.home_action)
         self.toolbar.addAction(self.word_list_action)
+        self.recent_marks_action = QAction("最近标记", self)
+        self.recent_marks_action.setToolTip("随时进入最近添加标记的 30 个词，退出后回到原位置")
+        self.recent_marks_action.triggered.connect(self.recentMarksRequested.emit)
+        self.toolbar.addAction(self.recent_marks_action)
         toolbar_spacer = QWidget()
         toolbar_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.toolbar.addWidget(toolbar_spacer)

@@ -83,7 +83,7 @@ class SettingsDialog(QDialog):
         data_group = QGroupBox("本地数据")
         data_layout = QVBoxLayout(data_group)
         data_note = QLabel(
-            "可导出学习位置、List 完成次数、星级和设置，并在网页版或另一台电脑导入。"
+            "可导出学习位置、List 完成次数、星级、备注、累计标记和设置，并在网页版或另一台电脑导入。"
         )
         data_note.setObjectName("muted")
         data_note.setWordWrap(True)
@@ -292,7 +292,7 @@ class SettingsDialog(QDialog):
 
     def _confirm_clear(self) -> None:
         message = (
-            "这会清空本机保存的星级评分、List 完成次数、学习位置和应用设置。"
+            "这会清空本机保存的星级评分、备注、累计标记、List 完成次数、学习位置和应用设置。"
             "词库文件不会被删除。此操作无法撤销，是否继续？"
         )
         answer = QMessageBox.question(

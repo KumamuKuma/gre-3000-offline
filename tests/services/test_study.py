@@ -107,6 +107,10 @@ class FakeUser:
         self.seen = []
         self.ratings = {}
         self.completions = {}
+        self.marks = {}
+
+    def mark_count(self, word):
+        return self.marks.get(word.lower(), "0")
 
     def load_setting(self, key):
         return self.settings.get(key)
@@ -604,3 +608,65 @@ def test_navigation_keeps_memory_intent_and_retries_atomically(tmp_path):
 
     with UserRepository(path) as persisted:
         assert persisted.load_queue("source:list:list1:all").position == 1
+
+
+@pytest.mark.parametrize('mode', list(StudyMode))
+def test_jump_ten_twenty_clamps_and_resets_only_landing_question(mode):
+    content = FakeContent(100)
+    user = FakeUser()
+    user.settings['study_mode'] = mode.value
+    study = StudySession(content, user, random.Random(7))
+    study.start(BrowseOrder.SOURCE, source_section='list1')
+    assert study.jump(10).word.id == 11
+    assert study.jump(20).word.id == 31
+    assert study.jump(-20).word.id == 11
+    assert study.jump(-10).word.id == 1
+    assert study.jump(-20).word.id == 1
+    study.last()
+    assert study.jump(20).word.id == 50
+    if mode is StudyMode.QUIZ:
+        study.answer_quiz(0)
+        assert study.jump(-10).quiz_selected_index is None
+    assert user.queues[study._queue_name].position == study.current().index
+
+
+def test_mark_sort_numeric_ties_frozen_order_and_resume():
+    content = FakeContent(12)
+    user = FakeUser()
+    user.marks = {'word2': '9', 'word3': '10', 'word4': '10', 'word5': '9007199254740993123456789'}
+    study = StudySession(content, user, random.Random(7))
+    assert study.start(BrowseOrder.SOURCE, source_section='list1', marks_desc=True).word.id == 5
+    assert study._ids == (5, 3, 4, 2, 1, 6)
+    assert study.current().marks_desc
+    study.next()
+    user.marks['word6'] = '9' * 100
+    for mode in StudyMode:
+        study.set_mode(mode)
+        assert study.current().word.id == 3
+        assert study._ids == (5, 3, 4, 2, 1, 6)
+    resumed = StudySession(content, user, random.Random(7))
+    assert resumed.start(BrowseOrder.SOURCE, source_section='list1', marks_desc=True).word.id == 3
+    assert resumed._ids == (6, 5, 3, 4, 2, 1)
+    normal = resumed.start(BrowseOrder.SOURCE, source_section='list1')
+    assert not normal.marks_desc
+    assert resumed._ids == (1, 2, 3, 4, 5, 6)
+
+
+def test_recent_queue_updates_live_and_uses_whole_vocabulary_for_quiz():
+    content = FakeContent(80)
+    user = FakeUser()
+    user.settings['study_mode'] = 'quiz'
+    study = StudySession(content, user, random.Random(5))
+    snapshot = study.start_recent([3])
+    assert snapshot.total == 1
+    assert len(snapshot.quiz_choices) == 4
+    study.answer_quiz(0)
+    selected = study.current().quiz_selected_index
+    study.refresh_recent([2, 3, 1])
+    assert study.current().word.id == 3
+    assert study.current().index == 1
+    assert study.current().quiz_selected_index == selected
+    assert not study.current().can_complete_round
+    study.refresh_recent([2, 1])
+    assert study.current().word.id == 2
+    assert study.current().quiz_selected_index is None

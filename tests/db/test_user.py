@@ -572,6 +572,7 @@ def test_word_notes_migrate_v4_persist_retry_and_clear(tmp_path):
         repo.set_star_rating(1, 3)
     with sqlite3.connect(path) as db:
         db.execute("drop table word_notes")
+        db.execute("drop table word_marks")
         db.execute("pragma user_version=4")
     with UserRepository(path) as repo:
         assert repo.star_rating(1) == 3
@@ -590,3 +591,51 @@ def test_word_notes_migrate_v4_persist_retry_and_clear(tmp_path):
         repo.clear_all()
     with UserRepository(path) as repo:
         assert repo.word_notes() == {}
+
+
+def test_mark_counter_migrates_persists_large_values_and_keeps_other_data(tmp_path):
+    path = tmp_path / 'marks.db'
+    with UserRepository(path) as user:
+        user.set_star_rating(1, 3)
+        user.set_word_note('inevitable', '记忆方法')
+    with sqlite3.connect(path) as db:
+        db.execute('drop table word_marks')
+        db.execute('pragma user_version=5')
+    huge = '9' * 5000
+    with UserRepository(path) as user:
+        assert user.mark_count('inevitable') == '0'
+        user.set_mark_count(' INEVITABLE ', huge)
+        user.adjust_mark_count('inevitable', 1)
+        assert user.mark_count('INEVITABLE') == '1' + '0' * 5000
+        assert user.db.execute('select typeof(count) from word_marks').fetchone()[0] == 'text'
+    with UserRepository(path) as user:
+        assert user.star_rating(1) == 3
+        assert user.word_note('inevitable') == '记忆方法'
+        user.adjust_mark_count('inevitable', -1)
+        assert user.mark_count('inevitable') == huge
+        user.set_mark_count('inevitable', '1')
+        user.adjust_mark_count('inevitable', -1)
+        user.adjust_mark_count('inevitable', -1)
+        assert user.word_marks() == {}
+        user.set_mark_count('inevitable', '1')
+        user.clear_all()
+    with UserRepository(path) as user:
+        assert user.word_marks() == {}
+
+
+def test_recent_mark_history_is_unique_capped_and_persistent(tmp_path):
+    path = tmp_path / 'recent.db'
+    with UserRepository(path) as user:
+        for word_id in range(1, 36):
+            user.record_recent_marked(word_id)
+        assert user.recent_marked_ids() == tuple(range(35, 5, -1))
+        user.record_recent_marked(10)
+        assert user.recent_marked_ids()[0] == 10
+        assert len(user.recent_marked_ids()) == 30
+        assert len(set(user.recent_marked_ids())) == 30
+        user.adjust_mark_count('word10', -1)
+        assert user.recent_marked_ids()[0] == 10
+    with UserRepository(path) as user:
+        assert user.recent_marked_ids()[0] == 10
+        user.clear_all()
+        assert user.recent_marked_ids() == ()

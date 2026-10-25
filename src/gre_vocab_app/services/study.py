@@ -33,6 +33,7 @@ class StudySession:
         self._star_filter: int | None = None
         self._star_filters: tuple[int, ...] = ()
         self._machine7_only = False
+        self._marks_desc = False
         self._list_key: str | None = None
         self._list_keys: tuple[str, ...] = ()
         self._list_label = ""
@@ -42,6 +43,7 @@ class StudySession:
         self._quiz_selected_index: int | None = None
         self._quiz_attempt_count = 0
         self._started = False
+        self._recent = False
 
     @staticmethod
     def _valid_position(position: int, ids: Sequence[int]) -> bool:
@@ -126,7 +128,9 @@ class StudySession:
             seen_word_id=self._ids[self._position],
             event_id=uuid.uuid4().hex,
         )
-        if self._machine7_only:
+        if self._marks_desc:
+            self._user.save_setting("study_marks_current_word_id", str(self._ids[self._position]))
+        elif self._machine7_only:
             self._user.save_setting(
                 "study_machine7_current_word_id",
                 str(self._ids[self._position]),
@@ -252,6 +256,7 @@ class StudySession:
         star_rating: int | None = None,
         star_ratings: Sequence[int] | None = None,
         machine7_only: bool = False,
+        marks_desc: bool = False,
     ) -> SessionSnapshot:
         try:
             parsed_order = BrowseOrder(order)
@@ -261,6 +266,8 @@ class StudySession:
             raise ValueError("only source-order study is supported")
         if type(machine7_only) is not bool:
             raise ValueError("machine7 filter must be a boolean")
+        if type(marks_desc) is not bool:
+            raise ValueError("mark sorting must be a boolean")
 
         star_filters = self._validate_star_filters(star_rating, star_ratings)
         star_filter = star_filters[0] if len(star_filters) == 1 else None
@@ -343,6 +350,12 @@ class StudySession:
                 filter_setting = (
                     f"stars:{','.join(str(value) for value in star_filters)}"
                 )
+        if marks_desc:
+            ids = tuple(sorted(ids, key=lambda word_id: (
+                len(self._user.mark_count(self._content.get(word_id).headword)),
+                self._user.mark_count(self._content.get(word_id).headword),
+            ), reverse=True))
+            queue_filters.append("marks_desc")
         queue_name = (
             f"source:{scope_name}:{':'.join(queue_filters)}"
             if queue_filters
@@ -358,6 +371,9 @@ class StudySession:
             and self._valid_position(saved.position, ids)
         ):
             position = int(saved.position)
+        elif marks_desc and saved is not None and self._valid_position(saved.position, saved.word_ids):
+            anchor = saved.word_ids[saved.position]
+            position = ids.index(anchor) if anchor in ids else 0
         elif star_filters:
             position = self._position_after_filter_change(
                 saved,
@@ -368,9 +384,10 @@ class StudySession:
             position = 0
         if (
             (saved is None or not tuple(saved.word_ids))
-            and (star_filters or machine7_only)
+            and (star_filters or machine7_only or marks_desc)
         ):
             anchor_keys = (
+                ("study_marks_current_word_id",) if marks_desc else
                 ("study_machine7_current_word_id",)
                 if machine7_only
                 else ("study_star_current_word_id",)
@@ -386,6 +403,7 @@ class StudySession:
                     break
 
         self._order = parsed_order
+        self._recent = False
         self._mode = self._load_mode()
         self._ids = ids
         self._position = position
@@ -394,6 +412,7 @@ class StudySession:
         self._star_filter = star_filter
         self._star_filters = star_filters
         self._machine7_only = machine7_only
+        self._marks_desc = marks_desc
         self._list_key = selected_keys[0] if len(selected_keys) == 1 else None
         self._list_keys = selected_keys
         self._list_label = list_label
@@ -406,6 +425,7 @@ class StudySession:
         self._user.save_setting("study_lists", list_scope)
         self._user.save_setting("study_star_lists", list_scope)
         self._user.save_setting("study_filter", filter_setting)
+        self._user.save_setting("study_sort", "marks_desc" if marks_desc else "source")
         self._user.save_setting(
             "study_machine7_only", "1" if machine7_only else "0"
         )
@@ -416,6 +436,40 @@ class StudySession:
     def _require_started(self) -> None:
         if not self._started:
             raise RuntimeError("study session has not started")
+
+    def start_recent(self, word_ids: Sequence[int]) -> SessionSnapshot | None:
+        self._recent = True
+        self._mode = self._load_mode()
+        self._ids = tuple(word_ids)
+        self._position = 0
+        self._queue_name = "recent:marks"
+        self._seed = 0
+        self._list_key = None
+        self._list_keys = ()
+        self._list_label = "最近标记 · 实时更新"
+        self._star_filters = ()
+        self._star_filter = None
+        self._machine7_only = self._marks_desc = False
+        self._answer_visible = False
+        self._started = bool(self._ids)
+        if not self._started:
+            return None
+        self._prepare_quiz()
+        self._save_navigation()
+        return self.current()
+
+    def refresh_recent(self, word_ids: Sequence[int]) -> SessionSnapshot | None:
+        old_id = self._ids[self._position] if self._started else None
+        self._ids = tuple(word_ids)
+        self._started = bool(self._ids)
+        if not self._started:
+            return None
+        self._position = self._ids.index(old_id) if old_id in self._ids else 0
+        if self._ids[self._position] != old_id:
+            self._answer_visible = False
+            self._prepare_quiz()
+        self._user.save_queue(self._queue_name, self._ids, position=self._position, seed=0)
+        return self.current()
 
     def _snapshot(
         self,
@@ -430,6 +484,7 @@ class StudySession:
         star_filter: int | None,
         star_filters: tuple[int, ...] = (),
         machine7_only: bool = False,
+        marks_desc: bool = False,
         quiz_choices: tuple[QuizChoice, ...] = (),
         quiz_correct_index: int | None = None,
         quiz_selected_index: int | None = None,
@@ -476,6 +531,7 @@ class StudySession:
             list_keys=list_keys,
             list_label=list_label,
             machine7_only=machine7_only,
+            marks_desc=marks_desc,
             can_complete_round=(
                 not star_filters
                 and not machine7_only
@@ -506,6 +562,7 @@ class StudySession:
             star_filter=self._star_filter,
             star_filters=self._star_filters,
             machine7_only=self._machine7_only,
+            marks_desc=self._marks_desc,
             quiz_choices=self._quiz_choices,
             quiz_correct_index=self._quiz_correct_index,
             quiz_selected_index=self._quiz_selected_index,
@@ -579,6 +636,13 @@ class StudySession:
         if self._position >= len(self._ids) - 1:
             return self.current()
         return self._move(self._position + 1)
+
+    def jump(self, delta: int) -> SessionSnapshot:
+        self._require_started()
+        if type(delta) is not int or delta not in (-20, -10, 10, 20):
+            raise ValueError("jump must be -20, -10, 10 or 20")
+        target = max(0, min(len(self._ids) - 1, self._position + delta))
+        return self.current() if target == self._position else self._move(target)
 
     def previous(self) -> SessionSnapshot:
         self._require_started()
@@ -668,6 +732,8 @@ class StudySession:
         }
         self._user.reset_position(self._queue_name)
         self._position = 0
+        if self._marks_desc:
+            self._user.save_setting("study_marks_current_word_id", str(self._ids[0]))
         if len(self._list_keys) == 1:
             return counts[self._list_keys[0]]
         return counts

@@ -16,9 +16,32 @@ def test_notes_available_in_every_mode_and_literal_text(qtbot, sample_word):
         assert detail.word_note.isVisible()
         assert detail.word_note.preview.text() == "<b>联想</b>\n词根记忆"
         assert detail.word_note.preview.textFormat() == Qt.PlainText
+        assert not detail.word_note.preview.isVisible()
+        assert not detail.word_note.edit_button.isVisible()
+        detail.word_note.button.click()
+        assert detail.word_note.preview.isVisible()
+        assert detail.word_note.edit_button.isVisible()
+        detail.word_note.refresh()
+        assert detail.word_note.preview.isVisible()
         with qtbot.waitSignal(detail.word_note.editRequested) as signal:
-            detail.word_note.button.click()
+            detail.word_note.edit_button.click()
         assert signal.args == [sample_word.headword]
+        detail.word_note.button.click()
+        assert not detail.word_note.preview.isVisible()
+
+    detail.word_note.button.click()
+    detail.word_note.set_word("another")
+    assert not detail.word_note.preview.isVisible()
+    with qtbot.waitSignal(detail.word_note.editRequested) as signal:
+        detail.word_note.button.click()
+    assert signal.args == ["another"]
+    detail.word_note.set_word(sample_word.headword)
+    assert not detail.word_note.preview.isVisible()
+    detail.word_note.button.click()
+    detail.hide()
+    detail.show()
+    assert not detail.word_note.preview.isVisible()
+    assert detail.word_note.button.text() == "显示备注"
 
 
 def test_editor_keeps_typing_keys_and_allows_delete(qtbot):

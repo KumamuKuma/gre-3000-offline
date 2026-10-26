@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QPushButton, QVBoxLayout, QWidget,
 )
 
-from gre_vocab_app.word_notes import MAX_NOTE_LENGTH
+from gre_vocab_app.word_notes import MAX_NOTE_LENGTH, note_key
 
 
 class WordNote(QWidget):
@@ -19,25 +19,59 @@ class WordNote(QWidget):
         self.button = QPushButton("添加备注")
         self.button.setObjectName("outlineButton")
         self.button.setMinimumHeight(36)
-        self.button.clicked.connect(lambda: self.editRequested.emit(self.headword))
+        self.button.clicked.connect(self._toggle_note)
+        self.edit_button = QPushButton("编辑备注")
+        self.edit_button.setObjectName("outlineButton")
+        self.edit_button.setMinimumHeight(36)
+        self.edit_button.clicked.connect(lambda: self.editRequested.emit(self.headword))
         self.preview = QLabel()
         self.preview.setTextFormat(Qt.PlainText)
         self.preview.setWordWrap(True)
         self.preview.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
-        layout.addWidget(self.button, 0, Qt.AlignLeft)
+        actions = QHBoxLayout()
+        actions.addWidget(self.button)
+        actions.addWidget(self.edit_button)
+        actions.addStretch()
+        layout.addLayout(actions)
         layout.addWidget(self.preview)
+        self.preview.hide()
+        self.edit_button.hide()
         self.hide()
 
     def set_word(self, headword: str):
+        if note_key(headword) != note_key(self.headword):
+            self.button.setChecked(False)
         self.headword = headword
         self.refresh()
 
     def refresh(self):
         text = self.load_note(self.headword) if self.headword else ""
-        self.button.setText("编辑备注" if text else "添加备注")
+        self.button.setCheckable(bool(text))
+        if not text:
+            self.button.setChecked(False)
+        expanded = bool(text) and self.button.isChecked()
+        self.button.setText(("收起备注" if expanded else "显示备注") if text else "添加备注")
+        self.button.setAccessibleName(self.button.text())
         self.preview.setText(text)
-        self.preview.setVisible(bool(text))
+        self.preview.setVisible(expanded)
+        self.edit_button.setVisible(expanded)
         self.setVisible(bool(self.headword))
+
+    def _toggle_note(self):
+        if self.load_note(self.headword):
+            self.refresh()
+        else:
+            self.editRequested.emit(self.headword)
+
+    def hideEvent(self, event):
+        self.button.setChecked(False)
+        self.preview.hide()
+        self.edit_button.hide()
+        super().hideEvent(event)
+
+    def showEvent(self, event):
+        self.refresh()
+        super().showEvent(event)
 
 
 class WordNoteDialog(QDialog):

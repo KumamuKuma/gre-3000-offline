@@ -83,7 +83,7 @@ def _request(
     headers = {
         "accept": "application/json",
         "authorization": f"Bearer {token}",
-        "user-agent": "GRE-3000-Windows/0.11.1",
+        "user-agent": "GRE-3000-Windows/0.11.2",
     }
     if payload is not None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")

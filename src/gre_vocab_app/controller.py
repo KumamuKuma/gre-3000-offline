@@ -438,10 +438,7 @@ class ApplicationController:
             word = next((item for item in self._all_words if note_key(item.headword) == note_key(headword)), None)
             if word is not None:
                 self.user.record_recent_marked(word.id)
-        if self._recent_state is not None:
-            snapshot = self.study.refresh_recent(self.user.recent_marked_ids())
-            if self._detail_snapshot is None:
-                self._render_recent(snapshot)
+        # Keep this visit's queue and reading/quiz state until the next opening.
         for widget in self._mark_widgets:
             widget.refresh()
         self._report_persistence_issue()

@@ -1055,7 +1055,7 @@ def test_controller_mark_adjustment_and_jumps_keep_quiz_state_and_sort(qtbot):
     assert not window.study_page.jump_buttons[-10].isEnabled()
 
 
-def test_recent_marks_door_is_live_and_restores_original_quiz(qtbot):
+def test_recent_marks_freeze_until_reopened_and_restore_original_quiz(qtbot):
     controller, window, _content, user, _speech = make_controller(qtbot, word_count=60)
     controller._open_study('list1')
     controller._set_mode(StudyMode.QUIZ)
@@ -1070,22 +1070,53 @@ def test_recent_marks_door_is_live_and_restores_original_quiz(qtbot):
     assert controller.study is not normal_study
     assert window.study_page.snapshot.word.id == 3
     controller._set_mode(StudyMode.RECALL)
+    controller._jump(10)
     controller._toggle_answer()
+    before = window.study_page.snapshot
+    window.study_page.word_detail.word_marks.increase.click()
+    assert user.mark_count('word2') == '2'
+    assert window.study_page.word_detail.word_marks.label.text() == '累计标记：2 次'
+    assert user.recent_marked_ids() == (2, 3)
+    assert controller.study._ids == (3, 2)
+    assert window.study_page.snapshot == before
     controller._adjust_word_mark('word2', 1)
-    assert controller.study._ids == (2, 3)
-    assert window.study_page.snapshot.word.id == 3
+    assert controller.study._ids == (3, 2)
+    assert window.study_page.snapshot.word.id == 2
     assert window.study_page.snapshot.index == 1
     assert window.study_page.snapshot.answer_visible
     controller._adjust_word_mark('word2', -1)
-    assert controller.study._ids == (2, 3)
+    assert controller.study._ids == (3, 2)
     controller._adjust_word_mark('word3', -1)
     assert user.mark_count('word3') == '0'
-    assert controller.study._ids == (2, 3)
+    assert controller.study._ids == (3, 2)
     window.study_page.back_button.click()
     assert controller.study is normal_study
     restored = window.study_page.snapshot
     assert (restored.word.id, restored.mode, restored.quiz_selected_index) == (original.word.id, original.mode, original.quiz_selected_index)
     assert user.load_setting('study_mode') == original.mode.value
+    window.recent_marks_action.trigger()
+    assert controller.study._ids == (2, 3)
+    assert window.study_page.snapshot.word.id == 2
+
+
+def test_recent_marks_keep_current_word_when_new_marks_evict_it_from_history(qtbot):
+    controller, window, _content, user, _speech = make_controller(qtbot, word_count=60)
+    for word_id in range(1, 31):
+        controller._adjust_word_mark(f'word{word_id}', 1)
+    window.recent_marks_action.trigger()
+    controller._jump(20)
+    controller._jump(10)
+    controller._set_mode(StudyMode.QUIZ)
+    controller._answer_quiz(0)
+    before = window.study_page.snapshot
+    controller._adjust_word_mark('word31', 1)
+    assert 1 not in user.recent_marked_ids()
+    assert controller.study._ids == tuple(range(30, 0, -1))
+    assert window.study_page.snapshot == before
+    window.study_page.back_button.click()
+    window.recent_marks_action.trigger()
+    assert controller.study._ids == tuple(range(31, 1, -1))
+    assert window.study_page.snapshot.word.id == 31
 
 
 def test_recent_marks_door_opens_empty_and_returns_home(qtbot):

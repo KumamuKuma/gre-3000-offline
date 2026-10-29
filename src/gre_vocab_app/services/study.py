@@ -446,7 +446,7 @@ class StudySession:
         self._seed = 0
         self._list_key = None
         self._list_keys = ()
-        self._list_label = "最近标记 · 实时更新"
+        self._list_label = "最近标记 · 本轮顺序固定"
         self._star_filters = ()
         self._star_filter = None
         self._machine7_only = self._marks_desc = False

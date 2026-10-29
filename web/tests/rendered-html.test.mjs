@@ -224,7 +224,7 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.ok(studyScreen.indexOf('className="study-actions"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="quiz-retry study-retry"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="study-jumps"') > studyScreen.indexOf('className="word-card"'));
-  assert.match(worker, /gre-3000-pwa-v24/);
+  assert.match(worker, /gre-3000-pwa-v25/);
   assert.match(worker, /data\/words\.json/);
   assert.match(worker, /data\/click_dictionary\.json/);
   assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);
@@ -362,7 +362,7 @@ test("long sentence reader shows every ordered note with lookup and safe paging"
   assert.match(styles, /\.sentence-notes-list \{[^}]*overflow-y:\s*auto/);
   assert.match(styles, /\.sentence-note-text \{[^}]*white-space:\s*pre-wrap/);
   assert.match(styles, /\.sentence-actions/);
-  assert.match(worker, /gre-3000-pwa-v24/);
+  assert.match(worker, /gre-3000-pwa-v25/);
   assert.match(worker, /"\/data\/long_sentences\.json\?v=2"/);
   assert.match(worker, /url\.pathname === "\/data\/long_sentences\.json"/);
   assert.equal(worker.match(/\/data\/long_sentences\.json/g)?.length, 2);

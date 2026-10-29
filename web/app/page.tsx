@@ -515,6 +515,7 @@ export default function Home() {
   const [hydrated, setHydrated] = useState(false);
   const [screen, setScreen] = useState<Screen>("home");
   const [recentMode, setRecentMode] = useState(false);
+  const [recentSessionWordIds, setRecentSessionWordIds] = useState<number[]>([]);
   const recentReturn = useRef<RecentReturn | null>(null);
   const [activeWordId, setActiveWordId] = useState<number | null>(null);
   const [studySessionWordIds, setStudySessionWordIds] = useState<number[]>([]);
@@ -850,7 +851,7 @@ export default function Home() {
     const words = allStarsSelected ? studyBaseWords : studyBaseWords.filter((word) => selectedStarRatings.includes(progress.stars[String(word.id)] ?? 0));
     return marksDesc ? sortByMarks(words, progress.marks) : words;
   }, [allStarsSelected, marksDesc, progress, selectedStarRatings, studyBaseWords]);
-  const recentWords = useMemo(() => (progress?.recent_marks ?? []).map(id => wordMap.get(id)).filter((word): word is WordEntry => Boolean(word)), [progress?.recent_marks, wordMap]);
+  const recentWords = useMemo(() => recentSessionWordIds.map(id => wordMap.get(id)).filter((word): word is WordEntry => Boolean(word)), [recentSessionWordIds, wordMap]);
   const studyQueue = useMemo(() => {
     if (recentMode) return recentWords;
     if (screen !== "study" || !studySessionWordIds.length) return eligibleStudyQueue;
@@ -897,7 +898,7 @@ export default function Home() {
     }
     return `已选 ${selectedListKeys.length} 个 List`;
   }, [data, selectedListKeys]);
-  const studySelectionLabel = recentMode ? "最近标记 · 实时更新" : machine7Only
+  const studySelectionLabel = recentMode ? "最近标记 · 本轮顺序固定" : machine7Only
     ? `${studyScopeLabel} · 机经 7.0 重点`
     : studyScopeLabel;
 
@@ -943,9 +944,11 @@ export default function Home() {
   function openRecent() {
     if (recentMode) return;
     recentReturn.current = { screen, wordId: activeWordId, ids: studySessionWordIds, revealed: answerVisible, selected: quizSelected, attempts: quizAttemptCount, mode, lookup, preview: grePreviewWordId };
+    const ids = [...(progress?.recent_marks ?? [])];
+    setRecentSessionWordIds(ids);
     setRecentMode(true);
     setScreen("study");
-    setActiveWordId(recentWords[0]?.id ?? null);
+    setActiveWordId(ids[0] ?? null);
     setAnswerVisible(mode === "reading" || mode === "brief");
     setQuizSelected(null);
     setQuizAttemptCount(0);
@@ -957,6 +960,7 @@ export default function Home() {
   function exitRecent(destination?: Screen) {
     const previous = recentReturn.current;
     setRecentMode(false);
+    setRecentSessionWordIds([]);
     recentReturn.current = null;
     if (previous) {
       setScreen(destination ?? previous.screen);
@@ -1639,7 +1643,7 @@ export default function Home() {
             {[-20, -10, 10, 20].map((step) => <button key={step} disabled={step < 0 ? activeQueueIndex <= 0 : activeQueueIndex >= studyQueue.length - 1} onClick={() => move(step)}>{step < 0 ? `后退 ${-step} 词` : `前进 ${step} 词`}</button>)}
           </div>
           {marksDesc && !recentMode && <p className="list-hint">累计标记倒序 · 本轮顺序固定，重新进入时按最新次数排序</p>}
-          {recentMode && <p className="list-hint">最近添加的 30 个不同单词 · +1 时实时移到最前，−1 不改变先后 · 退出后回到原位置</p>}
+          {recentMode && <p className="list-hint">最近添加的 30 个不同单词 · 标记次数立即保存，本轮顺序固定，再次打开时更新排序 · 退出后回到原位置</p>}
           <div className="study-actions">
             <button onClick={() => move(-1)} disabled={activeQueueIndex === 0}>← 上一词</button>
             {activeQueueIndex >= studyQueue.length - 1

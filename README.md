@@ -19,7 +19,7 @@
 
 ![GRE 3000 Vocabulary Trainer Windows 离线版首页](docs/images/windows-home.png)
 
-<p align="center"><sub>Windows v0.12.1 桌面版首页</sub></p>
+<p align="center"><sub>Windows 1.0 正式版首页</sub></p>
 
 ## 这是什么
 

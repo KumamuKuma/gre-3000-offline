@@ -2,19 +2,19 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
-    QApplication,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
     QSlider,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -43,12 +43,23 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("设置")
         self.setMinimumWidth(460)
+        self.resize(560, 428)
         root = QVBoxLayout(self)
-        root.setContentsMargins(22, 20, 22, 18)
+        root.setContentsMargins(24, 22, 24, 20)
         root.setSpacing(14)
+        title = QLabel("设置")
+        title.setObjectName("pageTitle")
+        root.addWidget(title)
+        tabs = QTabWidget()
+        root.addWidget(tabs, 1)
 
-        study_group = QGroupBox("学习与朗读")
-        form = QFormLayout(study_group)
+        study_panel = QWidget()
+        form = QFormLayout(study_panel)
+        form.setContentsMargins(18, 18, 18, 18)
+        form.setHorizontalSpacing(16)
+        form.setVerticalSpacing(8)
+        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form.setLabelAlignment(Qt.AlignVCenter)
         self.mode_combo = QComboBox()
         self.mode_combo.addItem("阅读模式", StudyMode.READING)
         self.mode_combo.addItem("简义模式", StudyMode.BRIEF)
@@ -78,10 +89,12 @@ class SettingsDialog(QDialog):
         form.addRow("自动朗读", self.auto_speak_checkbox)
         form.addRow("自动调星", self.quiz_wrong_star_up_checkbox)
         form.addRow("", self.quiz_correct_star_down_checkbox)
-        root.addWidget(study_group)
+        tabs.addTab(study_panel, "学习与朗读")
 
-        data_group = QGroupBox("本地数据")
-        data_layout = QVBoxLayout(data_group)
+        data_panel = QWidget()
+        data_layout = QVBoxLayout(data_panel)
+        data_layout.setContentsMargins(18, 18, 18, 18)
+        data_layout.setSpacing(10)
         data_note = QLabel(
             "可导出学习位置、List 完成次数、星级、备注、累计标记和设置，并在网页版或另一台电脑导入。"
         )
@@ -99,10 +112,13 @@ class SettingsDialog(QDialog):
         data_layout.addLayout(transfer_row)
         data_layout.addWidget(self.reset_button)
         data_layout.addWidget(self.clear_button)
-        root.addWidget(data_group)
+        data_layout.addStretch()
+        tabs.addTab(data_panel, "本地数据")
 
-        cloud_group = QGroupBox("免账号同步码")
-        cloud_layout = QVBoxLayout(cloud_group)
+        cloud_panel = QWidget()
+        cloud_layout = QVBoxLayout(cloud_panel)
+        cloud_layout.setContentsMargins(18, 18, 18, 18)
+        cloud_layout.setSpacing(10)
         cloud_note = QLabel(
             "无需登录。创建一组同步码，在 Windows 和 iPhone 网页版粘贴同一组码即可同步。"
             "进度会先在设备端加密；请妥善保存同步码，遗失后无法恢复。"
@@ -126,9 +142,11 @@ class SettingsDialog(QDialog):
         cloud_layout.addWidget(self.cloud_token_input)
         cloud_layout.addLayout(cloud_code_buttons)
         cloud_layout.addLayout(cloud_buttons)
-        root.addWidget(cloud_group)
+        cloud_layout.addStretch()
+        tabs.addTab(cloud_panel, "云端同步")
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.button(QDialogButtonBox.Close).setText("关闭")
         buttons.rejected.connect(self.close)
         root.addWidget(buttons)
 

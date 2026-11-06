@@ -73,14 +73,16 @@ class MainWindow(QMainWindow):
 
         brand = QWidget()
         brand_layout = QHBoxLayout(brand)
-        brand_layout.setContentsMargins(0, 0, 20, 0)
-        brand_layout.setSpacing(8)
+        brand_layout.setContentsMargins(28, 0, 22, 0)
+        brand_layout.setSpacing(10)
+        brand_glyph = QLabel("G")
+        brand_glyph.setObjectName("brandGlyph")
+        brand_glyph.setAlignment(Qt.AlignCenter)
+        brand_glyph.setFixedSize(32, 32)
+        brand_layout.addWidget(brand_glyph)
         brand_mark = QLabel("GRE 3000")
         brand_mark.setObjectName("brandMark")
-        brand_tag = QLabel("STUDY")
-        brand_tag.setObjectName("brandTag")
         brand_layout.addWidget(brand_mark)
-        brand_layout.addWidget(brand_tag)
         self.toolbar.addWidget(brand)
 
         self.home_action = QAction("首页", self)
@@ -117,7 +119,7 @@ class MainWindow(QMainWindow):
         self.settings_dialog = SettingsDialog(self)
         self.lookup_dialog = LookupDialog(self)
         self.settings_action.triggered.connect(self.show_settings)
-        self.statusBar().showMessage("离线运行 · 学习数据默认保存在本机")
+        self.statusBar().showMessage("离线模式  /  学习记录保存在本机")
 
     def show_home(self) -> None:
         self.stack.setCurrentWidget(self.home_page)

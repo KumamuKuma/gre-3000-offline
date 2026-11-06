@@ -53,12 +53,12 @@ class StudyPage(QWidget):
         self.snapshot: SessionSnapshot | None = None
         self._speech_available = True
         root = QVBoxLayout(self)
-        root.setContentsMargins(28, 20, 28, 22)
-        root.setSpacing(14)
+        root.setContentsMargins(32, 18, 32, 18)
+        root.setSpacing(10)
 
         study_header = QFrame(objectName="studyHeader")
         top = QHBoxLayout(study_header)
-        top.setContentsMargins(12, 10, 12, 10)
+        top.setContentsMargins(10, 7, 10, 7)
         top.setSpacing(7)
         self.back_button = QPushButton("返回")
         self.back_button.setObjectName("backButton")
@@ -120,7 +120,7 @@ class StudyPage(QWidget):
 
         self.study_action_bar = QFrame(objectName="navigationBar")
         study_actions = QHBoxLayout(self.study_action_bar)
-        study_actions.setContentsMargins(12, 10, 12, 10)
+        study_actions.setContentsMargins(10, 6, 10, 6)
         study_actions.addWidget(self.previous_button)
         study_actions.addStretch(1)
         study_actions.addWidget(self.quiz_retry_button)
@@ -139,27 +139,24 @@ class StudyPage(QWidget):
             button.clicked.connect(lambda _checked=False, delta=step: self.jumpRequested.emit(delta))
             self.jump_buttons[step] = button
             jumps.addWidget(button)
-        root.addWidget(self.quick_jump_bar)
-
         root.addWidget(self.word_detail, 1)
         self.empty_recent_label = QLabel("还没有添加过标记的单词。给任意 GRE 单词点击 +1 后，就会出现在这里。")
+        self.empty_recent_label.setObjectName("emptyState")
+        self.empty_recent_label.setAlignment(Qt.AlignCenter)
         self.empty_recent_label.setWordWrap(True)
         self.empty_recent_label.hide()
         root.addWidget(self.empty_recent_label, 1)
 
         self.boundary_navigation_bar = QFrame(objectName="navigationBar")
         navigation = QHBoxLayout(self.boundary_navigation_bar)
-        navigation.setContentsMargins(12, 10, 12, 10)
+        navigation.setContentsMargins(10, 6, 10, 6)
         self.first_button = QPushButton("到开头")
         self.last_button = QPushButton("到结尾")
         self.first_button.setMinimumSize(84, 42)
         self.last_button.setMinimumSize(84, 42)
-        shortcut_hint = QLabel("← / → 切换 · P 朗读 · Space 揭示")
-        shortcut_hint.setObjectName("sectionHint")
+        self.study_action_bar.setToolTip("← / → 切换 · P 朗读 · Space 揭示")
         navigation.addWidget(self.first_button)
-        navigation.addStretch(1)
-        navigation.addWidget(shortcut_hint)
-        navigation.addStretch(1)
+        navigation.addWidget(self.quick_jump_bar, 1)
         navigation.addWidget(self.last_button)
         root.addWidget(self.boundary_navigation_bar)
 

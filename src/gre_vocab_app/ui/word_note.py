@@ -1,7 +1,13 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QPlainTextEdit,
-    QPushButton, QVBoxLayout, QWidget,
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QLabel,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from gre_vocab_app.word_notes import MAX_NOTE_LENGTH, note_key
@@ -25,6 +31,7 @@ class WordNote(QWidget):
         self.edit_button.setMinimumHeight(36)
         self.edit_button.clicked.connect(lambda: self.editRequested.emit(self.headword))
         self.preview = QLabel()
+        self.preview.setObjectName("notePreview")
         self.preview.setTextFormat(Qt.PlainText)
         self.preview.setWordWrap(True)
         self.preview.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
@@ -80,28 +87,32 @@ class WordNoteDialog(QDialog):
         self.setWindowTitle(f"{headword} · 我的备注")
         self.resize(540, 360)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 22, 24, 20)
+        layout.setSpacing(12)
         title = QLabel(headword)
+        title.setObjectName("noteTitle")
         title.setTextFormat(Qt.PlainText)
         layout.addWidget(title)
         self.editor = QPlainTextEdit()
+        self.editor.setObjectName("noteEditor")
         self.editor.setAccessibleName("单词备注")
-        self.editor.setPlaceholderText("写下联想、词根拆解或自己的记忆方法……")
         self.editor.setPlainText(text)
         layout.addWidget(self.editor, 1)
-        footer = QHBoxLayout()
-        self.count = QLabel()
-        footer.addWidget(self.count)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        self.buttons.button(QDialogButtonBox.Save).setText("保存备注")
+        save_button = self.buttons.button(QDialogButtonBox.Save)
+        save_button.setText("保存备注")
+        save_button.setObjectName("primaryButton")
         self.buttons.button(QDialogButtonBox.Cancel).setText("取消")
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
-        footer.addWidget(self.buttons)
-        layout.addLayout(footer)
+        layout.addWidget(self.buttons)
         self.editor.textChanged.connect(self._validate)
+        self.editor.setFocus()
         self._validate()
 
     def _validate(self):
-        length = len(self.editor.toPlainText())
-        self.count.setText(f"{length} / {MAX_NOTE_LENGTH} 字 · 清空并保存可删除备注")
-        self.buttons.button(QDialogButtonBox.Save).setEnabled(length <= MAX_NOTE_LENGTH)
+        valid = len(self.editor.toPlainText()) <= MAX_NOTE_LENGTH
+        message = "" if valid else f"备注最多可保存 {MAX_NOTE_LENGTH} 字。"
+        self.editor.setToolTip(message)
+        self.editor.setAccessibleDescription(message)
+        self.buttons.button(QDialogButtonBox.Save).setEnabled(valid)

@@ -55,21 +55,29 @@ class LookupDialog(QDialog):
         self._result: LookupResult | None = None
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(22, 20, 22, 18)
+        root.setContentsMargins(24, 22, 24, 20)
         root.setSpacing(12)
-        header = QHBoxLayout()
+        header_card = QFrame(objectName="studyHeader")
+        header = QHBoxLayout(header_card)
+        header.setContentsMargins(16, 12, 16, 12)
         title_box = QVBoxLayout()
+        title_box.setSpacing(3)
         self.query_label = QLabel()
         self.query_label.setObjectName("lookupHeadword")
+        self.query_label.setTextFormat(Qt.PlainText)
+        self.query_label.setWordWrap(True)
         self.phonetic_label = QLabel()
         self.phonetic_label.setObjectName("phonetic")
         title_box.addWidget(self.query_label)
         title_box.addWidget(self.phonetic_label)
         header.addLayout(title_box, 1)
         self.source_label = QLabel()
-        self.source_label.setObjectName("sourceBadge")
-        header.addWidget(self.source_label)
-        root.addLayout(header)
+        self.source_label.setObjectName("muted")
+        self.source_label.setWordWrap(True)
+        self.source_label.setMaximumWidth(235)
+        self.source_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        header.addWidget(self.source_label, 1)
+        root.addWidget(header_card)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -80,8 +88,10 @@ class LookupDialog(QDialog):
         details.setSpacing(12)
         self.word_note = WordNote()
         self.word_marks = WordMarks()
-        details.addWidget(self.word_marks)
-        details.addWidget(self.word_note)
+        annotations = QHBoxLayout()
+        annotations.addWidget(self.word_note, 1)
+        annotations.addWidget(self.word_marks, 0, Qt.AlignTop)
+        details.addLayout(annotations)
         self.primary_title = QLabel()
         self.primary_title.setObjectName("sectionTitle")
         self.translation_label = self._detail_label("lookupTranslation")
@@ -123,8 +133,7 @@ class LookupDialog(QDialog):
         root.addWidget(scroll, 1)
 
         privacy = QLabel(
-            "点词释义来自本地；只有点击“联网翻译”时，当前文字才会发送给第三方 "
-            "MyMemory 翻译服务。"
+            "点词释义来自本地。点击「联网翻译」会将当前文字发送至 MyMemory。"
         )
         privacy.setObjectName("sectionHint")
         privacy.setWordWrap(True)

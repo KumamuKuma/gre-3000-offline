@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from gre_vocab_app.domain import WordEntry
+from .theme import WARNING_COLOR
 from .word_marks import WordMarks
 
 
@@ -51,8 +52,8 @@ class WordListPage(QWidget):
         self._selected_word_id: int | None = None
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(36, 27, 36, 28)
-        root.setSpacing(15)
+        root.setContentsMargins(32, 24, 32, 24)
+        root.setSpacing(12)
 
         header_row = QHBoxLayout()
         header_copy = QVBoxLayout()
@@ -61,7 +62,7 @@ class WordListPage(QWidget):
         eyebrow.setObjectName("eyebrow")
         title = QLabel("完整词表")
         title.setObjectName("pageTitle")
-        subtitle = QLabel("按原书顺序浏览；支持 0–3 星标注和个人备注。")
+        subtitle = QLabel("按原书词序排列")
         subtitle.setObjectName("muted")
         header_copy.addWidget(eyebrow)
         header_copy.addWidget(title)
@@ -187,7 +188,7 @@ class WordListPage(QWidget):
                         font = item.font()
                         font.setBold(True)
                         item.setFont(font)
-                        item.setForeground(QColor("#c2410c"))
+                        item.setForeground(QColor(WARNING_COLOR))
                         item.setToolTip("同时收录于《GRE 镇考机经词 7.0》")
                     self.words_table.setItem(row_index, column, item)
         finally:

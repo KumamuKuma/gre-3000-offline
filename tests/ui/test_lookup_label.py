@@ -3,6 +3,7 @@ from gre_vocab_app.ui.lookup_label import (
     lookup_html,
     lookup_query_html,
 )
+from gre_vocab_app.ui.theme import TEXT_COLOR
 
 
 def test_lookup_html_preserves_punctuation_and_wraps_english_tokens():
@@ -11,8 +12,7 @@ def test_lookup_html_preserves_punctuation_and_wraps_english_tokens():
     assert 'href="lookup:Work"' in rendered
     assert 'href="lookup:don%E2%80%99t"' in rendered
     assert ">hard</a>," in rendered
-    assert "color:#101828" in rendered
-    assert "color:#4338ca" not in rendered
+    assert f"color:{TEXT_COLOR}" in rendered
 
 
 def test_lookup_label_emits_decoded_word(qtbot):

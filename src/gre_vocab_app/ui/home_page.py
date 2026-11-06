@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtCore import QPointF, QSignalBlocker, Qt, Signal
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -20,6 +21,25 @@ from PySide6.QtWidgets import (
 )
 
 from gre_vocab_app.domain import SourceList, WordEntry
+
+
+class _DashboardBanner(QFrame):
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setClipRect(self.rect().adjusted(2, 2, -2, -2))
+        center = QPointF(self.width() - 124, 45)
+        painter.setPen(QPen(QColor(129, 234, 215, 34), 1))
+        for radius in (31, 51, 71, 91):
+            painter.drawEllipse(center, radius, radius)
+        painter.setPen(QPen(QColor(129, 234, 215, 50), 1))
+        painter.drawLine(center + QPointF(-106, 0), center + QPointF(106, 0))
+        painter.drawLine(center + QPointF(0, -30), center + QPointF(0, 96))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(129, 234, 215, 150))
+        for offset in (QPointF(), QPointF(-51, 0), QPointF(66, -18)):
+            painter.drawEllipse(center + offset, 2.5, 2.5)
 
 
 class ListScopeDialog(QDialog):
@@ -40,7 +60,7 @@ class ListScopeDialog(QDialog):
         root.setContentsMargins(22, 20, 22, 18)
         root.setSpacing(12)
         title = QLabel("选择要一起学习的 List")
-        title.setObjectName("sectionTitle")
+        title.setObjectName("pageTitle")
         hint = QLabel("可任意多选；学习时会把所选 List 按原书顺序合并。")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -74,6 +94,8 @@ class ListScopeDialog(QDialog):
             QDialogButtonBox.StandardButton.Ok
             | QDialogButtonBox.StandardButton.Cancel
         )
+        self.buttons.button(QDialogButtonBox.Ok).setText("应用选择")
+        self.buttons.button(QDialogButtonBox.Cancel).setText("取消")
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         root.addWidget(self.buttons)
@@ -126,7 +148,7 @@ class StarScopeDialog(QDialog):
         root.setContentsMargins(22, 20, 22, 18)
         root.setSpacing(12)
         title = QLabel("选择要一起学习的星级")
-        title.setObjectName("sectionTitle")
+        title.setObjectName("pageTitle")
         hint = QLabel("可以同时选择多个星级，例如同时学习 1 星和 2 星单词。")
         hint.setObjectName("sectionHint")
         hint.setWordWrap(True)
@@ -158,6 +180,8 @@ class StarScopeDialog(QDialog):
             QDialogButtonBox.StandardButton.Ok
             | QDialogButtonBox.StandardButton.Cancel
         )
+        self.buttons.button(QDialogButtonBox.Ok).setText("应用选择")
+        self.buttons.button(QDialogButtonBox.Cancel).setText("取消")
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         root.addWidget(self.buttons)
@@ -210,33 +234,33 @@ class HomePage(QWidget):
         self._machine7_only = False
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(38, 28, 38, 30)
-        root.setSpacing(18)
+        root.setContentsMargins(32, 20, 32, 20)
+        root.setSpacing(11)
 
-        hero = QFrame(objectName="heroCard")
-        hero.setMinimumHeight(150)
+        self.banner = hero = _DashboardBanner(objectName="heroCard")
+        hero.setMinimumHeight(164)
         hero_layout = QHBoxLayout(hero)
-        hero_layout.setContentsMargins(27, 22, 24, 22)
+        hero_layout.setContentsMargins(28, 15, 26, 15)
         hero_layout.setSpacing(24)
 
         hero_copy = QVBoxLayout()
-        hero_copy.setSpacing(7)
-        hero_copy.addStretch(1)
-        eyebrow = QLabel("GRE DESKTOP · STUDY")
+        hero_copy.setSpacing(5)
+        eyebrow = QLabel("VOCABULARY WORKSPACE")
         eyebrow.setObjectName("heroEyebrow")
-        title = QLabel("GRE 3000 Vocabulary Trainer")
+        title = QLabel("GRE 3000 词汇训练")
         title.setObjectName("heroTitle")
-        subtitle = QLabel("按原书词序专注学习 · 学习记录默认保存在本机")
+        subtitle = QLabel("原书词序  /  离线学习")
         subtitle.setObjectName("heroSubtitle")
         hero_copy.addWidget(eyebrow)
         hero_copy.addWidget(title)
         hero_copy.addWidget(subtitle)
-        self.long_sentence_button = QPushButton("打开杨鹏阅读长难句  →")
+        self.long_sentence_button = QPushButton("杨鹏阅读长难句  ↗")
         self.long_sentence_button.setObjectName("heroActionButton")
         self.long_sentence_button.setAccessibleName("打开杨鹏阅读长难句")
         self.long_sentence_button.clicked.connect(
             self.longSentencesRequested.emit
         )
+        hero_copy.addSpacing(4)
         hero_copy.addWidget(self.long_sentence_button, 0, Qt.AlignLeft)
         hero_copy.addStretch(1)
         hero_layout.addLayout(hero_copy, 5)
@@ -245,13 +269,13 @@ class HomePage(QWidget):
         metrics.setSpacing(10)
         self.total_value = self._hero_metric(metrics, "完整词库")
         self.rounds_value = self._hero_metric(metrics, "完成轮次")
-        hero_layout.addLayout(metrics, 3)
+        hero_layout.addLayout(metrics)
         root.addWidget(hero)
 
         search_card = QFrame(objectName="searchCard")
         search_layout = QVBoxLayout(search_card)
-        search_layout.setContentsMargins(20, 15, 20, 18)
-        search_layout.setSpacing(10)
+        search_layout.setContentsMargins(18, 12, 18, 14)
+        search_layout.setSpacing(7)
         search_header = QHBoxLayout()
         search_title = QLabel("快速查词")
         search_title.setObjectName("sectionTitle")
@@ -264,7 +288,7 @@ class HomePage(QWidget):
 
         self.search_edit = QLineEdit()
         self.search_edit.setObjectName("largeSearch")
-        self.search_edit.setPlaceholderText("输入英文单词，立即搜索完整词库")
+        self.search_edit.setPlaceholderText("输入英文单词")
         self.search_edit.setAccessibleName("搜索英文单词")
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.textChanged.connect(self._on_search_changed)
@@ -273,13 +297,13 @@ class HomePage(QWidget):
 
         study_card = QFrame(objectName="studyCard")
         study_layout = QGridLayout(study_card)
-        study_layout.setContentsMargins(21, 17, 21, 19)
+        study_layout.setContentsMargins(18, 13, 18, 15)
         study_layout.setHorizontalSpacing(12)
         study_layout.setVerticalSpacing(9)
         study_layout.setColumnStretch(0, 3)
         study_layout.setColumnStretch(1, 2)
         study_layout.setColumnStretch(2, 1)
-        study_title = QLabel("开始一次专注学习")
+        study_title = QLabel("学习计划")
         study_title.setObjectName("sectionTitle")
         study_layout.addWidget(study_title, 0, 0, 1, 2)
 
@@ -288,40 +312,32 @@ class HomePage(QWidget):
         self.word_list_button.clicked.connect(self.wordListRequested.emit)
         study_layout.addWidget(self.word_list_button, 0, 2)
 
-        study_hint = QLabel(
-            "List 和星级都可以多选，并可仅学习机经 7.0 重点词；"
-            "也可按累计标记次数倒序学习。"
-        )
-        study_hint.setObjectName("sectionHint")
-        study_layout.addWidget(study_hint, 1, 0, 1, 3)
-
         list_label = QLabel("学习 List")
         list_label.setObjectName("fieldLabel")
         star_label = QLabel("星级筛选")
         star_label.setObjectName("fieldLabel")
-        action_label = QLabel("学习")
-        action_label.setObjectName("fieldLabel")
-        study_layout.addWidget(list_label, 2, 0)
-        study_layout.addWidget(star_label, 2, 1)
-        study_layout.addWidget(action_label, 2, 2)
+        study_layout.addWidget(list_label, 1, 0)
+        study_layout.addWidget(star_label, 1, 1)
 
         self.list_scope_button = self._action("选择学习 List")
         self.list_scope_button.setObjectName("outlineButton")
         self.list_scope_button.setAccessibleName("多选学习 List")
         self.list_scope_button.clicked.connect(self._choose_lists)
-        study_layout.addWidget(self.list_scope_button, 3, 0)
+        study_layout.addWidget(self.list_scope_button, 2, 0)
 
         self.star_scope_button = self._action("选择学习星级")
         self.star_scope_button.setObjectName("outlineButton")
         self.star_scope_button.setAccessibleName("多选学习星级")
         self.star_scope_button.clicked.connect(self._choose_stars)
-        study_layout.addWidget(self.star_scope_button, 3, 1)
+        study_layout.addWidget(self.star_scope_button, 2, 1)
 
         self.start_button = self._action("开始 / 继续", primary=True)
         self.start_button.setMinimumWidth(142)
         self.start_button.clicked.connect(self._emit_list_study)
-        study_layout.addWidget(self.start_button, 3, 2)
+        study_layout.addWidget(self.start_button, 2, 2)
 
+        filters = QHBoxLayout()
+        filters.setSpacing(20)
         self.machine7_only_checkbox = QCheckBox("仅显示机经 7.0 重点词")
         self.machine7_only_checkbox.setObjectName("machine7FilterCheckbox")
         self.machine7_only_checkbox.setAccessibleName("仅学习机经 7.0 重点词")
@@ -331,11 +347,13 @@ class HomePage(QWidget):
         self.machine7_only_checkbox.toggled.connect(
             self._machine7_filter_toggled
         )
-        study_layout.addWidget(self.machine7_only_checkbox, 4, 0, 1, 3)
-        self.mark_sort_checkbox = QCheckBox("按累计标记次数倒序（进入学习时排序）")
+        filters.addWidget(self.machine7_only_checkbox)
+        self.mark_sort_checkbox = QCheckBox("按累计标记倒序")
         self.mark_sort_checkbox.setToolTip("次数相同保留原书词序；学习中增减标记不会移动当前词")
         self.mark_sort_checkbox.toggled.connect(self.markSortChanged.emit)
-        study_layout.addWidget(self.mark_sort_checkbox, 5, 0, 1, 3)
+        filters.addWidget(self.mark_sort_checkbox)
+        filters.addStretch(1)
+        study_layout.addLayout(filters, 3, 0, 1, 3)
 
         progress_row = QHBoxLayout()
         self.list_meta_label = QLabel("请选择 List")
@@ -366,7 +384,7 @@ class HomePage(QWidget):
             lambda: self._emit_completion_adjustment(1)
         )
         progress_row.addWidget(self.increase_rounds_button)
-        study_layout.addLayout(progress_row, 6, 0, 1, 3)
+        study_layout.addLayout(progress_row, 4, 0, 1, 3)
         root.addWidget(study_card)
         self.set_star_counts({})
 
@@ -392,11 +410,12 @@ class HomePage(QWidget):
         self.results.itemActivated.connect(self._emit_word)
         self.results.hide()
         root.addWidget(self.results, 1)
+        root.addStretch()
 
     @staticmethod
     def _action(text: str, *, primary: bool = False) -> QPushButton:
         button = QPushButton(text)
-        button.setMinimumHeight(46)
+        button.setMinimumHeight(39)
         if primary:
             button.setObjectName("primaryButton")
         return button
@@ -404,17 +423,17 @@ class HomePage(QWidget):
     @staticmethod
     def _hero_metric(layout: QHBoxLayout, label_text: str) -> QLabel:
         card = QFrame(objectName="heroMetric")
-        card.setMinimumWidth(118)
+        card.setMinimumWidth(110)
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(16, 13, 16, 14)
+        card_layout.setContentsMargins(13, 10, 13, 10)
         card_layout.setSpacing(3)
         label = QLabel(label_text)
         label.setObjectName("heroMetricLabel")
         value = QLabel("0")
         value.setObjectName("heroMetricValue")
-        card_layout.addWidget(label)
         card_layout.addWidget(value)
-        layout.addWidget(card)
+        card_layout.addWidget(label)
+        layout.addWidget(card, 0, Qt.AlignBottom)
         return value
 
     def set_stats(self, total: int, completed_rounds: int) -> None:
@@ -594,6 +613,7 @@ class HomePage(QWidget):
         self.results.hide()
         self.no_results_label.hide()
         query = text.strip()
+        self.banner.setVisible(not query)
         self.results_header.setVisible(bool(query))
         self.searchRequested.emit(query)
 

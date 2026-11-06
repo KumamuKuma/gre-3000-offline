@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QApplication, QDialogButtonBox
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QLabel
 
 from gre_vocab_app.ui.word_note import WordNote, WordNoteDialog
 from gre_vocab_app.domain import StudyMode
@@ -48,6 +48,8 @@ def test_editor_keeps_typing_keys_and_allows_delete(qtbot):
     dialog = WordNoteDialog("inevitable", "", None)
     qtbot.addWidget(dialog)
     dialog.show()
+    assert dialog.editor.placeholderText() == ""
+    assert [label.text() for label in dialog.findChildren(QLabel)] == ["inevitable"]
     dialog.editor.setFocus()
     qtbot.keyClicks(dialog.editor, "p space")
     qtbot.keyClick(dialog.editor, Qt.Key_Left)

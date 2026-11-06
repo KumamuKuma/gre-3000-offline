@@ -8,6 +8,8 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QLabel
 
+from .theme import TEXT_COLOR
+
 
 TOKEN = re.compile(r"[A-Za-z]+(?:['’-][A-Za-z]+)*")
 
@@ -20,7 +22,7 @@ def lookup_html(text: str) -> str:
         token = match.group(0)
         href = urllib.parse.quote(token, safe="")
         pieces.append(
-            f'<a href="lookup:{href}" style="color:#101828;'
+            f'<a href="lookup:{href}" style="color:{TEXT_COLOR};'
             f'text-decoration:none;">{html.escape(token)}</a>'
         )
         cursor = match.end()
@@ -32,7 +34,7 @@ def lookup_query_html(text: str) -> str:
     href = urllib.parse.quote(text, safe="")
     rendered = html.escape(text).replace("\n", "<br>")
     return (
-        f'<a href="lookup:{href}" style="color:#101828;'
+        f'<a href="lookup:{href}" style="color:{TEXT_COLOR};'
         f'text-decoration:none;">{rendered}</a>'
     )
 

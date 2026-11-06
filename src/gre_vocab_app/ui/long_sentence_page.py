@@ -40,8 +40,8 @@ class LongSentencePage(QWidget):
         self._index = 0
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(38, 28, 38, 30)
-        root.setSpacing(18)
+        root.setContentsMargins(32, 24, 32, 24)
+        root.setSpacing(14)
 
         header = QFrame(objectName="studyHeader")
         header_layout = QHBoxLayout(header)
@@ -49,13 +49,12 @@ class LongSentencePage(QWidget):
         header_layout.setSpacing(18)
         copy = QVBoxLayout()
         copy.setSpacing(4)
-        eyebrow = QLabel("SENTENCE READING · OFFLINE")
+        eyebrow = QLabel("SENTENCE READER")
         eyebrow.setObjectName("eyebrow")
         title = QLabel("杨鹏阅读长难句")
         title.setObjectName("pageTitle")
         subtitle = QLabel(
-            "一页一句精读；点击任意英文单词优先查看离线释义，"
-            "未收录词可主动联网翻译。"
+            "一页一句  /  点击英文单词查看释义"
         )
         subtitle.setObjectName("sectionHint")
         subtitle.setWordWrap(True)
@@ -85,7 +84,7 @@ class LongSentencePage(QWidget):
         self.sentence_label = LookupLabel()
         self.sentence_label.setObjectName("longSentenceText")
         self.sentence_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.sentence_label.setMinimumHeight(150)
+        self.sentence_label.setMinimumHeight(96)
         self.sentence_label.setToolTip(
             "点击单词优先查看离线释义；未收录词可联网翻译；"
             "拖动选择可翻译整段文字"

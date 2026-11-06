@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from PySide6.QtCore import QPointF, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -29,17 +29,16 @@ class _DashboardBanner(QFrame):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setClipRect(self.rect().adjusted(2, 2, -2, -2))
-        center = QPointF(self.width() - 124, 45)
-        painter.setPen(QPen(QColor(129, 234, 215, 34), 1))
-        for radius in (31, 51, 71, 91):
-            painter.drawEllipse(center, radius, radius)
-        painter.setPen(QPen(QColor(129, 234, 215, 50), 1))
-        painter.drawLine(center + QPointF(-106, 0), center + QPointF(106, 0))
-        painter.drawLine(center + QPointF(0, -30), center + QPointF(0, 96))
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(129, 234, 215, 150))
-        for offset in (QPointF(), QPointF(-51, 0), QPointF(66, -18)):
-            painter.drawEllipse(center + offset, 2.5, 2.5)
+        painter.setPen(QPen(QColor(75, 110, 92, 50), 1))
+        for offset in range(0, 56, 7):
+            origin = QPointF(self.width() - 282, offset)
+            page_edge = QPainterPath(origin + QPointF(0, 69))
+            page_edge.cubicTo(
+                origin + QPointF(79, -18),
+                origin + QPointF(168, 85),
+                origin + QPointF(282, 27),
+            )
+            painter.drawPath(page_edge)
 
 
 class ListScopeDialog(QDialog):
@@ -244,12 +243,12 @@ class HomePage(QWidget):
         hero_layout.setSpacing(24)
 
         hero_copy = QVBoxLayout()
-        hero_copy.setSpacing(5)
-        eyebrow = QLabel("VOCABULARY WORKSPACE")
+        hero_copy.setSpacing(4)
+        eyebrow = QLabel("VOCABULARY STUDIO")
         eyebrow.setObjectName("heroEyebrow")
-        title = QLabel("GRE 3000 词汇训练")
+        title = QLabel("GRE 3000")
         title.setObjectName("heroTitle")
-        subtitle = QLabel("原书词序  /  离线学习")
+        subtitle = QLabel("词汇训练 · 原书词序")
         subtitle.setObjectName("heroSubtitle")
         hero_copy.addWidget(eyebrow)
         hero_copy.addWidget(title)
@@ -260,7 +259,6 @@ class HomePage(QWidget):
         self.long_sentence_button.clicked.connect(
             self.longSentencesRequested.emit
         )
-        hero_copy.addSpacing(4)
         hero_copy.addWidget(self.long_sentence_button, 0, Qt.AlignLeft)
         hero_copy.addStretch(1)
         hero_layout.addLayout(hero_copy, 5)

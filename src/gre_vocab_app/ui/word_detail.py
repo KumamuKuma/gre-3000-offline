@@ -223,7 +223,7 @@ class WordDetail(QWidget):
             self._request_secondary_example_speech
         )
         example_header.addWidget(self.secondary_example_speech_button)
-        self.example_en_label = self._lookup_label()
+        self.example_en_label = self._lookup_label(object_name="exampleText")
         self.example_zh_label = self._label(object_name="muted")
         meaning_layout.addSpacing(5)
         meaning_layout.addLayout(example_header)

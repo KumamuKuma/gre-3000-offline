@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -11,6 +11,21 @@ from PySide6.QtWidgets import (
 )
 
 from gre_vocab_app.word_notes import MAX_NOTE_LENGTH, note_key
+
+
+class _NoteEditor(QPlainTextEdit):
+    def event(self, event):
+        handled = super().event(event)
+        if event.type() == QEvent.InputMethodQuery:
+            # Qt reports these in viewport coordinates. IMEs need widget
+            # coordinates, including the border and stylesheet padding.
+            # Keep other query values in Qt to preserve its native MIME data.
+            for query in (Qt.ImCursorRectangle, Qt.ImAnchorRectangle):
+                if event.queries() & query:
+                    event.setValue(
+                        query, event.value(query).translated(self.viewport().pos())
+                    )
+        return handled
 
 
 class WordNote(QWidget):
@@ -93,7 +108,7 @@ class WordNoteDialog(QDialog):
         title.setObjectName("noteTitle")
         title.setTextFormat(Qt.PlainText)
         layout.addWidget(title)
-        self.editor = QPlainTextEdit()
+        self.editor = _NoteEditor()
         self.editor.setObjectName("noteEditor")
         self.editor.setAccessibleName("单词备注")
         self.editor.setPlainText(text)

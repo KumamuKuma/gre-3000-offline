@@ -1,6 +1,10 @@
+import pytest
+
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QInputMethodEvent, QInputMethodQueryEvent, QTextCursor
 from PySide6.QtWidgets import QApplication, QDialogButtonBox, QLabel
 
+from gre_vocab_app.ui.theme import APP_STYLESHEET
 from gre_vocab_app.ui.word_note import WordNote, WordNoteDialog
 from gre_vocab_app.domain import StudyMode
 from gre_vocab_app.ui.word_detail import WordDetail
@@ -59,3 +63,70 @@ def test_editor_keeps_typing_keys_and_allows_delete(qtbot):
     assert not dialog.buttons.button(QDialogButtonBox.Save).isEnabled()
     dialog.editor.clear()
     assert dialog.buttons.button(QDialogButtonBox.Save).isEnabled()
+
+
+@pytest.mark.parametrize("zoom", [0, 3])
+@pytest.mark.parametrize(
+    "text",
+    ["", "中文备注\n第二行", "\n".join(f"第 {i} 行中文备注" for i in range(60))],
+)
+def test_ime_rectangles_match_the_padded_editor_after_scrolling(qtbot, text, zoom):
+    dialog = WordNoteDialog("inevitable", text)
+    qtbot.addWidget(dialog)
+    editor = dialog.editor
+    editor.setStyleSheet(APP_STYLESHEET)
+    editor.zoomIn(zoom)
+    dialog.show()
+    editor.moveCursor(QTextCursor.End)
+    editor.ensureCursorVisible()
+    QApplication.processEvents()
+    assert editor.viewport().pos().y() > editor.frameWidth() / 2
+
+    event = QInputMethodQueryEvent(Qt.ImCursorRectangle | Qt.ImAnchorRectangle)
+    QApplication.sendEvent(editor, event)
+    caret = editor.cursorRect()
+    caret.moveTopLeft(editor.viewport().mapTo(editor, caret.topLeft()))
+    for query in (Qt.ImCursorRectangle, Qt.ImAnchorRectangle):
+        assert event.value(query).toRect() == caret
+
+
+def test_ime_preedit_and_selection_keep_their_position_and_text(qtbot):
+    dialog = WordNoteDialog("inevitable", "中文备注")
+    qtbot.addWidget(dialog)
+    editor = dialog.editor
+    editor.setStyleSheet(APP_STYLESHEET)
+    dialog.show()
+    editor.moveCursor(QTextCursor.End)
+    editor.setFocus()
+    QApplication.processEvents()
+
+    preedit = QInputMethodEvent(
+        "zhongwen",
+        [QInputMethodEvent.Attribute(QInputMethodEvent.Cursor, 3, 1, None)],
+    )
+    QApplication.sendEvent(editor, preedit)
+    event = QInputMethodQueryEvent(
+        Qt.ImCursorRectangle | Qt.ImCursorPosition | Qt.ImSurroundingText
+    )
+    QApplication.sendEvent(editor, event)
+    expected = editor.cursorRect().translated(editor.viewport().pos())
+    assert event.value(Qt.ImCursorRectangle).toRect() == expected
+    assert event.value(Qt.ImCursorPosition) == len("中文备注")
+    assert event.value(Qt.ImSurroundingText) == "中文备注"
+    assert editor.toPlainText() == "中文备注"
+
+    commit = QInputMethodEvent()
+    commit.setCommitString("中文")
+    QApplication.sendEvent(editor, commit)
+    assert editor.toPlainText() == "中文备注中文"
+    cursor = editor.textCursor()
+    cursor.setPosition(1)
+    cursor.setPosition(4, QTextCursor.KeepAnchor)
+    editor.setTextCursor(cursor)
+    event = QInputMethodQueryEvent(Qt.ImQueryAll)
+    QApplication.sendEvent(editor, event)
+    anchor = editor.textCursor()
+    anchor.setPosition(anchor.anchor())
+    expected = editor.cursorRect(anchor).translated(editor.viewport().pos())
+    assert event.value(Qt.ImAnchorRectangle).toRect() == expected
+    assert editor.textCursor().selectedText() == "文备注"

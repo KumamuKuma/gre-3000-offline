@@ -6,8 +6,6 @@ from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
-    QHBoxLayout,
-    QLabel,
     QMainWindow,
     QMessageBox,
     QSizePolicy,
@@ -71,20 +69,6 @@ class MainWindow(QMainWindow):
         self.toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self.addToolBar(self.toolbar)
 
-        brand = QWidget()
-        brand_layout = QHBoxLayout(brand)
-        brand_layout.setContentsMargins(28, 0, 22, 0)
-        brand_layout.setSpacing(10)
-        brand_glyph = QLabel("G")
-        brand_glyph.setObjectName("brandGlyph")
-        brand_glyph.setAlignment(Qt.AlignCenter)
-        brand_glyph.setFixedSize(32, 32)
-        brand_layout.addWidget(brand_glyph)
-        brand_mark = QLabel("GRE 3000")
-        brand_mark.setObjectName("brandMark")
-        brand_layout.addWidget(brand_mark)
-        self.toolbar.addWidget(brand)
-
         self.home_action = QAction("首页", self)
         self.word_list_action = QAction("词表", self)
         self.settings_action = QAction("设置", self)
@@ -101,6 +85,12 @@ class MainWindow(QMainWindow):
         toolbar_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.toolbar.addWidget(toolbar_spacer)
         self.toolbar.addAction(self.settings_action)
+        self.home_search_action = self.toolbar.addWidget(self.home_page.take_search_edit())
+        self.stack.currentChanged.connect(
+            lambda _index: self.home_search_action.setVisible(
+                self.stack.currentWidget() is self.home_page
+            )
+        )
         self.home_action.triggered.connect(self.homeRequested.emit)
         self.word_list_action.triggered.connect(self.wordListRequested.emit)
         self.home_page.wordListRequested.connect(self.wordListRequested.emit)

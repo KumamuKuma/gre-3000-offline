@@ -1,3 +1,4 @@
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLineEdit, QMessageBox
 
 from gre_vocab_app.domain import StudyMode
@@ -8,7 +9,7 @@ from gre_vocab_app.services.speech import ONLINE_VOICE_NAME
 def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
     dialog = SettingsDialog()
     qtbot.addWidget(dialog)
-    assert [dialog.mode_combo.itemData(index) for index in range(4)] == [
+    assert [dialog.mode_control.itemData(index) for index in range(4)] == [
         StudyMode.READING,
         StudyMode.BRIEF,
         StudyMode.RECALL,
@@ -36,14 +37,14 @@ def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
     assert rate.args == [0.4]
 
     with qtbot.waitSignal(dialog.defaultModeChanged) as mode:
-        dialog.mode_combo.setCurrentIndex(
-            dialog.mode_combo.findData(StudyMode.QUIZ)
+        dialog.mode_control.setCurrentIndex(
+            dialog.mode_control.findData(StudyMode.QUIZ)
         )
     assert mode.args == [StudyMode.QUIZ]
     assert mode.args[0] is StudyMode.QUIZ
 
     dialog.set_default_mode(StudyMode.BRIEF)
-    assert dialog.mode_combo.currentData() == StudyMode.BRIEF
+    assert dialog.mode_control.currentData() == StudyMode.BRIEF
 
     with qtbot.waitSignal(dialog.autoSpeakChanged) as auto_speak:
         dialog.auto_speak_checkbox.setChecked(True)
@@ -137,3 +138,35 @@ def test_settings_distinguishes_default_voice_fallback_from_unavailable(qtbot):
     )
     assert dialog.secondary_voice_combo.isEnabled()
     assert dialog.secondary_voice_combo.currentText() == ONLINE_VOICE_NAME
+
+
+def test_settings_segments_emit_modes_and_navigation_preserves_controls(qtbot):
+    dialog = SettingsDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    with qtbot.waitSignal(dialog.defaultModeChanged) as mode:
+        qtbot.mouseClick(dialog.mode_control.buttons[2], Qt.LeftButton)
+    assert mode.args == [StudyMode.RECALL]
+    with qtbot.assertNotEmitted(dialog.defaultModeChanged):
+        dialog.set_default_mode(StudyMode.BRIEF)
+    assert dialog.mode_control.buttons[1].isChecked()
+    for index in (1, 2, 0):
+        qtbot.mouseClick(dialog.navigation.buttons[index], Qt.LeftButton)
+        assert dialog.pages.currentIndex() == index
+    assert dialog.mode_control.currentData() == StudyMode.BRIEF
+
+
+def test_small_settings_window_can_scroll_to_last_switch(qtbot):
+    dialog = SettingsDialog()
+    qtbot.addWidget(dialog)
+    dialog.resize(500, 440)
+    dialog.show()
+    scroll = dialog.pages.currentWidget()
+    target = dialog.quiz_correct_star_down_checkbox
+    scroll.ensureWidgetVisible(target, 8, 8)
+    qtbot.wait(20)
+    center = target.mapTo(scroll.viewport(), target.rect().center())
+    assert scroll.viewport().rect().contains(center)
+    with qtbot.waitSignal(dialog.quizCorrectStarDownChanged) as adjusted:
+        qtbot.mouseClick(target, Qt.LeftButton)
+    assert adjusted.args == [True]

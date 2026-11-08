@@ -45,11 +45,43 @@ def test_home_search_results_fit_without_overlapping_actions_at_minimum_size(
     page.set_results([sample_word])
     qtbot.waitUntil(page.results.isVisible)
 
-    start_bottom = page.start_button.mapTo(
-        page, page.start_button.rect().bottomLeft()
-    ).y()
-    assert start_bottom < page.results.geometry().top()
+    # Search takes over the content area, so the learning controls cannot
+    # compete with results for space in the smallest supported window.
+    assert not page.dashboard.isVisible()
+    assert not page.start_button.isVisible()
     assert page.results.height() >= page.results.minimumSizeHint().height()
+    page.search_edit.clear()
+    qtbot.waitUntil(page.dashboard.isVisible)
+    assert page.start_button.isVisible()
+    assert not page.results.isVisible()
+
+
+def test_home_search_is_only_visible_on_home_navigation(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitUntil(window.home_page.search_edit.isVisible)
+    for navigate in (window.show_study, window.show_word_list, window.show_long_sentences):
+        navigate()
+        qtbot.waitUntil(lambda: not window.home_page.search_edit.isVisible())
+        assert not window.home_search_action.isVisible()
+    window.show_home()
+    qtbot.waitUntil(window.home_page.search_edit.isVisible)
+
+
+def test_home_content_stays_centered_at_small_and_large_window_sizes(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    page = window.home_page
+    for width, height in ((820, 620), (1200, 900)):
+        window.resize(width, height)
+        qtbot.wait(20)
+        center = page.dashboard.mapTo(page.home_scroll.viewport(), page.dashboard.rect().center())
+        viewport_center = page.home_scroll.viewport().rect().center()
+        assert abs(center.x() - viewport_center.x()) <= 2
+        assert abs(center.y() - viewport_center.y()) <= 2
+        assert page.dashboard.width() <= 740
 
 
 def test_main_window_restores_intersecting_geometry_and_rejects_offscreen(qtbot):

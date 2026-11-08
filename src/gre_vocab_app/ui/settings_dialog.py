@@ -3,21 +3,21 @@ from __future__ import annotations
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
-    QComboBox,
     QDialog,
-    QDialogButtonBox,
-    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
     QSlider,
-    QTabWidget,
+    QScrollArea,
+    QStackedWidget,
+    QFrame,
     QVBoxLayout,
     QWidget,
 )
+
+from .controls import RoundedComboBox, SegmentedControl, ToggleSwitch
 
 from gre_vocab_app.domain import StudyMode
 
@@ -42,120 +42,155 @@ class SettingsDialog(QDialog):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle("设置")
-        self.setMinimumWidth(460)
-        self.resize(560, 428)
+        self.setObjectName("settingsDialog")
+        self.setMinimumSize(500, 440)
+        self.resize(560, 640)
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 22, 24, 20)
+        root.setContentsMargins(24, 18, 24, 16)
         root.setSpacing(14)
+        header = QHBoxLayout()
         title = QLabel("设置")
-        title.setObjectName("pageTitle")
-        root.addWidget(title)
-        tabs = QTabWidget()
-        root.addWidget(tabs, 1)
+        title.setObjectName("settingsTitle")
+        header.addWidget(title)
+        header.addStretch(1)
+        self.close_button = QPushButton("×")
+        self.close_button.setObjectName("settingsClose")
+        self.close_button.setFixedSize(32, 32)
+        self.close_button.setAccessibleName("关闭设置")
+        self.close_button.clicked.connect(self.close)
+        header.addWidget(self.close_button)
+        root.addLayout(header)
+
+        self.navigation = SegmentedControl((("学习与朗读", 0), ("本地数据", 1), ("云端同步", 2)), navigation=True)
+        root.addWidget(self.navigation)
+        self.pages = QStackedWidget()
+        self.navigation.currentIndexChanged.connect(self.pages.setCurrentIndex)
+        root.addWidget(self.pages, 1)
 
         study_panel = QWidget()
-        form = QFormLayout(study_panel)
-        form.setContentsMargins(18, 18, 18, 18)
-        form.setHorizontalSpacing(16)
-        form.setVerticalSpacing(8)
-        form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        form.setLabelAlignment(Qt.AlignVCenter)
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItem("阅读模式", StudyMode.READING)
-        self.mode_combo.addItem("简义模式", StudyMode.BRIEF)
-        self.mode_combo.addItem("回忆模式", StudyMode.RECALL)
-        self.mode_combo.addItem("四选一", StudyMode.QUIZ)
-        self.voice_combo = QComboBox()
-        self.secondary_voice_combo = QComboBox()
+        study_panel.setObjectName("settingsPage")
+        study = QVBoxLayout(study_panel)
+        study.setContentsMargins(2, 0, 8, 0)
+        study.setSpacing(8)
+        self._section(study, "学习方式")
+        self.mode_control = SegmentedControl((("阅读", StudyMode.READING), ("简义", StudyMode.BRIEF),
+            ("回忆", StudyMode.RECALL), ("四选一", StudyMode.QUIZ)))
+        self.mode_control.setAccessibleName("默认学习模式")
+        mode_label = QLabel("默认模式")
+        mode_label.setObjectName("settingsLabel")
+        study.addWidget(mode_label)
+        study.addWidget(self.mode_control)
+
+        self._section(study, "朗读")
+        self.voice_combo = RoundedComboBox()
+        self.voice_combo.setAccessibleName("主音源")
+        self.secondary_voice_combo = RoundedComboBox()
+        self.secondary_voice_combo.setAccessibleName("备用音源")
+        self._control_row(study, "主音源", self.voice_combo)
+        self._control_row(study, "备用音源", self.secondary_voice_combo)
+        rate_widget = QWidget()
+        rate_row = QHBoxLayout(rate_widget)
+        rate_row.setContentsMargins(0, 0, 0, 0)
+        rate_row.setSpacing(14)
         self.rate_slider = QSlider(Qt.Horizontal)
+        self.rate_slider.setAccessibleName("朗读速度")
         self.rate_slider.setRange(-10, 10)
         self.rate_slider.setSingleStep(1)
         self.rate_slider.setValue(0)
-        self.rate_value = QLabel("0.0")
-        rate_row = QHBoxLayout()
+        self.rate_value = QLabel("正常")
+        self.rate_value.setObjectName("settingsHint")
+        self.rate_value.setFixedWidth(40)
+        self.rate_value.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         rate_row.addWidget(self.rate_slider, 1)
         rate_row.addWidget(self.rate_value)
-        self.auto_speak_checkbox = QCheckBox("切换到下一词时自动朗读一次")
-        self.quiz_wrong_star_up_checkbox = QCheckBox(
-            "四选一答错时自动加 1 星"
-        )
-        self.quiz_correct_star_down_checkbox = QCheckBox(
-            "四选一答对时自动减 1 星"
-        )
-        form.addRow("默认模式", self.mode_combo)
-        form.addRow("主音源", self.voice_combo)
-        form.addRow("备用音源", self.secondary_voice_combo)
-        form.addRow("朗读速度", rate_row)
-        form.addRow("自动朗读", self.auto_speak_checkbox)
-        form.addRow("自动调星", self.quiz_wrong_star_up_checkbox)
-        form.addRow("", self.quiz_correct_star_down_checkbox)
-        tabs.addTab(study_panel, "学习与朗读")
+        self._control_row(study, "朗读速度", rate_widget)
+        self.auto_speak_checkbox = ToggleSwitch("")
+        self.auto_speak_checkbox.setAccessibleName("切换到下一词时自动朗读一次")
+        self.auto_speak_checkbox.setFixedWidth(48)
+        self._control_row(study, "自动朗读", self.auto_speak_checkbox, "切换单词时朗读一次", stretch=False)
+
+        self._section(study, "四选一调星")
+        self.quiz_wrong_star_up_checkbox = ToggleSwitch("")
+        self.quiz_wrong_star_up_checkbox.setAccessibleName("四选一答错时自动加 1 星")
+        self.quiz_wrong_star_up_checkbox.setFixedWidth(48)
+        self.quiz_correct_star_down_checkbox = ToggleSwitch("")
+        self.quiz_correct_star_down_checkbox.setAccessibleName("四选一答对时自动减 1 星")
+        self.quiz_correct_star_down_checkbox.setFixedWidth(48)
+        self._control_row(study, "答错时加 1 星", self.quiz_wrong_star_up_checkbox, stretch=False)
+        self._control_row(study, "答对时减 1 星", self.quiz_correct_star_down_checkbox, stretch=False)
+        study.addStretch(1)
+        self._add_page(study_panel)
 
         data_panel = QWidget()
+        data_panel.setObjectName("settingsPage")
         data_layout = QVBoxLayout(data_panel)
-        data_layout.setContentsMargins(18, 18, 18, 18)
-        data_layout.setSpacing(10)
-        data_note = QLabel(
-            "可导出学习位置、List 完成次数、星级、备注、累计标记和设置，并在网页版或另一台电脑导入。"
-        )
-        data_note.setObjectName("muted")
+        data_layout.setContentsMargins(2, 0, 8, 0)
+        data_layout.setSpacing(16)
+        self._section(data_layout, "进度备份")
+        data_note = QLabel("导出学习位置、List 完成次数、星级、备注、累计标记和设置，可在网页版或另一台电脑导入。")
+        data_note.setObjectName("settingsHint")
         data_note.setWordWrap(True)
-        self.reset_button = QPushButton("重置学习位置")
-        transfer_row = QHBoxLayout()
+        data_layout.addWidget(data_note)
         self.export_button = QPushButton("导出进度")
         self.import_button = QPushButton("导入进度")
+        transfer_row = QHBoxLayout()
         transfer_row.addWidget(self.export_button)
         transfer_row.addWidget(self.import_button)
-        self.clear_button = QPushButton("清空全部本地数据")
-        self.clear_button.setObjectName("dangerButton")
-        data_layout.addWidget(data_note)
         data_layout.addLayout(transfer_row)
-        data_layout.addWidget(self.reset_button)
-        data_layout.addWidget(self.clear_button)
-        data_layout.addStretch()
-        tabs.addTab(data_panel, "本地数据")
+        self._section(data_layout, "学习位置")
+        self.reset_button = QPushButton("重置")
+        self.reset_button.setAccessibleName("重置学习位置")
+        self._control_row(data_layout, "重置学习位置", self.reset_button, "保留星级、备注和累计标记", stretch=False)
+        self._section(data_layout, "本地数据")
+        self.clear_button = QPushButton("清空数据")
+        self.clear_button.setAccessibleName("清空全部本地数据")
+        self.clear_button.setObjectName("dangerButton")
+        self._control_row(data_layout, "清空全部本地数据", self.clear_button, "删除本机进度和设置", stretch=False)
+        data_layout.addStretch(1)
+        self._add_page(data_panel)
 
         cloud_panel = QWidget()
+        cloud_panel.setObjectName("settingsPage")
         cloud_layout = QVBoxLayout(cloud_panel)
-        cloud_layout.setContentsMargins(18, 18, 18, 18)
-        cloud_layout.setSpacing(10)
-        cloud_note = QLabel(
-            "无需登录。创建一组同步码，在 Windows 和 iPhone 网页版粘贴同一组码即可同步。"
-            "进度会先在设备端加密；请妥善保存同步码，遗失后无法恢复。"
-        )
-        cloud_note.setObjectName("muted")
+        cloud_layout.setContentsMargins(2, 0, 8, 0)
+        cloud_layout.setSpacing(16)
+        self._section(cloud_layout, "同步码")
+        cloud_note = QLabel("无需登录。在 Windows 和 iPhone 网页版使用同一组同步码即可同步。进度先在设备端加密；请妥善保存同步码，遗失后无法恢复。")
+        cloud_note.setObjectName("settingsHint")
         cloud_note.setWordWrap(True)
+        cloud_layout.addWidget(cloud_note)
         self.cloud_token_input = QLineEdit()
+        self.cloud_token_input.setAccessibleName("云端同步码")
         self.cloud_token_input.setPlaceholderText("GRE1- 开头的同步码")
         self.cloud_token_input.setEchoMode(QLineEdit.Password)
+        cloud_layout.addWidget(self.cloud_token_input)
         self.cloud_create_button = QPushButton("生成新同步码")
-        self.cloud_copy_button = QPushButton("显示并复制同步码")
+        self.cloud_copy_button = QPushButton("显示并复制")
+        self.cloud_copy_button.setAccessibleName("显示并复制同步码")
         cloud_code_buttons = QHBoxLayout()
         cloud_code_buttons.addWidget(self.cloud_create_button)
         cloud_code_buttons.addWidget(self.cloud_copy_button)
-        cloud_buttons = QHBoxLayout()
-        self.cloud_upload_button = QPushButton("上传本机进度")
-        self.cloud_download_button = QPushButton("从云端恢复")
-        cloud_buttons.addWidget(self.cloud_upload_button)
-        cloud_buttons.addWidget(self.cloud_download_button)
-        cloud_layout.addWidget(cloud_note)
-        cloud_layout.addWidget(self.cloud_token_input)
         cloud_layout.addLayout(cloud_code_buttons)
-        cloud_layout.addLayout(cloud_buttons)
-        cloud_layout.addStretch()
-        tabs.addTab(cloud_panel, "云端同步")
+        self._section(cloud_layout, "进度同步")
+        self.cloud_upload_button = QPushButton("上传本机进度")
+        self.cloud_upload_button.setObjectName("primaryButton")
+        self.cloud_download_button = QPushButton("从云端恢复")
+        self._control_row(cloud_layout, "保存到云端", self.cloud_upload_button, "上传本机当前进度", stretch=False)
+        self._control_row(cloud_layout, "恢复到本机", self.cloud_download_button, "下载云端保存的进度", stretch=False)
+        cloud_layout.addStretch(1)
+        self._add_page(cloud_panel)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
-        buttons.button(QDialogButtonBox.Close).setText("关闭")
-        buttons.rejected.connect(self.close)
-        root.addWidget(buttons)
+        saved_hint = QLabel("更改自动保存")
+        saved_hint.setObjectName("settingsHint")
+        saved_hint.setAlignment(Qt.AlignCenter)
+        root.addWidget(saved_hint)
 
         self.voice_combo.currentTextChanged.connect(self._voice_changed)
         self.secondary_voice_combo.currentTextChanged.connect(
             self._secondary_voice_changed
         )
         self.rate_slider.valueChanged.connect(self._rate_changed)
-        self.mode_combo.currentIndexChanged.connect(self._mode_changed)
+        self.mode_control.currentIndexChanged.connect(self._mode_changed)
         self.auto_speak_checkbox.toggled.connect(self.autoSpeakChanged.emit)
         self.quiz_wrong_star_up_checkbox.toggled.connect(
             self.quizWrongStarUpChanged.emit
@@ -174,6 +209,51 @@ class SettingsDialog(QDialog):
         self.cloud_download_button.clicked.connect(self.cloudDownloadRequested.emit)
         self.reset_button.clicked.connect(self.resetPositionRequested.emit)
         self.clear_button.clicked.connect(self._confirm_clear)
+
+    @staticmethod
+    def _section(layout, title):
+        section = QWidget()
+        group = QVBoxLayout(section)
+        group.setContentsMargins(0, 4, 0, 0)
+        group.setSpacing(8)
+        rule = QFrame()
+        rule.setObjectName("settingsDivider")
+        rule.setFixedHeight(1)
+        label = QLabel(title)
+        label.setObjectName("settingsSection")
+        group.addWidget(rule)
+        group.addWidget(label)
+        layout.addWidget(section)
+
+    @staticmethod
+    def _control_row(layout, title, control, hint=None, *, stretch=True):
+        widget = QWidget()
+        row = QHBoxLayout(widget)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(18)
+        copy = QVBoxLayout()
+        copy.setSpacing(2)
+        label = QLabel(title)
+        label.setObjectName("settingsLabel")
+        copy.addWidget(label)
+        if hint:
+            subtitle = QLabel(hint)
+            subtitle.setObjectName("settingsHint")
+            subtitle.setWordWrap(True)
+            copy.addWidget(subtitle)
+        row.addLayout(copy, 0 if stretch else 1)
+        if stretch:
+            label.setMinimumWidth(78)
+        row.addWidget(control, 1 if stretch else 0)
+        layout.addWidget(widget)
+
+    def _add_page(self, panel):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(panel)
+        self.pages.addWidget(scroll)
 
     def set_voice_names(
         self,
@@ -233,13 +313,13 @@ class SettingsDialog(QDialog):
         value = max(-10, min(10, round(float(rate) * 10)))
         with QSignalBlocker(self.rate_slider):
             self.rate_slider.setValue(value)
-        self.rate_value.setText(f"{value / 10:.1f}")
+        self.rate_value.setText("正常" if value == 0 else f"{value / 10:+.1f}")
 
     def set_default_mode(self, mode: StudyMode) -> None:
-        index = self.mode_combo.findData(StudyMode(mode))
+        index = self.mode_control.findData(StudyMode(mode))
         if index >= 0:
-            with QSignalBlocker(self.mode_combo):
-                self.mode_combo.setCurrentIndex(index)
+            with QSignalBlocker(self.mode_control):
+                self.mode_control.setCurrentIndex(index)
 
     def set_auto_speak(self, enabled: bool) -> None:
         with QSignalBlocker(self.auto_speak_checkbox):
@@ -300,11 +380,11 @@ class SettingsDialog(QDialog):
 
     def _rate_changed(self, value: int) -> None:
         rate = value / 10.0
-        self.rate_value.setText(f"{rate:.1f}")
+        self.rate_value.setText("正常" if value == 0 else f"{rate:+.1f}")
         self.rateChanged.emit(rate)
 
     def _mode_changed(self, index: int) -> None:
-        mode = self.mode_combo.itemData(index)
+        mode = self.mode_control.itemData(index)
         if mode is not None:
             self.defaultModeChanged.emit(StudyMode(mode))
 

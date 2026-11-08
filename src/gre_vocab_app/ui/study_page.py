@@ -6,7 +6,6 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QButtonGroup,
-    QCheckBox,
     QComboBox,
     QFrame,
     QHBoxLayout,
@@ -18,6 +17,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from .controls import ToggleSwitch
 
 from gre_vocab_app.domain import SessionSnapshot, StudyMode
 
@@ -101,8 +102,8 @@ class StudyPage(QWidget):
         quiz_automation.setSpacing(16)
         quiz_automation_label = QLabel("四选一自动调星")
         quiz_automation_label.setObjectName("fieldLabel")
-        self.quiz_wrong_star_up_checkbox = QCheckBox("答错 +1 星")
-        self.quiz_correct_star_down_checkbox = QCheckBox("答对 −1 星")
+        self.quiz_wrong_star_up_checkbox = ToggleSwitch("答错 +1 星")
+        self.quiz_correct_star_down_checkbox = ToggleSwitch("答对 −1 星")
         quiz_automation.addWidget(quiz_automation_label)
         quiz_automation.addStretch(1)
         quiz_automation.addWidget(self.quiz_wrong_star_up_checkbox)

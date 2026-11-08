@@ -7,7 +7,6 @@ from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QCheckBox,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -19,6 +18,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from .controls import ToggleSwitch
 
 from gre_vocab_app.domain import WordEntry
 from .theme import WARNING_COLOR
@@ -82,7 +83,7 @@ class WordListPage(QWidget):
         filter_row = QHBoxLayout()
         filter_row.setSpacing(12)
         filter_row.addWidget(self.search_edit, 1)
-        self.machine7_only_checkbox = QCheckBox("仅显示机经 7.0 重点词")
+        self.machine7_only_checkbox = ToggleSwitch("仅显示机经 7.0 重点词")
         self.machine7_only_checkbox.setObjectName("machine7FilterCheckbox")
         self.machine7_only_checkbox.toggled.connect(
             self._machine7_filter_toggled

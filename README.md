@@ -19,7 +19,11 @@
 
 ![GRE 3000 Vocabulary Trainer Windows 离线版首页](docs/images/windows-home.png)
 
-<p align="center"><sub>Windows 1.0 正式版首页</sub></p>
+<p align="center"><sub>Windows v1.1.0：居中专注首页，暖白黑灰配色</sub></p>
+
+v1.1.0 更新了 Windows 界面：首页内容随窗口保持居中，学习计划限制宽度；List 与星级使用整块多选按钮，筛选与自动调星使用滑动开关。设置页改用分段导航，默认学习模式可直接点击选择，音源菜单、朗读速度与本地数据操作按组排列。已有学习进度、备注、星级和同步码继续保留。
+
+![Windows v1.1.0 分组设置与分段模式选择](docs/images/windows-settings.png)
 
 ## 这是什么
 
@@ -43,9 +47,9 @@ GRE 3000 Vocabulary Trainer 是一款围绕原书词序设计的个人背词工�
 
 <p align="center"><sub>本地 EXE 的阅读模式：上一词和下一词固定在单词卡上方，到 List 开头和结尾继续固定在下方。</sub></p>
 
-![Windows 离线版四选一答错后重新作答](docs/images/windows-study-quiz-retry.png)
+![Windows 离线版四选一模式](docs/images/windows-study-quiz-retry.png)
 
-<p align="center"><sub>四选一答错后，“重新作答”会出现在上方两个翻词按钮之间，正确答案同时标出词性。</sub></p>
+<p align="center"><sub>四选一模式：自动调星采用滑动开关，每个选项都可打开完整 GRE 词条；答错后可重新作答。</sub></p>
 
 ## Windows：三步开始
 

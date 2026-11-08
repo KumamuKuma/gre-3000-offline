@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from PySide6.QtCore import QPointF, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFrame,
@@ -16,33 +14,18 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 from gre_vocab_app.domain import SourceList, WordEntry
-
-
-class _DashboardBanner(QFrame):
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setClipRect(self.rect().adjusted(2, 2, -2, -2))
-        painter.setPen(QPen(QColor(75, 110, 92, 50), 1))
-        for offset in range(0, 56, 7):
-            origin = QPointF(self.width() - 282, offset)
-            page_edge = QPainterPath(origin + QPointF(0, 69))
-            page_edge.cubicTo(
-                origin + QPointF(79, -18),
-                origin + QPointF(168, 85),
-                origin + QPointF(282, 27),
-            )
-            painter.drawPath(page_edge)
+from .controls import SelectionChip, ToggleSwitch
 
 
 class ListScopeDialog(QDialog):
-    """Compact checkbox picker for a multi-List study scope."""
+    """Scrollable chip picker for a multi-List study scope."""
 
     def __init__(
         self,
@@ -52,7 +35,8 @@ class ListScopeDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowTitle("选择学习 List")
-        self.setMinimumSize(440, 520)
+        self.setMinimumSize(500, 520)
+        self.resize(560, 590)
         self._source_lists = tuple(source_lists)
 
         root = QVBoxLayout(self)
@@ -66,24 +50,32 @@ class ListScopeDialog(QDialog):
         root.addWidget(title)
         root.addWidget(hint)
 
-        self.all_checkbox = QCheckBox("全部 List")
+        self.all_checkbox = ToggleSwitch("全部 List")
         self.all_checkbox.setObjectName("scopeAllCheckbox")
         root.addWidget(self.all_checkbox)
 
-        self.list_widget = QListWidget()
-        self.list_widget.setObjectName("scopeList")
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        content = QWidget()
+        grid = QGridLayout(content)
+        grid.setContentsMargins(0, 4, 10, 4)
+        grid.setSpacing(10)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        grid.setAlignment(Qt.AlignTop)
+        self.list_buttons: dict[str, SelectionChip] = {}
         selected = set(selected_keys)
-        for source_list in self._source_lists:
-            item = QListWidgetItem(
+        for index, source_list in enumerate(self._source_lists):
+            button = SelectionChip(
                 f"{source_list.label} · {source_list.word_count} 词"
             )
-            item.setData(Qt.UserRole, source_list.key)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(
-                Qt.Checked if source_list.key in selected else Qt.Unchecked
-            )
-            self.list_widget.addItem(item)
-        root.addWidget(self.list_widget, 1)
+            button.setChecked(source_list.key in selected)
+            button.toggled.connect(self._sync_state)
+            self.list_buttons[source_list.key] = button
+            grid.addWidget(button, index // 2, index % 2)
+        scroll.setWidget(content)
+        root.addWidget(scroll, 1)
 
         self.selection_label = QLabel()
         self.selection_label.setObjectName("muted")
@@ -100,27 +92,22 @@ class ListScopeDialog(QDialog):
         root.addWidget(self.buttons)
 
         self.all_checkbox.toggled.connect(self._set_all)
-        self.list_widget.itemChanged.connect(self._sync_state)
         self._sync_state()
 
     def selected_keys(self) -> tuple[str, ...]:
         return tuple(
-            str(self.list_widget.item(index).data(Qt.UserRole))
-            for index in range(self.list_widget.count())
-            if self.list_widget.item(index).checkState() == Qt.Checked
+            key for key, button in self.list_buttons.items() if button.isChecked()
         )
 
     def _set_all(self, checked: bool) -> None:
-        with QSignalBlocker(self.list_widget):
-            for index in range(self.list_widget.count()):
-                self.list_widget.item(index).setCheckState(
-                    Qt.Checked if checked else Qt.Unchecked
-                )
+        for button in self.list_buttons.values():
+            with QSignalBlocker(button):
+                button.setChecked(checked)
         self._sync_state()
 
     def _sync_state(self, *_args: object) -> None:
         selected_count = len(self.selected_keys())
-        total = self.list_widget.count()
+        total = len(self.list_buttons)
         with QSignalBlocker(self.all_checkbox):
             self.all_checkbox.setChecked(total > 0 and selected_count == total)
         self.selection_label.setText(
@@ -132,7 +119,7 @@ class ListScopeDialog(QDialog):
 
 
 class StarScopeDialog(QDialog):
-    """Checkbox picker for one or more star ratings."""
+    """Chip picker for one or more star ratings."""
 
     def __init__(
         self,
@@ -154,10 +141,10 @@ class StarScopeDialog(QDialog):
         root.addWidget(title)
         root.addWidget(hint)
 
-        self.all_checkbox = QCheckBox("全部星级")
+        self.all_checkbox = ToggleSwitch("全部星级")
         root.addWidget(self.all_checkbox)
         selected = {int(value) for value in selected_ratings}
-        self.checkboxes: list[QCheckBox] = []
+        self.checkboxes: list[SelectionChip] = []
         values = tuple(int(value) for value in counts)
         for rating in range(4):
             label = (
@@ -165,7 +152,7 @@ class StarScopeDialog(QDialog):
                 if rating == 0
                 else f"{rating} 星（{values[rating]:,} 词）"
             )
-            checkbox = QCheckBox(label)
+            checkbox = SelectionChip(label)
             checkbox.setProperty("rating", rating)
             checkbox.setChecked(rating in selected)
             checkbox.toggled.connect(self._sync_state)
@@ -233,157 +220,166 @@ class HomePage(QWidget):
         self._machine7_only = False
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(32, 20, 32, 20)
-        root.setSpacing(11)
+        root.setContentsMargins(28, 16, 28, 16)
+        root.setSpacing(12)
 
-        self.banner = hero = _DashboardBanner(objectName="heroCard")
-        hero.setMinimumHeight(164)
-        hero_layout = QHBoxLayout(hero)
-        hero_layout.setContentsMargins(28, 15, 26, 15)
-        hero_layout.setSpacing(24)
-
-        hero_copy = QVBoxLayout()
-        hero_copy.setSpacing(4)
-        eyebrow = QLabel("VOCABULARY STUDIO")
-        eyebrow.setObjectName("heroEyebrow")
-        title = QLabel("GRE 3000")
-        title.setObjectName("heroTitle")
-        subtitle = QLabel("词汇训练 · 原书词序")
-        subtitle.setObjectName("heroSubtitle")
-        hero_copy.addWidget(eyebrow)
-        hero_copy.addWidget(title)
-        hero_copy.addWidget(subtitle)
-        self.long_sentence_button = QPushButton("杨鹏阅读长难句  ↗")
-        self.long_sentence_button.setObjectName("heroActionButton")
-        self.long_sentence_button.setAccessibleName("打开杨鹏阅读长难句")
-        self.long_sentence_button.clicked.connect(
-            self.longSentencesRequested.emit
-        )
-        hero_copy.addWidget(self.long_sentence_button, 0, Qt.AlignLeft)
-        hero_copy.addStretch(1)
-        hero_layout.addLayout(hero_copy, 5)
-
-        metrics = QHBoxLayout()
-        metrics.setSpacing(10)
-        self.total_value = self._hero_metric(metrics, "完整词库")
-        self.rounds_value = self._hero_metric(metrics, "完成轮次")
-        hero_layout.addLayout(metrics)
-        root.addWidget(hero)
-
-        search_card = QFrame(objectName="searchCard")
-        search_layout = QVBoxLayout(search_card)
-        search_layout.setContentsMargins(18, 12, 18, 14)
-        search_layout.setSpacing(7)
-        search_header = QHBoxLayout()
-        search_title = QLabel("快速查词")
-        search_title.setObjectName("sectionTitle")
-        search_hint = QLabel("Ctrl + F")
-        search_hint.setObjectName("shortcutBadge")
-        search_header.addWidget(search_title)
-        search_header.addStretch(1)
-        search_header.addWidget(search_hint)
-        search_layout.addLayout(search_header)
-
+        self.search_container = QWidget()
+        search_row = QHBoxLayout(self.search_container)
+        search_row.setContentsMargins(0, 0, 0, 0)
+        search_row.addStretch(1)
         self.search_edit = QLineEdit()
         self.search_edit.setObjectName("largeSearch")
-        self.search_edit.setPlaceholderText("输入英文单词")
+        self.search_edit.setPlaceholderText("输入英文单词    Ctrl + F")
         self.search_edit.setAccessibleName("搜索英文单词")
         self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.setMinimumWidth(240)
+        self.search_edit.setMaximumWidth(360)
         self.search_edit.textChanged.connect(self._on_search_changed)
-        search_layout.addWidget(self.search_edit)
-        root.addWidget(search_card)
+        search_row.addWidget(self.search_edit)
+        root.addWidget(self.search_container)
+
+        self.home_scroll = QScrollArea()
+        self.home_scroll.setWidgetResizable(True)
+        self.home_scroll.setFrameShape(QFrame.NoFrame)
+        self.home_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        viewport_content = QWidget()
+        centered_layout = QVBoxLayout(viewport_content)
+        centered_layout.setContentsMargins(0, 0, 0, 0)
+        centered_layout.setAlignment(Qt.AlignCenter)
+        self.dashboard = QWidget()
+        self.dashboard.setMinimumWidth(680)
+        self.dashboard.setMaximumWidth(740)
+        self.dashboard.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        dashboard_layout = QVBoxLayout(self.dashboard)
+        dashboard_layout.setContentsMargins(0, 0, 0, 0)
+        dashboard_layout.setSpacing(16)
+
+        self.banner = hero = QFrame(objectName="heroCard")
+        hero_layout = QVBoxLayout(hero)
+        hero_layout.setContentsMargins(0, 0, 0, 0)
+        hero_layout.setSpacing(6)
+        title = QLabel("GRE 3000")
+        title.setObjectName("heroTitle")
+        title.setAlignment(Qt.AlignCenter)
+        subtitle = QLabel("词汇训练 · 原书词序")
+        subtitle.setObjectName("heroSubtitle")
+        subtitle.setAlignment(Qt.AlignCenter)
+        hero_layout.addWidget(title)
+        hero_layout.addWidget(subtitle)
+        metrics = QHBoxLayout()
+        metrics.setSpacing(16)
+        metrics.addStretch(1)
+        self.total_value = self._hero_metric(metrics, "完整词库")
+        divider = QLabel("│")
+        divider.setObjectName("muted")
+        metrics.addWidget(divider)
+        self.rounds_value = self._hero_metric(metrics, "完成轮次")
+        metrics.addStretch(1)
+        hero_layout.addLayout(metrics)
+        dashboard_layout.addWidget(hero)
 
         study_card = QFrame(objectName="studyCard")
-        study_layout = QGridLayout(study_card)
-        study_layout.setContentsMargins(18, 13, 18, 15)
-        study_layout.setHorizontalSpacing(12)
-        study_layout.setVerticalSpacing(9)
-        study_layout.setColumnStretch(0, 3)
-        study_layout.setColumnStretch(1, 2)
-        study_layout.setColumnStretch(2, 1)
+        study_layout = QVBoxLayout(study_card)
+        study_layout.setContentsMargins(24, 18, 24, 18)
+        study_layout.setSpacing(16)
         study_title = QLabel("学习计划")
-        study_title.setObjectName("sectionTitle")
-        study_layout.addWidget(study_title, 0, 0, 1, 2)
-
-        self.word_list_button = self._action("浏览完整词表")
-        self.word_list_button.setObjectName("outlineButton")
-        self.word_list_button.clicked.connect(self.wordListRequested.emit)
-        study_layout.addWidget(self.word_list_button, 0, 2)
-
-        list_label = QLabel("学习 List")
-        list_label.setObjectName("fieldLabel")
-        star_label = QLabel("星级筛选")
-        star_label.setObjectName("fieldLabel")
-        study_layout.addWidget(list_label, 1, 0)
-        study_layout.addWidget(star_label, 1, 1)
-
+        study_title.setObjectName("homeStudyTitle")
+        study_layout.addWidget(study_title)
+        scope_grid = QGridLayout()
+        scope_grid.setHorizontalSpacing(12)
+        scope_grid.setColumnStretch(1, 1)
+        scope_grid.setColumnStretch(3, 1)
+        for column, caption in ((0, "学习 List"), (2, "星级筛选")):
+            label = QLabel(caption)
+            label.setObjectName("fieldLabel")
+            scope_grid.addWidget(label, 0, column)
         self.list_scope_button = self._action("选择学习 List")
         self.list_scope_button.setObjectName("outlineButton")
         self.list_scope_button.setAccessibleName("多选学习 List")
         self.list_scope_button.clicked.connect(self._choose_lists)
-        study_layout.addWidget(self.list_scope_button, 2, 0)
-
+        scope_grid.addWidget(self.list_scope_button, 0, 1)
         self.star_scope_button = self._action("选择学习星级")
         self.star_scope_button.setObjectName("outlineButton")
         self.star_scope_button.setAccessibleName("多选学习星级")
         self.star_scope_button.clicked.connect(self._choose_stars)
-        study_layout.addWidget(self.star_scope_button, 2, 1)
-
-        self.start_button = self._action("开始 / 继续", primary=True)
-        self.start_button.setMinimumWidth(142)
-        self.start_button.clicked.connect(self._emit_list_study)
-        study_layout.addWidget(self.start_button, 2, 2)
+        scope_grid.addWidget(self.star_scope_button, 0, 3)
+        study_layout.addLayout(scope_grid)
 
         filters = QHBoxLayout()
-        filters.setSpacing(20)
-        self.machine7_only_checkbox = QCheckBox("仅显示机经 7.0 重点词")
+        filters.setSpacing(14)
+        self.machine7_only_checkbox = ToggleSwitch("仅机经 7.0 重点词", pill=True)
         self.machine7_only_checkbox.setObjectName("machine7FilterCheckbox")
         self.machine7_only_checkbox.setAccessibleName("仅学习机经 7.0 重点词")
-        self.machine7_only_checkbox.setToolTip(
-            "在所选 List 和星级范围内，只保留机经 7.0 重点词"
-        )
-        self.machine7_only_checkbox.toggled.connect(
-            self._machine7_filter_toggled
-        )
-        filters.addWidget(self.machine7_only_checkbox)
-        self.mark_sort_checkbox = QCheckBox("按累计标记倒序")
+        self.machine7_only_checkbox.setToolTip("在所选 List 和星级范围内，只保留机经 7.0 重点词")
+        self.machine7_only_checkbox.toggled.connect(self._machine7_filter_toggled)
+        filters.addWidget(self.machine7_only_checkbox, 1)
+        self.mark_sort_checkbox = ToggleSwitch("按累计标记倒序", pill=True)
         self.mark_sort_checkbox.setToolTip("次数相同保留原书词序；学习中增减标记不会移动当前词")
         self.mark_sort_checkbox.toggled.connect(self.markSortChanged.emit)
-        filters.addWidget(self.mark_sort_checkbox)
-        filters.addStretch(1)
-        study_layout.addLayout(filters, 3, 0, 1, 3)
+        filters.addWidget(self.mark_sort_checkbox, 1)
+        study_layout.addLayout(filters)
 
         progress_row = QHBoxLayout()
+        progress_row.setSpacing(12)
         self.list_meta_label = QLabel("请选择 List")
         self.list_meta_label.setObjectName("muted")
-        progress_row.addWidget(self.list_meta_label)
-        progress_row.addStretch(1)
+        self.list_meta_label.setWordWrap(True)
+        progress_row.addWidget(self.list_meta_label, 1)
         progress_label = QLabel("所选 List 已背")
         progress_label.setObjectName("fieldLabel")
         progress_row.addWidget(progress_label)
+        stepper = QFrame(objectName="roundStepper")
+        stepper_layout = QHBoxLayout(stepper)
+        stepper_layout.setContentsMargins(0, 0, 0, 0)
+        stepper_layout.setSpacing(0)
         self.decrease_rounds_button = QPushButton("−")
-        self.decrease_rounds_button.setObjectName("compactButton")
+        self.decrease_rounds_button.setObjectName("stepperDecrease")
+        self.decrease_rounds_button.setFixedSize(38, 34)
         self.decrease_rounds_button.setAccessibleName("所选 List 已背次数减一")
         self.decrease_rounds_button.setToolTip("手动修正：已背次数减一")
-        self.decrease_rounds_button.clicked.connect(
-            lambda: self._emit_completion_adjustment(-1)
-        )
-        progress_row.addWidget(self.decrease_rounds_button)
+        self.decrease_rounds_button.clicked.connect(lambda: self._emit_completion_adjustment(-1))
+        stepper_layout.addWidget(self.decrease_rounds_button)
         self.rounds_value_label = QLabel("0")
-        self.rounds_value_label.setObjectName("countBadge")
-        self.rounds_value_label.setMinimumWidth(30)
+        self.rounds_value_label.setObjectName("roundStepperValue")
+        self.rounds_value_label.setMinimumWidth(34)
         self.rounds_value_label.setAlignment(Qt.AlignCenter)
-        progress_row.addWidget(self.rounds_value_label)
+        stepper_layout.addWidget(self.rounds_value_label)
         self.increase_rounds_button = QPushButton("+")
-        self.increase_rounds_button.setObjectName("compactButton")
+        self.increase_rounds_button.setObjectName("stepperIncrease")
+        self.increase_rounds_button.setFixedSize(38, 34)
         self.increase_rounds_button.setAccessibleName("所选 List 已背次数加一")
         self.increase_rounds_button.setToolTip("手动记录：已背次数加一")
-        self.increase_rounds_button.clicked.connect(
-            lambda: self._emit_completion_adjustment(1)
-        )
-        progress_row.addWidget(self.increase_rounds_button)
-        study_layout.addLayout(progress_row, 4, 0, 1, 3)
-        root.addWidget(study_card)
+        self.increase_rounds_button.clicked.connect(lambda: self._emit_completion_adjustment(1))
+        stepper_layout.addWidget(self.increase_rounds_button)
+        progress_row.addWidget(stepper)
+        study_layout.addLayout(progress_row)
+        self.start_button = self._action("开始 / 继续学习", primary=True)
+        self.start_button.setProperty("homeAction", True)
+        self.start_button.setMinimumHeight(48)
+        self.start_button.clicked.connect(self._emit_list_study)
+        study_layout.addWidget(self.start_button)
+        dashboard_layout.addWidget(study_card)
+
+        links = QHBoxLayout()
+        links.setSpacing(18)
+        links.addStretch(1)
+        self.word_list_button = QPushButton("浏览完整词表")
+        self.word_list_button.setObjectName("textButton")
+        self.word_list_button.clicked.connect(self.wordListRequested.emit)
+        self.long_sentence_button = QPushButton("杨鹏阅读长难句")
+        self.long_sentence_button.setObjectName("textButton")
+        self.long_sentence_button.setAccessibleName("打开杨鹏阅读长难句")
+        self.long_sentence_button.clicked.connect(self.longSentencesRequested.emit)
+        links.addWidget(self.word_list_button)
+        link_divider = QLabel("│")
+        link_divider.setObjectName("muted")
+        links.addWidget(link_divider)
+        links.addWidget(self.long_sentence_button)
+        links.addStretch(1)
+        dashboard_layout.addLayout(links)
+        centered_layout.addWidget(self.dashboard, 0, Qt.AlignHCenter)
+        self.home_scroll.setWidget(viewport_content)
+        root.addWidget(self.home_scroll, 1)
         self.set_star_counts({})
 
         self.results_header = QWidget()
@@ -408,7 +404,6 @@ class HomePage(QWidget):
         self.results.itemActivated.connect(self._emit_word)
         self.results.hide()
         root.addWidget(self.results, 1)
-        root.addStretch()
 
     @staticmethod
     def _action(text: str, *, primary: bool = False) -> QPushButton:
@@ -421,18 +416,23 @@ class HomePage(QWidget):
     @staticmethod
     def _hero_metric(layout: QHBoxLayout, label_text: str) -> QLabel:
         card = QFrame(objectName="heroMetric")
-        card.setMinimumWidth(110)
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(13, 10, 13, 10)
-        card_layout.setSpacing(3)
+        row = QHBoxLayout(card)
+        row.setContentsMargins(0, 6, 0, 0)
+        row.setSpacing(8)
         label = QLabel(label_text)
         label.setObjectName("heroMetricLabel")
         value = QLabel("0")
-        value.setObjectName("heroMetricValue")
-        card_layout.addWidget(value)
-        card_layout.addWidget(label)
-        layout.addWidget(card, 0, Qt.AlignBottom)
+        value.setObjectName("homeInlineValue")
+        row.addWidget(label)
+        row.addWidget(value)
+        layout.addWidget(card)
         return value
+
+    def take_search_edit(self) -> QLineEdit:
+        """Move the standalone search into the main window's navigation bar."""
+        self.search_container.layout().removeWidget(self.search_edit)
+        self.search_container.hide()
+        return self.search_edit
 
     def set_stats(self, total: int, completed_rounds: int) -> None:
         self.total_value.setText(f"{total:,}")
@@ -611,7 +611,7 @@ class HomePage(QWidget):
         self.results.hide()
         self.no_results_label.hide()
         query = text.strip()
-        self.banner.setVisible(not query)
+        self.home_scroll.setVisible(not query)
         self.results_header.setVisible(bool(query))
         self.searchRequested.emit(query)
 

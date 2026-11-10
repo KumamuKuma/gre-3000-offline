@@ -2,18 +2,26 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import json
 import secrets
+import socket
+import ssl
+from http.client import HTTPSConnection, HTTPException
+from time import monotonic
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request, getproxies, proxy_bypass, urlopen
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
-DEFAULT_CLOUD_ENDPOINT = "https://gre-sync-kumamukuma.pages.dev"
+_SYNC_HOST = "gre-sync-kumamukuma.pages.dev"
+DEFAULT_CLOUD_ENDPOINT = f"https://{_SYNC_HOST}"
+_DNS_RESOLVERS = ("https://223.5.5.5/resolve", "https://8.8.8.8/resolve")
+_DNS_CACHE: tuple[float, tuple[str, ...]] = (0, ())
 SYNC_CODE_PREFIX = "GRE1-"
 _SPACE_CONTEXT = b"gre-sync-space-v1:"
 _AUTH_CONTEXT = b"gre-sync-auth-v1:"
@@ -78,6 +86,92 @@ def _sync_credentials(code: str) -> tuple[str, str, bytes]:
     return space_id, auth_token, encryption_key
 
 
+def _resolve_sync_host() -> tuple[str, ...]:
+    global _DNS_CACHE
+    expires, addresses = _DNS_CACHE
+    if monotonic() < expires:
+        return addresses
+    query = urlencode({"name": _SYNC_HOST, "type": "A"})
+    for resolver in _DNS_RESOLVERS:
+        try:
+            with urlopen(f"{resolver}?{query}", timeout=5) as response:
+                result = json.loads(response.read(16_384))
+            if result.get("Status") != 0:
+                continue
+            answers = {}
+            for answer in result.get("Answer", []):
+                if answer.get("type") != 1:
+                    continue
+                address = ipaddress.IPv4Address(answer["data"])
+                if address.is_global:
+                    answers[str(address)] = int(answer.get("TTL", 0))
+            if answers:
+                addresses = tuple(answers)[:3]
+                ttl = min(300, max(0, min(answers[address] for address in addresses)))
+                _DNS_CACHE = (monotonic() + ttl, addresses)
+                return addresses
+        except (OSError, HTTPException, ValueError, TypeError, AttributeError, KeyError):
+            continue
+    raise CloudSyncError("无法解析云同步服务的域名，请稍后重试。")
+
+
+class _ResolvedHTTPSConnection(HTTPSConnection):
+    def __init__(self, address: str):
+        self._resolved_address = address
+        self._tls = ssl.create_default_context()
+        super().__init__(_SYNC_HOST, timeout=6, context=self._tls)
+
+    def connect(self) -> None:
+        raw_socket = socket.create_connection((self._resolved_address, self.port), self.timeout)
+        try:
+            # Keep TLS and HTTP verification tied to the service hostname.
+            self.sock = self._tls.wrap_socket(raw_socket, server_hostname=self.host)
+            self.sock.settimeout(15)
+        except OSError:
+            raw_socket.close()
+            raise
+
+
+def _read_sync_response(request: Request) -> bytes:
+    global _DNS_CACHE
+    try:
+        with urlopen(request, timeout=15) as response:
+            return response.read()
+    except URLError as error:
+        if not isinstance(error.reason, socket.gaierror) or request.type != "https" or request.host != _SYNC_HOST:
+            raise
+        if getproxies().get("https") and not proxy_bypass(_SYNC_HOST):
+            raise
+
+    method = request.get_method()
+    for address in _resolve_sync_host():
+        connection = _ResolvedHTTPSConnection(address)
+        try:
+            connection.connect()
+        except OSError:
+            connection.close()
+            continue
+        try:
+            connection.request(method, request.selector, request.data, dict(request.header_items()))
+            with connection.getresponse() as response:
+                # The next login step can start with the route that just responded.
+                expires, cached = _DNS_CACHE
+                if address in cached and address != cached[0]:
+                    _DNS_CACHE = (expires, (address,) + tuple(ip for ip in cached if ip != address))
+                if not 200 <= response.status < 300:
+                    raise HTTPError(request.full_url, response.status, response.reason, response.headers, None)
+                return response.read()
+        except HTTPError:
+            raise
+        except (OSError, HTTPException):
+            # A read can safely use the next address; a submitted write may already have succeeded.
+            if method != "GET":
+                raise
+        finally:
+            connection.close()
+    raise CloudSyncError("已解析同步域名，但暂时无法连接云同步服务。")
+
+
 def _request(
     method: str,
     url: str,
@@ -96,13 +190,12 @@ def _request(
         headers["content-type"] = "application/json; charset=utf-8"
     request = Request(url, data=data, headers=headers, method=method)
     try:
-        with urlopen(request, timeout=15) as response:
-            decoded = json.loads(response.read().decode("utf-8"))
+        decoded = json.loads(_read_sync_response(request).decode("utf-8"))
     except HTTPError as error:
         if error.code == 401:
             raise CloudSyncHTTPError(401, "同步码无效或与云端空间不匹配。") from error
         raise CloudSyncHTTPError(error.code, f"云端返回错误：HTTP {error.code}") from error
-    except (OSError, URLError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (OSError, HTTPException, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise CloudSyncError("暂时无法连接云同步服务。") from error
     if not isinstance(decoded, dict):
         raise CloudSyncError("云端返回了无效数据。")

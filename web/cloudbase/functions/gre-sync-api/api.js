@@ -85,7 +85,13 @@ function parseEncryptedBody(body) {
     throw new Error("progress is too large");
   }
   try {
-    return validateEncryptedPayload(JSON.parse(body));
+    const payload = JSON.parse(body);
+    const encrypted = validateEncryptedPayload(payload);
+    const expectedNonce = payload.expected_nonce;
+    if (expectedNonce !== undefined && expectedNonce !== null && (
+      typeof expectedNonce !== "string" || !NONCE_PATTERN.test(expectedNonce)
+    )) throw new Error("invalid expected nonce");
+    return expectedNonce === undefined ? encrypted : { ...encrypted, expectedNonce };
   } catch (error) {
     if (error instanceof SyntaxError) throw new Error("invalid progress");
     throw error;
@@ -115,7 +121,9 @@ export function createCodeProgressHandler({ store, now = () => new Date(), onErr
     try {
       if (method === "GET") {
         const row = await store.get(credentials.spaceId);
-        if (!row) return jsonResponse(200, { progress: null, updated_at: null });
+        const protocol = new URL(request.url, "http://cloudbase.local").searchParams.get("protocol");
+        const capabilities = protocol === "2" ? { conditional_write: true } : {};
+        if (!row) return jsonResponse(200, { progress: null, updated_at: null, ...capabilities });
         if (!authorized(row.authHash, credentials.authHash)) {
           return jsonResponse(401, { error: "invalid_sync_code" });
         }
@@ -127,6 +135,7 @@ export function createCodeProgressHandler({ store, now = () => new Date(), onErr
             nonce: row.nonce,
           },
           updated_at: timestamp(row.updatedAt),
+          ...capabilities,
         });
       }
 
@@ -149,7 +158,9 @@ export function createCodeProgressHandler({ store, now = () => new Date(), onErr
         ciphertext: encrypted.ciphertext,
         nonce: encrypted.nonce,
         updatedAt,
+        ...(encrypted.expectedNonce === undefined ? {} : { expectedNonce: encrypted.expectedNonce }),
       });
+      if (saved === "conflict") return jsonResponse(409, { error: "progress_changed" });
       if (!saved) return jsonResponse(401, { error: "invalid_sync_code" });
       return jsonResponse(200, { updated_at: updatedAt });
     } catch (error) {

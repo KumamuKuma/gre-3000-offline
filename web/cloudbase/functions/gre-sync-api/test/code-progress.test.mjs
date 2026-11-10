@@ -279,6 +279,34 @@ test("CloudBase storage refuses to overwrite an existing object with another aut
   assert.equal(backend.value().authHash, AUTH_HASH);
 });
 
+test("guarded writes reject a stale cloud revision and a concurrent first upload", async () => {
+  const backend = cloudStorage();
+  const handle = createCodeProgressHandler({
+    store: createCloudBaseStorageStore(backend.client),
+    now: () => new Date(UPDATED_AT),
+  });
+  const read = request();
+  const firstRead = await handle({ ...read, url: `${read.url}&protocol=2` });
+  assert.deepEqual(responseJson(firstRead), { progress: null, updated_at: null, conditional_write: true });
+
+  const put = (expectedNonce, nonce) => handle(request("PUT", AUTH_TOKEN, JSON.stringify({
+    ...ENCRYPTED,
+    nonce,
+    expected_nonce: expectedNonce,
+  })));
+  const first = await Promise.all([put(null, ENCRYPTED.nonce), put(null, "B".repeat(16))]);
+  assert.deepEqual(first.map(({ status }) => status).sort(), [200, 409]);
+  assert.equal(backend.uploads.length, 1);
+  const acknowledged = backend.value().nonce;
+
+  const second = await Promise.all([put(acknowledged, "C".repeat(16)), put(acknowledged, "D".repeat(16))]);
+  assert.deepEqual(second.map(({ status }) => status).sort(), [200, 409]);
+  assert.deepEqual(responseJson(second.find(({ status }) => status === 409)), { error: "progress_changed" });
+  assert.equal(backend.uploads.length, 2);
+  assert.notEqual(backend.value().nonce, acknowledged);
+  assert.equal((await put("bad-nonce", ENCRYPTED.nonce)).status, 400);
+});
+
 test("progress updates and deletions read the newest object even when the CDN retains an older version", async () => {
   const initial = {
     authHash: AUTH_HASH,

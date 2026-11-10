@@ -36,8 +36,10 @@ yarn-error.log*
 
 # typescript
 next-env.d.ts
+*.tsbuildinfo
 /dist/
 /cloudbase-dist/
+/github-pages-dist/
 /.wrangler/
 /outputs/
 /work/

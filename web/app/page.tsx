@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createSyncCode,
   decryptProgress,
@@ -8,9 +8,12 @@ import {
   encryptProgress,
   validateSyncCode,
 } from "./sync-code";
+import { connectSyncAccount, type SyncAccount } from "./sync-account";
+import { isSyncUsername } from "./sync-account-name";
 import { dictionaryEntryForDisplay } from "./dictionary-senses";
 import { MAX_NOTE_LENGTH, WordNotes, noteKey, normalizeNotes, setWordNote } from "./word-notes";
 import { WordMarks as WordMarkCounts, adjustMarkCount, getMarkCount, normalizeMarks, normalizeRecentMarks, rememberMarkedWord, sortByMarks } from "./word-marks";
+import { ListProgress, Progress, SyncBase, planProgressSync, progressSignature } from "./progress-sync";
 
 type StudyMode = "reading" | "brief" | "recall" | "quiz";
 type Screen = "home" | "study" | "sentences" | "words" | "settings";
@@ -70,24 +73,14 @@ type LongSentencePayload = {
   sentences: LongSentence[];
 };
 
-type ListProgress = { completed_count: number; current_word_id: number | null };
-type Progress = {
-  schema: "gre-vocab-progress";
-  version: 1;
-  exported_at?: string;
-  stars: Record<string, number>;
-  notes: WordNotes;
-  marks: WordMarkCounts;
-  recent_marks: number[];
-  lists: Record<string, ListProgress>;
-  settings: Record<string, string>;
-};
-
 type CloudState = {
-  status: "disconnected" | "checking" | "ready" | "error";
+  status: "disconnected" | "checking" | "ready" | "error" | "conflict";
   updatedAt?: string | null;
   message?: string;
+  nonce?: string | null;
 };
+
+type SyncChoice = { source: "local" | "cloud"; nonce: string | null };
 
 type DictionaryEntry = {
   word: string;
@@ -141,7 +134,10 @@ type LookupView = {
 const STORAGE_KEY = "gre-vocab-progress-v1";
 type RecentReturn = { screen: Screen; wordId: number | null; ids: number[]; revealed: boolean; selected: number | null; attempts: number; mode: StudyMode; lookup: LookupView | null; preview: number | null };
 const SYNC_CODE_STORAGE_KEY = "gre-vocab-sync-code-v1";
+const SYNC_BASE_STORAGE_KEY = "gre-vocab-sync-base-v1";
+const SYNC_ACCOUNT_STORAGE_KEY = "gre-vocab-sync-account-v1";
 const SYNC_TIMEOUT_MS = 12_000;
+const SYNC_POLL_MS = 30_000;
 const WORD_LIST_BATCH_SIZE = 80;
 const MODES: { key: StudyMode; label: string; hint: string }[] = [
   { key: "reading", label: "阅读", hint: "完整释义" },
@@ -426,6 +422,13 @@ function speak(word: string) {
   window.speechSynthesis.speak(utterance);
 }
 
+function staticAssetUrl(path: string) {
+  const base = typeof document === "undefined"
+    ? "/"
+    : document.querySelector<HTMLMetaElement>('meta[name="gre-app-base"]')?.content ?? "/";
+  return `${base}${path}`;
+}
+
 function apiUrl(path: string) {
   if (typeof document === "undefined") return path;
   const origin = document
@@ -435,10 +438,36 @@ function apiUrl(path: string) {
   return origin ? `${origin}${path}` : path;
 }
 
+function storedSyncAccount(): SyncAccount | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SYNC_ACCOUNT_STORAGE_KEY) ?? "null");
+    return saved && typeof saved.username === "string" && isSyncUsername(saved.username)
+      ? { username: saved.username, code: validateSyncCode(saved.code) }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function profileStorageKey(key: string, username: string) {
+  return username ? `${key}:${username}` : key;
+}
+
+function readLocalProgress(data: ContentPayload, username: string) {
+  try {
+    const saved = localStorage.getItem(profileStorageKey(STORAGE_KEY, username));
+    if (saved) return normalizeProgress(JSON.parse(saved), data);
+  } catch {
+    // Treat unreadable progress like a missing local copy.
+  }
+  localStorage.removeItem(profileStorageKey(SYNC_BASE_STORAGE_KEY, username));
+  return defaultProgress(data);
+}
+
 async function readCodeProgress(code: string) {
   const { spaceId, authToken } = await deriveSyncCredentials(code);
   const response = await fetchWithTimeout(
-    apiUrl(`/api/code-progress?space=${encodeURIComponent(spaceId)}`),
+    apiUrl(`/api/code-progress?space=${encodeURIComponent(spaceId)}&protocol=2`),
     {
       cache: "no-store",
       headers: { authorization: `Bearer ${authToken}` },
@@ -446,14 +475,19 @@ async function readCodeProgress(code: string) {
     "读取云端进度超时，请检查网络后重试。",
   );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json() as Promise<{ progress: Parameters<typeof decryptProgress>[1] | null; updated_at: string | null }>;
+  return response.json() as Promise<{
+    progress: Parameters<typeof decryptProgress>[1] | null;
+    updated_at: string | null;
+    conditional_write?: boolean;
+  }>;
 }
 
-async function writeCodeProgress(code: string, progress: Progress) {
+async function writeCodeProgress(code: string, progress: Progress, expectedNonce: string | null, cancelled: () => boolean) {
   const [{ spaceId, authToken }, encrypted] = await Promise.all([
     deriveSyncCredentials(code),
     encryptProgress(code, progress),
   ]);
+  if (cancelled()) return null;
   const response = await fetchWithTimeout(
     apiUrl(`/api/code-progress?space=${encodeURIComponent(spaceId)}`),
     {
@@ -462,12 +496,14 @@ async function writeCodeProgress(code: string, progress: Progress) {
         authorization: `Bearer ${authToken}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify(encrypted),
+      body: JSON.stringify({ ...encrypted, expected_nonce: expectedNonce }),
     },
     "上传云端进度超时，本机进度已保留。",
   );
+  if (response.status === 409) return null;
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json() as Promise<{ updated_at: string }>;
+  const result = await response.json() as { updated_at: string };
+  return { nonce: encrypted.nonce, updatedAt: result.updated_at };
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMessage: string) {
@@ -512,6 +548,13 @@ async function translateViaMyMemoryDirect(text: string) {
 export default function Home() {
   const [data, setData] = useState<ContentPayload | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
+  const currentProgress = useRef<Progress | null>(null);
+  const activeProfile = useRef("");
+  const replaceProgress = useCallback((next: Progress, persist = true) => {
+    if (persist) localStorage.setItem(profileStorageKey(STORAGE_KEY, activeProfile.current), JSON.stringify(next));
+    currentProgress.current = next;
+    setProgress(next);
+  }, []);
   const [hydrated, setHydrated] = useState(false);
   const [screen, setScreen] = useState<Screen>("home");
   const [recentMode, setRecentMode] = useState(false);
@@ -527,6 +570,13 @@ export default function Home() {
   const [cloud, setCloud] = useState<CloudState>({ status: "disconnected" });
   const [syncCode, setSyncCode] = useState("");
   const [syncCodeInput, setSyncCodeInput] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [accountMode, setAccountMode] = useState<"login" | "register">("login");
+  const [accountInput, setAccountInput] = useState("");
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountPasswordAgain, setAccountPasswordAgain] = useState("");
+  const [accountBusy, setAccountBusy] = useState(false);
+  const accountsAvailable = typeof document === "undefined" || document.querySelector<HTMLMetaElement>('meta[name="gre-account-sync"]')?.content !== "off";
   const [syncRetry, setSyncRetry] = useState(0);
   const [dictionary, setDictionary] = useState<DictionaryPayload | null>(null);
   const [dictionaryStatus, setDictionaryStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -538,8 +588,7 @@ export default function Home() {
   const [longSentencesStatus, setLongSentencesStatus] = useState<"loading" | "ready" | "error">("loading");
   const [longSentenceIndex, setLongSentenceIndex] = useState(0);
   const importRef = useRef<HTMLInputElement>(null);
-  const loadedSyncCode = useRef("");
-  const firstCloudUploadNoticeShown = useRef(false);
+  const requestSync = useRef<((delay: number, choice?: SyncChoice) => void) | null>(null);
   const translationCache = useRef(new Map<string, string>());
   const studySwipeStart = useRef<{
     pointerId: number;
@@ -556,7 +605,7 @@ export default function Home() {
   const sentenceLookupBlockedUntil = useRef(0);
 
   useEffect(() => {
-    fetch("/data/words.json")
+    fetch(staticAssetUrl("data/words.json"))
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
@@ -566,20 +615,15 @@ export default function Home() {
           throw new Error("词库校验失败");
         }
         setData(payload);
-        const base = defaultProgress(payload);
-        try {
-          const stored = localStorage.getItem(STORAGE_KEY);
-          setProgress(stored ? normalizeProgress(JSON.parse(stored), payload) : base);
-        } catch {
-          setProgress(base);
-          setNotice("本机旧进度无法读取，已使用新的本地进度。");
-        }
-        const storedSyncCode = localStorage.getItem(SYNC_CODE_STORAGE_KEY);
+        const account = storedSyncAccount();
+        activeProfile.current = account?.username ?? "";
+        setAccountName(activeProfile.current);
+        replaceProgress(readLocalProgress(payload, activeProfile.current), false);
+        const storedSyncCode = account?.code ?? localStorage.getItem(SYNC_CODE_STORAGE_KEY);
         if (storedSyncCode) {
           try {
             const normalized = validateSyncCode(storedSyncCode);
             setSyncCode(normalized);
-            setSyncCodeInput(normalized);
           } catch {
             localStorage.removeItem(SYNC_CODE_STORAGE_KEY);
           }
@@ -595,11 +639,11 @@ export default function Home() {
     };
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.addEventListener("controllerchange", reloadForWorkerUpdate);
-      navigator.serviceWorker.register("/sw.js")
+      navigator.serviceWorker.register(staticAssetUrl("sw.js"))
         .then((registration) => registration.update())
         .catch(() => undefined);
     }
-    fetch("/data/click_dictionary.json?v=6", { cache: "no-store" })
+    fetch(staticAssetUrl("data/click_dictionary.json?v=6"), { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
@@ -615,10 +659,21 @@ export default function Home() {
         navigator.serviceWorker.removeEventListener("controllerchange", reloadForWorkerUpdate);
       }
     };
+  }, [replaceProgress]);
+
+  useEffect(() => {
+    const updateAccount = (event: StorageEvent) => {
+      if (event.key === SYNC_ACCOUNT_STORAGE_KEY) {
+        requestSync.current = null;
+        window.location.reload();
+      }
+    };
+    window.addEventListener("storage", updateAccount);
+    return () => window.removeEventListener("storage", updateAccount);
   }, []);
 
   useEffect(() => {
-    fetch("/data/long_sentences.json?v=2", { cache: "no-store" })
+    fetch(staticAssetUrl("data/long_sentences.json?v=2"), { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
@@ -727,10 +782,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (hydrated && progress) localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
-  }, [hydrated, progress]);
-
-  useEffect(() => {
     if (screen !== "sentences" || lookup || grePreviewWordId || !longSentences) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -751,67 +802,123 @@ export default function Home() {
   }, [longSentenceIndex, screen]);
 
   useEffect(() => {
-    if (!hydrated || !data) return;
-    if (!syncCode) return;
-    if (loadedSyncCode.current === syncCode) return;
-    loadedSyncCode.current = syncCode;
-    firstCloudUploadNoticeShown.current = false;
-    let cancelled = false;
+    if (!hydrated || !data || !syncCode) return;
+    const baselineKey = profileStorageKey(SYNC_BASE_STORAGE_KEY, activeProfile.current);
+    let base: SyncBase | null = null;
+    try {
+      const stored = JSON.parse(localStorage.getItem(baselineKey) ?? "null");
+      if (typeof stored?.nonce === "string" && typeof stored.signature === "string") base = stored;
+    } catch {
+      // An unreadable baseline cannot authorize an upload.
+    }
+    let running = false;
+    let rerun = false;
+    let pendingChoice: SyncChoice | undefined;
+    let timer = 0;
+    let lastStatus: CloudState["status"] = "checking";
     setCloud({ status: "checking" });
-    readCodeProgress(syncCode)
-      .then(async (result) => {
-        if (cancelled) return;
-        const hasCloudProgress = Boolean(result.progress);
-        if (result.progress) {
-          const decoded = await decryptProgress(syncCode, result.progress);
-          if (cancelled) return;
-          const imported = normalizeProgress(decoded, data);
-          setProgress((local) => {
-            const localTime = Date.parse(local?.exported_at ?? "1970-01-01");
-            const cloudTime = Date.parse(result.updated_at ?? "1970-01-01");
-            return cloudTime >= localTime
-              ? { ...imported, notes: Object.hasOwn(decoded as object, "notes") ? imported.notes : local?.notes ?? {}, marks: Object.hasOwn(decoded as object, "marks") ? imported.marks : local?.marks ?? {}, recent_marks: Object.hasOwn(decoded as object, "recent_marks") ? imported.recent_marks : local?.recent_marks ?? [], exported_at: result.updated_at ?? undefined }
-              : local;
-          });
-        }
-        setCloud({ status: "ready", updatedAt: result.updated_at });
-        if (hasCloudProgress) {
-          firstCloudUploadNoticeShown.current = true;
-          setNotice("云端进度读取完成，已开启自动同步。");
-        } else {
-          setNotice("同步码已连接，云端暂无旧进度，正在保存本机进度。");
-        }
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        const message = errorMessage(error, "暂时无法读取云端进度。");
-        setCloud({ status: "error", message });
-        setNotice(`云同步读取失败：${message}`);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [hydrated, data, syncCode, syncRetry]);
 
-  useEffect(() => {
-    if (!hydrated || !progress || !syncCode || cloud.status !== "ready") return;
-    const timer = window.setTimeout(() => {
-      writeCodeProgress(syncCode, progress)
-        .then((result) => {
-          setCloud((current) => ({ ...current, updatedAt: result.updated_at }));
-          if (!firstCloudUploadNoticeShown.current) {
-            firstCloudUploadNoticeShown.current = true;
-            setNotice("云同步已开启，进度已保存。");
+    function publish(next: CloudState, message?: string) {
+      setCloud(next);
+      if (message && (next.status !== lastStatus || next.status === "ready")) setNotice(message);
+      lastStatus = next.status;
+    }
+
+    function remember(nonce: string, snapshot: Progress) {
+      const signature = progressSignature(snapshot);
+      if (nonce === base?.nonce && signature === base.signature) return;
+      base = { nonce, signature };
+      localStorage.setItem(baselineKey, JSON.stringify(base));
+    }
+
+    function schedule(delay: number, choice?: SyncChoice) {
+      if (choice) pendingChoice = choice;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (running) {
+          rerun = true;
+          return;
+        }
+        const selected = pendingChoice;
+        pendingChoice = undefined;
+        void synchronize(selected);
+      }, delay);
+    }
+
+    const isCurrent = () => requestSync.current === schedule;
+
+    async function synchronize(choice?: SyncChoice) {
+      if (!isCurrent()) return;
+      running = true;
+      try {
+        const result = await readCodeProgress(syncCode);
+        if (!isCurrent()) return;
+        const decoded = result.progress ? await decryptProgress(syncCode, result.progress) : null;
+        const local = currentProgress.current;
+        if (!isCurrent() || !local || !data) return;
+        const remote = result.progress && {
+          progress: normalizeProgress(decoded, data),
+          nonce: result.progress.nonce,
+        };
+        const nonce = remote?.nonce ?? null;
+        const decision = planProgressSync(local, remote, base);
+        const selected = decision === "conflict" && choice?.nonce === nonce ? choice.source : null;
+
+        if (decision === "upload" || selected === "local") {
+          if (!result.conditional_write) throw new Error("云同步服务需要更新，请稍后重试。");
+          const saved = await writeCodeProgress(syncCode, local, nonce, () => !isCurrent());
+          if (!isCurrent()) return;
+          if (!saved) {
+            schedule(1200);
+            return;
           }
-        })
-        .catch((error) => {
-          const message = errorMessage(error, "暂时无法上传云端进度。");
-          setCloud((current) => ({ ...current, status: "error", message }));
-          setNotice(`云同步上传失败：${message}`);
-        });
-    }, 1200);
-    return () => window.clearTimeout(timer);
-  }, [hydrated, progress, syncCode, cloud.status]);
+          remember(saved.nonce, local);
+          publish({ status: "ready", updatedAt: saved.updatedAt },
+            lastStatus === "ready" ? undefined : "本机进度已同步到云端。");
+        } else if (remote && (decision === "download" || selected === "cloud")) {
+          const imported = normalizeProgress(decoded, data, local.notes, local.marks, local.recent_marks);
+          replaceProgress(imported);
+          remember(remote.nonce, imported);
+          publish({ status: "ready", updatedAt: result.updated_at }, "已读取云端最新进度。");
+        } else if (decision === "conflict") {
+          const message = remote ? "本机与云端都有不同的进度。请在设置里选择保留哪一份。" : "云端进度已找不到，本机进度仍保留。";
+          publish({ status: "conflict", nonce, message }, message);
+        } else {
+          if (remote) remember(remote.nonce, local);
+          publish({ status: "ready", updatedAt: result.updated_at });
+        }
+      } catch (error) {
+        if (isCurrent()) {
+          const message = errorMessage(error, "暂时无法同步云端进度。");
+          publish({ status: "error", message }, `云同步暂时失败：${message}`);
+        }
+      } finally {
+        running = false;
+        if (isCurrent() && rerun) {
+          rerun = false;
+          schedule(0);
+        }
+      }
+    }
+
+    const syncWhenVisible = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) schedule(0);
+    };
+    requestSync.current = schedule;
+    schedule(0);
+    const poll = window.setInterval(syncWhenVisible, SYNC_POLL_MS);
+    document.addEventListener("visibilitychange", syncWhenVisible);
+    window.addEventListener("pageshow", syncWhenVisible);
+    window.addEventListener("online", syncWhenVisible);
+    return () => {
+      requestSync.current = null;
+      window.clearTimeout(timer);
+      window.clearInterval(poll);
+      document.removeEventListener("visibilitychange", syncWhenVisible);
+      window.removeEventListener("pageshow", syncWhenVisible);
+      window.removeEventListener("online", syncWhenVisible);
+    };
+  }, [hydrated, data, syncCode, syncRetry, replaceProgress]);
 
   const wordMap = useMemo(() => new Map(data?.words.map((word) => [word.id, word]) ?? []), [data]);
   const wordByHeadword = useMemo(
@@ -921,11 +1028,10 @@ export default function Home() {
   }, [activeWord, data]);
 
   function updateProgress(mutator: (current: Progress) => Progress) {
-    setProgress((current) =>
-      current
-        ? { ...mutator(current), exported_at: new Date().toISOString() }
-        : current,
-    );
+    const current = currentProgress.current;
+    if (!current) return;
+    replaceProgress({ ...mutator(current), exported_at: new Date().toISOString() });
+    if (navigator.onLine) requestSync.current?.(1200);
   }
 
   function setSetting(key: string, value: string) {
@@ -1390,10 +1496,13 @@ export default function Home() {
   function importFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file || !data) return;
+    const username = activeProfile.current;
     file.text()
-      .then((text) => normalizeProgress(JSON.parse(text), data, progress?.notes, progress?.marks, progress?.recent_marks))
-      .then((imported) => {
-        setProgress(imported);
+      .then((text) => {
+        if (username !== activeProfile.current) return;
+        const local = currentProgress.current;
+        replaceProgress(normalizeProgress(JSON.parse(text), data, local?.notes, local?.marks, local?.recent_marks));
+        if (navigator.onLine) requestSync.current?.(1200);
         setNotice("学习进度导入成功。");
         setScreen("home");
       })
@@ -1406,9 +1515,9 @@ export default function Home() {
   function activateSyncCode(rawCode: string) {
     try {
       const normalized = validateSyncCode(rawCode);
+      if (normalized !== syncCode) localStorage.removeItem(SYNC_BASE_STORAGE_KEY);
       localStorage.setItem(SYNC_CODE_STORAGE_KEY, normalized);
-      loadedSyncCode.current = "";
-      firstCloudUploadNoticeShown.current = false;
+      requestSync.current = null;
       setSyncCode(normalized);
       setSyncCodeInput(normalized);
       setCloud({ status: "checking" });
@@ -1427,13 +1536,74 @@ export default function Home() {
   }
 
   function disconnectSyncCode() {
+    requestSync.current = null;
     localStorage.removeItem(SYNC_CODE_STORAGE_KEY);
-    loadedSyncCode.current = "";
-    firstCloudUploadNoticeShown.current = false;
+    localStorage.removeItem(SYNC_BASE_STORAGE_KEY);
     setSyncCode("");
     setSyncCodeInput("");
     setCloud({ status: "disconnected" });
     setNotice("已断开云同步，本机进度仍完整保留。");
+  }
+
+  async function submitAccount(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!data || accountBusy) return;
+    if (accountMode === "register" && accountPassword !== accountPasswordAgain) {
+      setNotice("两次输入的密码不一致。");
+      return;
+    }
+    setAccountBusy(true);
+    const existingCode = syncCodeInput.trim() || syncCode;
+    try {
+      const account = await connectSyncAccount(
+        (path, init) => fetchWithTimeout(apiUrl(path), init, "连接超时，请稍后再试。"),
+        accountMode, accountInput, accountPassword, existingCode,
+      );
+      const nextKey = profileStorageKey(STORAGE_KEY, account.username);
+      const canMoveLocal = account.code === syncCode || (accountMode === "register" && !existingCode);
+      const local = currentProgress.current;
+      const moveLocal = canMoveLocal && local && !localStorage.getItem(nextKey);
+      if (moveLocal) {
+        localStorage.setItem(nextKey, JSON.stringify(local));
+        const base = localStorage.getItem(SYNC_BASE_STORAGE_KEY);
+        if (base && account.code === syncCode) localStorage.setItem(profileStorageKey(SYNC_BASE_STORAGE_KEY, account.username), base);
+      }
+      localStorage.setItem(SYNC_ACCOUNT_STORAGE_KEY, JSON.stringify(account));
+      if (moveLocal) {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(SYNC_BASE_STORAGE_KEY);
+        localStorage.removeItem(SYNC_CODE_STORAGE_KEY);
+      }
+      requestSync.current = null;
+      activeProfile.current = account.username;
+      setAccountName(account.username);
+      replaceProgress(readLocalProgress(data, account.username), false);
+      setSyncCode(account.code);
+      setSyncCodeInput("");
+      setCloud({ status: "checking" });
+      setSyncRetry((current) => current + 1);
+      setNotice("已登录，正在同步学习进度。");
+    } catch (error) {
+      setNotice(errorMessage(error, "暂时无法登录。"));
+    } finally {
+      setAccountPassword("");
+      setAccountPasswordAgain("");
+      setAccountBusy(false);
+    }
+  }
+
+  function signOutAccount() {
+    if (!data) return;
+    requestSync.current = null;
+    localStorage.removeItem(SYNC_ACCOUNT_STORAGE_KEY);
+    activeProfile.current = "";
+    setAccountName("");
+    replaceProgress(readLocalProgress(data, ""), false);
+    const guestCode = localStorage.getItem(SYNC_CODE_STORAGE_KEY) ?? "";
+    setSyncCode(guestCode);
+    setCloud({ status: guestCode ? "checking" : "disconnected" });
+    setSyncRetry((current) => current + 1);
+    setNotice("已退出账号。离线进度将在再次登录时恢复。");
   }
 
   if (!data || !progress) {
@@ -1478,31 +1648,32 @@ export default function Home() {
       </header>
 
       {notice && <button className="notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
-      <button className="recent-gate" aria-label={recentMode ? "退出最近标记" : "打开最近标记"} onClick={() => recentMode ? exitRecent() : openRecent()}>{recentMode ? "退出最近标记 ↩" : `最近标记 ${progress.recent_marks.length}/30`}</button>
       {screen === "study" && recentMode && !activeWord && <section className="page"><h1>最近标记</h1><p>还没有添加过标记的单词。给任意 GRE 单词点击 +1 后，就会出现在这里。</p><button onClick={() => exitRecent()}>返回原位置</button></section>}
 
       {screen === "home" && (
         <section className="page home-page">
-          <div className="hero-copy">
-            <p className="eyebrow">CONTINUE YOUR ROUTE</p>
-            <h1>按自己的节奏，<br />把难词变成熟词。</h1>
-            <p>保持原书 List 顺序，标注真正需要反复见面的词。</p>
-          </div>
+          <div className="home-intro">
+            <div className="hero-copy">
+              <p className="eyebrow">CONTINUE YOUR ROUTE</p>
+              <h1>按自己的节奏，<br />把难词变成熟词。</h1>
+              <p>保持原书 List 顺序，标注真正需要反复见面的词。</p>
+            </div>
 
-          <button className="sentence-entry" onClick={openLongSentences}>
-            <span className="sentence-entry-icon">Aa</span>
-            <span>
-              <small>LONG SENTENCE READING</small>
-              <strong>杨鹏 GRE 长难句</strong>
-              <em>{longSentences ? `${longSentences.sentences.length} 句 · 一页一句 · 每词可查` : longSentencesStatus === "error" ? "内容载入失败，请刷新重试" : "正在载入内容…"}</em>
-            </span>
-            <b>进入 →</b>
-          </button>
+            <button className="sentence-entry" onClick={openLongSentences}>
+              <span className="sentence-entry-icon">Aa</span>
+              <span>
+                <small>LONG SENTENCE READING</small>
+                <strong>杨鹏 GRE 长难句</strong>
+                <em>{longSentences ? `${longSentences.sentences.length} 句 · 一页一句 · 每词可查` : longSentencesStatus === "error" ? "内容载入失败，请刷新重试" : "正在载入内容…"}</em>
+              </span>
+              <b>进入 →</b>
+            </button>
 
-          <div className="metric-row">
-            <div className="metric"><strong>{data.record_count.toLocaleString()}</strong><span>词条</span></div>
-            <div className="metric"><strong>{Object.keys(progress.stars).length}</strong><span>已标星</span></div>
-            <div className="metric"><strong>{Object.values(progress.lists).reduce((sum, item) => sum + item.completed_count, 0)}</strong><span>完成轮次</span></div>
+            <div className="metric-row">
+              <div className="metric"><strong>{data.record_count.toLocaleString()}</strong><span>词条</span></div>
+              <div className="metric"><strong>{Object.keys(progress.stars).length}</strong><span>已标星</span></div>
+              <div className="metric"><strong>{Object.values(progress.lists).reduce((sum, item) => sum + item.completed_count, 0)}</strong><span>完成轮次</span></div>
+            </div>
           </div>
 
           <section className="study-card">
@@ -1583,12 +1754,14 @@ export default function Home() {
             onPointerUp={finishSentenceSwipe}
             onPointerCancel={() => { sentenceSwipeStart.current = null; }}
           >
-            <div className="sentence-flags">
-              <span>LONG SENTENCE</span>
-              <em>原书第 {activeLongSentence.source_number} 句</em>
+            <div className="sentence-reading">
+              <div className="sentence-flags">
+                <span>LONG SENTENCE</span>
+                <em>原书第 {activeLongSentence.source_number} 句</em>
+              </div>
+              <p className="sentence-source">PDF 第 {activeLongSentence.source_pages.join("、")} 页</p>
+              <p className="sentence-text"><LookupText text={activeLongSentence.text} onLookup={openLookup} /></p>
             </div>
-            <p className="sentence-source">PDF 第 {activeLongSentence.source_pages.join("、")} 页</p>
-            <p className="sentence-text"><LookupText text={activeLongSentence.text} onLookup={openLookup} /></p>
             <section className="sentence-notes" aria-label="原书完整注释">
               <div className="sentence-notes-heading">
                 <span>原书完整注释</span>
@@ -1623,24 +1796,25 @@ export default function Home() {
           <div className="progress-track"><span style={{ width: `${Math.max(3, ((activeQueueIndex + 1) / Math.max(studyQueue.length, 1)) * 100)}%` }} /></div>
           <p className="swipe-hint">← 左右滑动切换单词 →</p>
 
-          <div className="study-mode-switcher">
-            <span>切换模式</span>
-            <div role="group" aria-label="学习模式">
-              {MODES.map((item) => (
-                <button
-                  className={mode === item.key ? "active" : ""}
-                  key={item.key}
-                  onClick={() => selectMode(item.key)}
-                  aria-pressed={mode === item.key}
-                >
-                  {item.label}
-                </button>
-              ))}
+          <div className="study-tools">
+            <div className="study-mode-switcher">
+              <span>切换模式</span>
+              <div role="group" aria-label="学习模式">
+                {MODES.map((item) => (
+                  <button
+                    className={mode === item.key ? "active" : ""}
+                    key={item.key}
+                    onClick={() => selectMode(item.key)}
+                    aria-pressed={mode === item.key}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-
-          <div className="quick-jumps" aria-label="快速翻词">
-            {[-20, -10, 10, 20].map((step) => <button key={step} disabled={step < 0 ? activeQueueIndex <= 0 : activeQueueIndex >= studyQueue.length - 1} onClick={() => move(step)}>{step < 0 ? `后退 ${-step} 词` : `前进 ${step} 词`}</button>)}
+            <div className="quick-jumps" aria-label="快速翻词">
+              {[-20, -10, 10, 20].map((step) => <button key={step} disabled={step < 0 ? activeQueueIndex <= 0 : activeQueueIndex >= studyQueue.length - 1} onClick={() => move(step)}>{step < 0 ? `后退 ${-step} 词` : `前进 ${step} 词`}</button>)}
+            </div>
           </div>
           {marksDesc && !recentMode && <p className="list-hint">累计标记倒序 · 本轮顺序固定，重新进入时按最新次数排序</p>}
           {recentMode && <p className="list-hint">最近添加的 30 个不同单词 · 标记次数立即保存，本轮顺序固定，再次打开时更新排序 · 退出后回到原位置</p>}
@@ -1797,32 +1971,62 @@ export default function Home() {
             <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={importFile} />
           </div>
           <div className="settings-card transfer-card cloud-card">
-            <span className="transfer-badge">NO ACCOUNT</span>
-            <h2>免账号同步码</h2>
+            <span className="transfer-badge">CLOUD</span>
+            <h2>{accountsAvailable ? "账号同步" : "免账号同步码"}</h2>
+            {accountsAvailable && !accountName && (
+              <form className="sync-code-connect" onSubmit={submitAccount}>
+                <p>{accountMode === "login" ? "登录后，这台设备会自动同步学习进度。" : "注册后可以在其他设备用同一用户名和密码同步。"}</p>
+                <input aria-label="用户名" placeholder="用户名" autoComplete="username" autoCapitalize="none" maxLength={32} required value={accountInput} onChange={(event) => setAccountInput(event.target.value)} />
+                <input aria-label="密码" placeholder="密码" type="password" autoComplete={accountMode === "register" ? "new-password" : "current-password"} required value={accountPassword} onChange={(event) => setAccountPassword(event.target.value)} />
+                {accountMode === "register" && <input aria-label="确认密码" placeholder="确认密码" type="password" autoComplete="new-password" required value={accountPasswordAgain} onChange={(event) => setAccountPasswordAgain(event.target.value)} />}
+                {accountMode === "register" && (syncCode
+                  ? <p>当前同步码会绑定到这个账号。</p>
+                  : <input aria-label="绑定已有同步码（选填）" placeholder="绑定已有同步码（选填）" type="password" autoComplete="off" value={syncCodeInput} onChange={(event) => setSyncCodeInput(event.target.value)} />)}
+                <button className="primary" disabled={accountBusy}>{accountBusy ? "正在连接…" : accountMode === "login" ? "登录并同步" : "注册并同步"}</button>
+                <button className="secondary" type="button" disabled={accountBusy} onClick={() => { setAccountPassword(""); setAccountPasswordAgain(""); setAccountMode(accountMode === "login" ? "register" : "login"); }}>
+                  {accountMode === "login" ? "注册账号" : "已有账号，去登录"}
+                </button>
+              </form>
+            )}
+            {accountName && <><p>已登录 {accountName}</p><button className="signout" onClick={signOutAccount}>退出账号</button></>}
             {cloud.status === "checking" && <p>正在安全连接并读取加密进度…</p>}
-            {cloud.status === "disconnected" && <>
-              <p>无需登录。新建一组同步码，或粘贴其他设备上的同步码，就能自动同步学习进度。</p>
-              <button className="primary" onClick={makeSyncCode}>创建新同步码</button>
+            {cloud.status === "disconnected" && <details>
+              <summary>使用同步码</summary>
+              <button className="secondary" disabled={accountBusy} onClick={makeSyncCode}>创建新同步码</button>
               <div className="sync-code-connect">
-                <input aria-label="已有同步码" value={syncCodeInput} onChange={(event) => setSyncCodeInput(event.target.value)} placeholder="粘贴 GRE1- 开头的同步码" />
-                <button className="secondary" onClick={() => activateSyncCode(syncCodeInput)}>连接已有同步码</button>
+                <input aria-label="已有同步码" type="password" autoComplete="off" value={syncCodeInput} onChange={(event) => setSyncCodeInput(event.target.value)} placeholder="粘贴 GRE1- 开头的同步码" />
+                <button className="secondary" disabled={accountBusy} onClick={() => activateSyncCode(syncCodeInput)}>连接已有同步码</button>
               </div>
-            </>}
+            </details>}
             {cloud.status === "ready" && <>
-              <p>此设备的更改会自动加密后同步。把下面这组码粘贴到 Windows 或另一台 iPhone 即可连接。</p>
+              <p>回到网页时会读取云端更新，本机的学习更改会自动加密同步。</p>
               <div className="cloud-status">
-                <span>● 免账号自动同步已开启</span>
-                <small>{cloud.updatedAt ? `最近同步 ${new Date(cloud.updatedAt).toLocaleString("zh-CN")}` : "等待首次同步"}</small>
+                <span>● 自动同步已开启</span>
+                <small>{cloud.updatedAt ? `云端更新于 ${new Date(cloud.updatedAt).toLocaleString("zh-CN")}` : "云端暂无学习进度"}</small>
               </div>
-              <div className="token-box"><code>{syncCode}</code><button onClick={() => { navigator.clipboard?.writeText(syncCode); setNotice("同步码已复制。"); }}>复制</button></div>
-              <button className="signout" onClick={disconnectSyncCode}>断开这组同步码</button>
+              {!accountName && <button className="signout" disabled={accountBusy} onClick={disconnectSyncCode}>断开这组同步码</button>}
+            </>}
+            {cloud.status === "conflict" && <>
+              <p>{cloud.message}</p>
+              <p>自动上传已暂停。可先导出本机进度备份，再选择要保留的版本。</p>
+              {cloud.nonce && <button className="secondary" onClick={() => requestSync.current?.(0, { source: "cloud", nonce: cloud.nonce ?? null })}>使用云端进度</button>}
+              <button className="secondary" onClick={() => requestSync.current?.(0, { source: "local", nonce: cloud.nonce ?? null })}>上传本机进度</button>
+              {!accountName && <button className="signout" disabled={accountBusy} onClick={disconnectSyncCode}>断开这组同步码</button>}
             </>}
             {cloud.status === "error" && <>
-              <p>暂时无法读取云端加密进度，本地学习不受影响。请检查网络或重新输入同步码。</p>
+              <p>暂时无法同步云端加密进度，本地学习不受影响。请检查网络或重新连接。</p>
               {cloud.message && <p className="sync-error-detail">{cloud.message}</p>}
-              <button className="secondary" onClick={() => { loadedSyncCode.current = ""; setCloud({ status: "checking" }); setSyncRetry((current) => current + 1); }}>重新连接</button>
-              <button className="signout" onClick={disconnectSyncCode}>改用其他同步码</button>
+              <button className="secondary" onClick={() => { setCloud({ status: "checking" }); setSyncRetry((current) => current + 1); }}>重新连接</button>
+              {!accountName && <button className="signout" disabled={accountBusy} onClick={disconnectSyncCode}>改用其他同步码</button>}
             </>}
+            {syncCode && <details>
+              <summary>备份同步码</summary>
+              <p>可以用同步码恢复进度，请将它保存到安全的地方。</p>
+              <button className="secondary" onClick={async () => {
+                try { await navigator.clipboard.writeText(syncCode); setNotice("同步码已复制。"); }
+                catch { setNotice("无法复制同步码，请检查浏览器的剪贴板权限。"); }
+              }}>复制同步码</button>
+            </details>}
           </div>
           <div className="privacy-note"><strong>隐私说明</strong><p>同步内容会在本机使用 AES-256-GCM 加密后再上传，服务器不保存明文，也不需要 GPT 或其他账号。同步码就是解密钥匙：请勿公开，遗失后无法找回。清除 Safari 网站数据前仍建议导出备份。</p></div>
         </section>
@@ -1912,7 +2116,7 @@ export default function Home() {
             )}
             <p className="lookup-privacy">
               点词释义来自本地；只有点击联网翻译时，当前文字才会发送给第三方 MyMemory。本站后端限流时，浏览器会直接连接该服务重试。
-              <br /><a href="/ECDICT-LICENSE.txt" target="_blank" rel="noreferrer">ECDICT 许可</a> · <a href="/COW-LICENSE.txt" target="_blank" rel="noreferrer">Chinese Open Wordnet 0.9 许可</a> · <a href="/WORDNET-LICENSE.txt" target="_blank" rel="noreferrer">WordNet 3.0 许可</a>
+              <br /><a href={staticAssetUrl("ECDICT-LICENSE.txt")} target="_blank" rel="noreferrer">ECDICT 许可</a> · <a href={staticAssetUrl("COW-LICENSE.txt")} target="_blank" rel="noreferrer">Chinese Open Wordnet 0.9 许可</a> · <a href={staticAssetUrl("WORDNET-LICENSE.txt")} target="_blank" rel="noreferrer">WordNet 3.0 许可</a>
             </p>
             <div className="lookup-actions">
               {lookup.greWordId && <button onClick={() => { setGrePreviewWordId(lookup.greWordId!); setLookup(null); }}>打开 GRE 词条</button>}
@@ -1953,6 +2157,7 @@ export default function Home() {
         <button className={screen === "home" || screen === "study" || screen === "sentences" ? "active" : ""} onClick={() => navigate("home")}><span>⌂</span>学习</button>
         <button className={screen === "words" ? "active" : ""} onClick={() => navigate("words")}><span>≡</span>词表</button>
         <button className={screen === "settings" ? "active" : ""} onClick={() => navigate("settings")}><span>⚙</span>设置</button>
+        <button className="recent-gate" aria-label={recentMode ? "退出最近标记" : "打开最近标记"} onClick={() => recentMode ? exitRecent() : openRecent()}>{recentMode ? "退出最近标记 ↩" : `最近标记 ${progress.recent_marks.length}/30`}</button>
       </nav>
     </main>
   );

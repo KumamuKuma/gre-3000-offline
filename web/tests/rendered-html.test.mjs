@@ -224,7 +224,7 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.ok(studyScreen.indexOf('className="study-actions"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="quiz-retry study-retry"') < studyScreen.indexOf('className="word-card"'));
   assert.ok(studyScreen.indexOf('className="study-jumps"') > studyScreen.indexOf('className="word-card"'));
-  assert.match(worker, /gre-3000-pwa-v25/);
+  assert.match(worker, /gre-3000-pwa-v\d+/);
   assert.match(worker, /data\/words\.json/);
   assert.match(worker, /data\/click_dictionary\.json/);
   assert.match(worker, /pathname\.startsWith\("\/api\/"\)/);
@@ -244,12 +244,12 @@ test("contains all study modes, offline support, and progress transfer", async (
   assert.equal(dictionarySenses.length, 33_433);
   assert.equal(dictionarySenses.filter((sense) => sense.translation && sense.definition).length, 14_214);
   assert.match(page, /click_dictionary\.json\?v=6/);
-  assert.match(page, /click_dictionary\.json\?v=6", \{ cache: "no-store" \}/);
+  assert.match(page, /staticAssetUrl\("data\/click_dictionary\.json\?v=6"\), \{ cache: "no-store" \}/);
   assert.match(page, /addEventListener\("controllerchange", reloadForWorkerUpdate\)/);
   assert.match(page, /registration\.update\(\)/);
   assert.match(page, /window\.location\.reload\(\)/);
   assert.match(worker, /click_dictionary\.json\?v=6/);
-  assert.match(worker, /url\.pathname === "\/data\/click_dictionary\.json"/);
+  assert.match(worker, /pathname === "\/data\/click_dictionary\.json"/);
   assert.match(worker, /fetch\(event\.request\)[\s\S]*caches\.match\(event\.request\)/);
   assert.match(page, /payload\.version !== 2/);
   assert.ok(dictionarySenses.every((sense) => (
@@ -329,7 +329,7 @@ test("long sentence reader shows every ordered note with lookup and safe paging"
   const sentenceData = JSON.parse(sentenceContent);
 
   assert.match(page, /"sentences"/);
-  assert.match(page, /fetch\("\/data\/long_sentences\.json\?v=2", \{ cache: "no-store" \}\)/);
+  assert.match(page, /fetch\(staticAssetUrl\("data\/long_sentences\.json\?v=2"\), \{ cache: "no-store" \}\)/);
   assert.match(page, /payload\.schema !== "gre-long-sentences"/);
   assert.match(page, /payload\.version !== 2/);
   assert.match(page, /payload\.count !== payload\.sentences\?\.length/);
@@ -362,9 +362,9 @@ test("long sentence reader shows every ordered note with lookup and safe paging"
   assert.match(styles, /\.sentence-notes-list \{[^}]*overflow-y:\s*auto/);
   assert.match(styles, /\.sentence-note-text \{[^}]*white-space:\s*pre-wrap/);
   assert.match(styles, /\.sentence-actions/);
-  assert.match(worker, /gre-3000-pwa-v25/);
+  assert.match(worker, /gre-3000-pwa-v\d+/);
   assert.match(worker, /"\/data\/long_sentences\.json\?v=2"/);
-  assert.match(worker, /url\.pathname === "\/data\/long_sentences\.json"/);
+  assert.match(worker, /pathname === "\/data\/long_sentences\.json"/);
   assert.equal(worker.match(/\/data\/long_sentences\.json/g)?.length, 2);
   assert.equal(sentenceData.schema, "gre-long-sentences");
   assert.equal(sentenceData.version, 2);

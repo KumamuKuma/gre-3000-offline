@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { syncSpaces } from "../../../db/schema";
 
@@ -38,11 +38,14 @@ export async function GET(request: Request) {
   if (!credentials) return Response.json({ error: "invalid_sync_code" }, { status: 401 });
   const rows = await getDb().select().from(syncSpaces).where(eq(syncSpaces.spaceId, credentials.spaceId)).limit(1);
   const row = rows[0];
-  if (!row) return Response.json({ progress: null, updated_at: null });
+  const protocol = new URL(request.url).searchParams.get("protocol");
+  const capabilities = protocol === "2" ? { conditional_write: true } : {};
+  if (!row) return Response.json({ progress: null, updated_at: null, ...capabilities });
   if (!authorized(row.authHash, credentials.authHash)) return Response.json({ error: "invalid_sync_code" }, { status: 401 });
   return Response.json({
     progress: { version: 1, algorithm: "AES-256-GCM", ciphertext: row.ciphertext, nonce: row.nonce },
     updated_at: row.updatedAt,
+    ...capabilities,
   });
 }
 
@@ -50,23 +53,39 @@ export async function PUT(request: Request) {
   const credentials = credentialsFromRequest(request);
   if (!credentials) return Response.json({ error: "invalid_sync_code" }, { status: 401 });
   try {
-    const encrypted = validateEncryptedPayload(await request.json());
+    const payload = await request.json();
+    const encrypted = validateEncryptedPayload(payload);
+    const expectedNonce: unknown = payload.expected_nonce;
+    if (expectedNonce !== undefined && expectedNonce !== null && (
+      typeof expectedNonce !== "string" || !/^[A-Za-z0-9_-]{16}$/.test(expectedNonce)
+    )) return Response.json({ error: "invalid expected nonce" }, { status: 400 });
     const db = getDb();
     const existing = await db.select({ authHash: syncSpaces.authHash }).from(syncSpaces).where(eq(syncSpaces.spaceId, credentials.spaceId)).limit(1);
     if (existing[0] && !authorized(existing[0].authHash, credentials.authHash)) {
       return Response.json({ error: "invalid_sync_code" }, { status: 401 });
     }
     const updatedAt = new Date().toISOString();
-    await db.insert(syncSpaces).values({
+    const update = { ...encrypted, updatedAt };
+    const insert = db.insert(syncSpaces).values({
       spaceId: credentials.spaceId,
       authHash: credentials.authHash,
-      ciphertext: encrypted.ciphertext,
-      nonce: encrypted.nonce,
-      updatedAt,
-    }).onConflictDoUpdate({
-      target: syncSpaces.spaceId,
-      set: { ciphertext: encrypted.ciphertext, nonce: encrypted.nonce, updatedAt },
+      ...update,
     });
+    const matchingAuth = eq(syncSpaces.authHash, credentials.authHash);
+    const saved = typeof expectedNonce === "string"
+      ? await db.update(syncSpaces).set(update).where(and(
+        eq(syncSpaces.spaceId, credentials.spaceId), matchingAuth, eq(syncSpaces.nonce, expectedNonce),
+      )).returning({ spaceId: syncSpaces.spaceId })
+      : expectedNonce === null
+        ? await insert.onConflictDoNothing().returning({ spaceId: syncSpaces.spaceId })
+        : await insert.onConflictDoUpdate({
+          target: syncSpaces.spaceId,
+          set: update,
+          setWhere: matchingAuth,
+        }).returning({ spaceId: syncSpaces.spaceId });
+    if (!saved.length) return expectedNonce === undefined
+      ? Response.json({ error: "invalid_sync_code" }, { status: 401 })
+      : Response.json({ error: "progress_changed" }, { status: 409 });
     return Response.json({ updated_at: updatedAt });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "invalid progress" }, { status: 400 });

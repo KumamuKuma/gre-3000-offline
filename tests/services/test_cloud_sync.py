@@ -21,9 +21,9 @@ class FakeResponse:
         return json.dumps(self.payload).encode()
 
 
-def test_default_endpoint_uses_the_independent_cloudbase_site():
+def test_default_endpoint_uses_the_same_sync_api_as_github_pages():
     assert cloud_sync.DEFAULT_CLOUD_ENDPOINT == (
-        "https://kuma-d9gnt6m3d6b8050f8-1472025206.ap-shanghai.app.tcloudbase.com"
+        "https://gre-sync-kumamukuma.pages.dev"
     )
 
 

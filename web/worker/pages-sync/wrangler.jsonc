@@ -1,0 +1,12 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "gre-sync-kumamukuma",
+  "pages_build_output_dir": "site",
+  "compatibility_date": "2026-05-22",
+  "services": [
+    {
+      "binding": "SYNC",
+      "service": "gre-3000-sync"
+    }
+  ]
+}

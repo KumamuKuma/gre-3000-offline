@@ -24,3 +24,11 @@ export const syncSpaces = sqliteTable("sync_spaces", {
   nonce: text("nonce").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const syncAccounts = sqliteTable("sync_accounts", {
+  username: text("username").primaryKey(),
+  salt: text("salt").notNull(),
+  authHash: text("auth_hash").notNull(),
+  wrappedCode: text("wrapped_code").notNull(),
+  nonce: text("nonce").notNull(),
+});

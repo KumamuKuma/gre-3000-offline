@@ -9,6 +9,7 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "build:cloudbase": "vite build --config vite.cloudbase.config.ts",
+    "build:github-pages": "vite build --config vite.cloudbase.config.ts --mode github-pages",
     "start": "vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern cloudbase-dist",

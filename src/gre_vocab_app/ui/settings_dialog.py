@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -36,6 +37,8 @@ class SettingsDialog(QDialog):
     cloudCreateCodeRequested = Signal()
     cloudUploadRequested = Signal()
     cloudDownloadRequested = Signal()
+    cloudAccountRequested = Signal(str, str, bool)
+    cloudAccountLogoutRequested = Signal()
     resetPositionRequested = Signal()
     clearAllRequested = Signal()
 
@@ -154,23 +157,55 @@ class SettingsDialog(QDialog):
         cloud_layout = QVBoxLayout(cloud_panel)
         cloud_layout.setContentsMargins(2, 0, 8, 0)
         cloud_layout.setSpacing(16)
-        self._section(cloud_layout, "同步码")
-        cloud_note = QLabel("无需登录。在 Windows 和 iPhone 网页版使用同一组同步码即可同步。进度先在设备端加密；请妥善保存同步码，遗失后无法恢复。")
-        cloud_note.setObjectName("settingsHint")
-        cloud_note.setWordWrap(True)
-        cloud_layout.addWidget(cloud_note)
+        self._section(cloud_layout, "账号同步")
+        self.cloud_account_status = QLabel("用网页端的用户名和密码登录即可自动同步。")
+        self.cloud_account_status.setWordWrap(True)
+        cloud_layout.addWidget(self.cloud_account_status)
+        self.cloud_account_form = QWidget()
+        account_form = QVBoxLayout(self.cloud_account_form)
+        account_form.setContentsMargins(0, 0, 0, 0)
+        self.cloud_username = QLineEdit()
+        self.cloud_username.setPlaceholderText("用户名")
+        self.cloud_username.setAccessibleName("同步账号用户名")
+        self.cloud_password = QLineEdit()
+        self.cloud_password.setEchoMode(QLineEdit.Password)
+        self.cloud_password.setPlaceholderText("密码")
+        self.cloud_password.setAccessibleName("同步账号密码")
+        account_form.addWidget(self.cloud_username)
+        account_form.addWidget(self.cloud_password)
+        account_buttons = QHBoxLayout()
+        self.cloud_login_button = QPushButton("登录并同步")
+        self.cloud_register_button = QPushButton("注册并同步")
+        account_buttons.addWidget(self.cloud_login_button)
+        account_buttons.addWidget(self.cloud_register_button)
+        account_form.addLayout(account_buttons)
+        cloud_layout.addWidget(self.cloud_account_form)
+        self.cloud_logout_button = QPushButton("退出账号")
+        cloud_layout.addWidget(self.cloud_logout_button)
+        self.cloud_logout_button.hide()
+        self.cloud_legacy_toggle = QPushButton("使用同步码")
+        self.cloud_legacy_toggle.setCheckable(True)
+        cloud_layout.addWidget(self.cloud_legacy_toggle)
+        self.cloud_legacy = QWidget()
+        legacy_layout = QVBoxLayout(self.cloud_legacy)
+        legacy_layout.setContentsMargins(0, 0, 0, 0)
         self.cloud_token_input = QLineEdit()
         self.cloud_token_input.setAccessibleName("云端同步码")
         self.cloud_token_input.setPlaceholderText("GRE1- 开头的同步码")
         self.cloud_token_input.setEchoMode(QLineEdit.Password)
-        cloud_layout.addWidget(self.cloud_token_input)
+        legacy_layout.addWidget(self.cloud_token_input)
         self.cloud_create_button = QPushButton("生成新同步码")
-        self.cloud_copy_button = QPushButton("显示并复制")
-        self.cloud_copy_button.setAccessibleName("显示并复制同步码")
+        self.cloud_copy_button = QPushButton("复制同步码")
+        self.cloud_copy_button.setAccessibleName("复制同步码")
         cloud_code_buttons = QHBoxLayout()
         cloud_code_buttons.addWidget(self.cloud_create_button)
         cloud_code_buttons.addWidget(self.cloud_copy_button)
-        cloud_layout.addLayout(cloud_code_buttons)
+        legacy_layout.addLayout(cloud_code_buttons)
+        cloud_layout.addWidget(self.cloud_legacy)
+        self.cloud_legacy.hide()
+        self.cloud_backup_button = QPushButton("复制备用同步码")
+        cloud_layout.addWidget(self.cloud_backup_button)
+        self.cloud_backup_button.hide()
         self._section(cloud_layout, "进度同步")
         self.cloud_upload_button = QPushButton("上传本机进度")
         self.cloud_upload_button.setObjectName("primaryButton")
@@ -207,6 +242,12 @@ class SettingsDialog(QDialog):
         self.cloud_copy_button.clicked.connect(self._copy_cloud_code)
         self.cloud_upload_button.clicked.connect(self.cloudUploadRequested.emit)
         self.cloud_download_button.clicked.connect(self.cloudDownloadRequested.emit)
+        self.cloud_legacy_toggle.toggled.connect(self.cloud_legacy.setVisible)
+        self.cloud_login_button.clicked.connect(lambda: self._submit_cloud_account(False))
+        self.cloud_register_button.clicked.connect(lambda: self._submit_cloud_account(True))
+        self.cloud_password.returnPressed.connect(lambda: self._submit_cloud_account(False))
+        self.cloud_logout_button.clicked.connect(self.cloudAccountLogoutRequested.emit)
+        self.cloud_backup_button.clicked.connect(self._copy_cloud_code)
         self.reset_button.clicked.connect(self.resetPositionRequested.emit)
         self.clear_button.clicked.connect(self._confirm_clear)
 
@@ -342,7 +383,34 @@ class SettingsDialog(QDialog):
 
     def set_cloud_token(self, token: str | None) -> None:
         with QSignalBlocker(self.cloud_token_input):
+            self.cloud_token_input.setEchoMode(QLineEdit.Password)
             self.cloud_token_input.setText(token or "")
+
+    def set_cloud_account(self, username: str) -> None:
+        self.cloud_account_form.setVisible(not username)
+        self.cloud_logout_button.setVisible(bool(username))
+        self.cloud_backup_button.setVisible(bool(username))
+        self.cloud_legacy_toggle.setVisible(not username)
+        self.cloud_legacy_toggle.setChecked(False)
+        self.cloud_account_status.setText(f"已登录 {username}" if username else "用网页端的用户名和密码登录即可自动同步。注册时会绑定当前同步码。")
+
+    def set_cloud_account_busy(self, busy: bool) -> None:
+        self.cloud_account_form.setEnabled(not busy)
+
+    def _submit_cloud_account(self, register: bool) -> None:
+        password = self.cloud_password.text()
+        if not password:
+            self.cloud_account_status.setText("请输入密码。")
+            return
+        if register:
+            repeated, accepted = QInputDialog.getText(self, "确认密码", "请再输入一次密码", QLineEdit.Password)
+            if not accepted:
+                return
+            if repeated != password:
+                self.cloud_account_status.setText("两次输入的密码不一致。")
+                return
+        self.cloud_password.clear()
+        self.cloudAccountRequested.emit(self.cloud_username.text(), password, register)
 
     def reveal_cloud_token(self) -> None:
         self.cloud_token_input.setEchoMode(QLineEdit.Normal)
@@ -354,8 +422,8 @@ class SettingsDialog(QDialog):
         if not code:
             return
         QApplication.clipboard().setText(code)
-        self.reveal_cloud_token()
         self.cloud_copy_button.setText("已复制")
+        self.cloud_backup_button.setText("已复制备用同步码")
 
     def _confirm_create_sync_code(self) -> None:
         if self.cloud_token_input.text().strip():

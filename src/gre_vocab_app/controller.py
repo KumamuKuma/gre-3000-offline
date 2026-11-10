@@ -3,12 +3,16 @@ from __future__ import annotations
 import logging
 import json
 import random
+import sqlite3
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+from gre_vocab_app.db.user import UserRepository
 
 from gre_vocab_app.domain import BrowseOrder, SessionSnapshot, StudyMode, WordEntry
 from gre_vocab_app.progress_transfer import (
@@ -21,12 +25,14 @@ from gre_vocab_app.services.cloud_sync import (
     CloudSyncError,
     create_sync_code,
     download_progress,
+    normalize_sync_code,
     upload_progress,
 )
 from gre_vocab_app.services.dictionary import DictionaryService
 from gre_vocab_app.services.long_sentences import LongSentenceService
 from gre_vocab_app.services.translation import TranslationService
 from gre_vocab_app.services.speech import ONLINE_VOICE_NAME
+from gre_vocab_app.services.sync_account import connect_account, has_learning, progress_signature, synchronize_account, valid_username
 from gre_vocab_app.ui.main_window import MainWindow
 from gre_vocab_app.ui.word_list_page import WordListRow
 from gre_vocab_app.ui.word_note import WordNoteDialog
@@ -52,6 +58,16 @@ class ApplicationController:
         self.window = window
         self.content = content_repository
         self.user = user_repository
+        self._guest = user_repository
+        self._account_name = ""
+        self._account_executor: ThreadPoolExecutor | None = None
+        self._account_job = None
+        self._account_poll = QTimer(window)
+        self._account_poll.setInterval(30_000)
+        self._account_poll.timeout.connect(self._sync_signed_in_account)
+        self._account_completion = QTimer(window)
+        self._account_completion.setInterval(150)
+        self._account_completion.timeout.connect(self._finish_account_job)
         self.study = study_session
         self.search = search_service
         self.speech = speech_service
@@ -84,7 +100,7 @@ class ApplicationController:
             self.window.word_list_page.word_marks,
         )
         for widget in self._mark_widgets:
-            widget.load_count = self.user.mark_count
+            widget.load_count = lambda word: self.user.mark_count(word)
             widget.adjustmentRequested.connect(self._adjust_word_mark)
         home.markSortChanged.connect(self._select_mark_sort)
         study_page.jumpRequested.connect(self._jump)
@@ -93,7 +109,7 @@ class ApplicationController:
             study_page.word_detail.word_note,
             self.window.lookup_dialog.word_note,
         ):
-            widget.load_note = self.user.word_note
+            widget.load_note = lambda word: self.user.word_note(word)
             widget.editRequested.connect(self._edit_word_note)
         self.window.word_list_page.noteRequested.connect(self._edit_word_note)
 
@@ -184,6 +200,8 @@ class ApplicationController:
         settings.cloudCreateCodeRequested.connect(self._create_cloud_code)
         settings.cloudUploadRequested.connect(self._upload_cloud_progress)
         settings.cloudDownloadRequested.connect(self._download_cloud_progress)
+        settings.cloudAccountRequested.connect(self._connect_cloud_account)
+        settings.cloudAccountLogoutRequested.connect(self._logout_cloud_account)
         settings.resetPositionRequested.connect(self._reset_positions)
         settings.clearAllRequested.connect(self._clear_all)
 
@@ -197,6 +215,18 @@ class ApplicationController:
             availability_changed.connect(self._speech_availability_changed)
 
     def start(self) -> None:
+        username = self._guest.load_setting("active_cloud_account") or ""
+        if valid_username(username):
+            try:
+                repository = self._open_account_repository(username)
+                try:
+                    normalize_sync_code(repository.load_setting("cloud_token") or "")
+                except CloudSyncError:
+                    repository.close()
+                    raise
+                self._use_account_repository(repository, username)
+            except (OSError, RuntimeError, sqlite3.Error) as error:
+                self._show_status(f"无法打开本机账号进度：{error}")
         self.window.restore_geometry_state(
             self.user.load_setting("window_geometry")
         )
@@ -209,6 +239,9 @@ class ApplicationController:
         self._configure_home_scope()
         self._refresh_stats()
         self.window.show_home()
+        if self._account_name:
+            self._account_poll.start()
+            self._sync_signed_in_account()
 
     def _saved_list_keys(self) -> tuple[str, ...]:
         all_keys = tuple(item.key for item in self._source_lists)
@@ -327,6 +360,7 @@ class ApplicationController:
         self.window.settings_dialog.set_cloud_token(
             self.user.load_setting("cloud_token")
         )
+        self.window.settings_dialog.set_cloud_account(self._account_name)
 
         take_notice = getattr(self.speech, "take_availability_notice", None)
         if callable(take_notice):
@@ -1217,11 +1251,13 @@ class ApplicationController:
         code = create_sync_code()
         self.user.save_setting("cloud_token", code)
         self.window.settings_dialog.set_cloud_token(code)
-        self.window.settings_dialog.reveal_cloud_token()
-        self._show_status("新同步码已生成并选中，请复制保存，再上传本机进度。")
+        self._show_status("新同步码已生成，请点击复制同步码保存。")
         self._report_persistence_issue()
 
     def _upload_cloud_progress(self) -> None:
+        if self._account_name:
+            self._sync_signed_in_account("upload")
+            return
         try:
             payload = export_progress(self.user, self.content)
             upload_progress(DEFAULT_CLOUD_ENDPOINT, self._cloud_token(), payload)
@@ -1231,6 +1267,9 @@ class ApplicationController:
         self._show_status("本机学习进度已上传到云端。")
 
     def _download_cloud_progress(self) -> None:
+        if self._account_name:
+            self._sync_signed_in_account("download")
+            return
         try:
             payload = download_progress(
                 DEFAULT_CLOUD_ENDPOINT,
@@ -1254,9 +1293,155 @@ class ApplicationController:
             f"{summary.list_count} 个 List 的进度。"
         )
 
+    def _open_account_repository(self, username: str) -> UserRepository:
+        return UserRepository(self._guest.path.parent / "accounts" / f"account-{username}.db")
+
+    def _use_account_repository(self, repository: UserRepository, username: str) -> None:
+        self.user = repository
+        self._account_name = username
+        self.study = type(self.study)(self.content, repository, random.Random())
+        self._recent_state = None
+        self._detail_snapshot = None
+        self._quiz_word_return_active = False
+        self._translation_request_id = None
+        self.window.lookup_dialog.close()
+
+    def _refresh_account_progress(self) -> None:
+        self._configure_settings()
+        self._configure_home_scope()
+        self._refresh_stats()
+        self._refresh_word_list()
+        self.window.show_home()
+
+    def _account_status(self, message: str) -> None:
+        self.window.settings_dialog.cloud_account_status.setText(message)
+        self._show_status(message)
+
+    def _start_account_job(self, work, on_success, on_error) -> None:
+        if self._account_executor is None:
+            self._account_executor = ThreadPoolExecutor(max_workers=1)
+        self._account_job = (self._account_executor.submit(work), on_success, on_error)
+        self._account_completion.start()
+
+    def _finish_account_job(self) -> None:
+        if self._account_job is None:
+            return
+        future, on_success, on_error = self._account_job
+        if not future.done():
+            return
+        self._account_job = None
+        self._account_completion.stop()
+        try:
+            on_success(future.result())
+        except Exception as error:
+            on_error(error)
+
+    def _connect_cloud_account(self, username: str, password: str, register: bool) -> None:
+        if self._account_name or self._account_job is not None:
+            return
+        existing = self._cloud_token()
+        dialog = self.window.settings_dialog
+        dialog.set_cloud_account_busy(True)
+
+        def connected(account):
+            name, code = account
+            account_repo = self._open_account_repository(name)
+            try:
+                try:
+                    guest_code = normalize_sync_code(self._cloud_token())
+                except CloudSyncError:
+                    guest_code = ""
+                if account_repo.load_setting("cloud_token") is None and (guest_code == code or (register and not existing)):
+                    local = export_progress(self.user, self.content)
+                    if has_learning(local):
+                        import_progress(account_repo, self.content, local)
+                if not account_repo.save_setting("cloud_token", code):
+                    raise CloudSyncError("无法保存账号到本机。")
+                if not self._guest.save_setting("active_cloud_account", name):
+                    self._guest.save_setting("active_cloud_account", "")
+                    raise CloudSyncError("无法保存登录状态。")
+            except Exception:
+                account_repo.close()
+                raise
+            self._use_account_repository(account_repo, name)
+            dialog.set_cloud_account_busy(False)
+            self._refresh_account_progress()
+            self._account_poll.start()
+            self._sync_signed_in_account()
+
+        def failed(error):
+            dialog.set_cloud_account_busy(False)
+            self._account_status(f"登录失败：{error}")
+
+        self._start_account_job(lambda: connect_account(username, password, register, existing), connected, failed)
+
+    def _logout_cloud_account(self) -> None:
+        if not self._account_name:
+            return
+        if not self.user.flush_pending():
+            self._account_status("还有本机进度未保存，请稍后重试退出。")
+            return
+        if not self._guest.save_setting("active_cloud_account", ""):
+            self._guest.save_setting("active_cloud_account", self._account_name)
+            self._account_status("无法保存退出状态，请稍后重试。")
+            return
+        self.user.close()
+        self._account_poll.stop()
+        self._use_account_repository(self._guest, "")
+        self._refresh_account_progress()
+        self._show_status("已退出账号。")
+
+    def _sync_signed_in_account(self, choice: str = "") -> None:
+        if not self._account_name or self._account_job is not None:
+            return
+        repository = self.user
+        username = self._account_name
+        local = export_progress(repository, self.content)
+        signature = progress_signature(local)
+        code = self._cloud_token()
+        try:
+            baseline = json.loads(repository.load_setting("cloud_baseline") or "{}")
+            if not isinstance(baseline, dict):
+                baseline = {}
+        except ValueError:
+            baseline = {}
+
+        def synchronized(result):
+            if self.user is not repository:
+                return
+            saved_signature = signature
+            if result.status == "conflict":
+                self._account_status(f"已登录 {username}。两端进度不同，请选择上传本机进度或从云端恢复。")
+                return
+            if result.status == "download":
+                if progress_signature(export_progress(repository, self.content)) != signature:
+                    self._account_status("同步期间本机进度有变化，将在下次同步时重新检查。")
+                    return
+                if not choice and self.window.stack.currentWidget() is self.window.study_page:
+                    self._account_status("检测到云端更新，回到首页后会自动同步。")
+                    return
+                import_progress(repository, self.content, result.progress)
+                if not repository.flush_pending():
+                    self._account_status("读取了云端进度，本机保存失败，将在下次同步时重试。")
+                    return
+                saved_signature = progress_signature(export_progress(repository, self.content))
+                self._refresh_account_progress()
+            if result.nonce:
+                repository.save_setting("cloud_baseline", json.dumps({"nonce": result.nonce, "signature": saved_signature}))
+            self.window.settings_dialog.cloud_account_status.setText(f"已登录 {username}，自动同步已开启。")
+
+        def failed(error):
+            if self.user is repository:
+                self._account_status(f"已登录 {username}。同步失败：{error}")
+
+        self._start_account_job(lambda: synchronize_account(code, local, baseline, choice), synchronized, failed)
+
     def _clear_all(self) -> None:
         self._show_status("本地星级、List 完成次数、进度和设置已清空。")
         self.user.clear_all()
+        if self._account_name:
+            self._logout_cloud_account()
+            return
         self._detail_snapshot = None
         self._configure_settings()
         self._configure_home_scope()
@@ -1303,10 +1488,17 @@ class ApplicationController:
             return
 
     def shutdown(self) -> None:
+        self._account_poll.stop()
+        self._account_completion.stop()
+        if self._account_executor is not None:
+            self._account_executor.shutdown(wait=False, cancel_futures=True)
         translation_shutdown = getattr(self.translation, "shutdown", None)
         if callable(translation_shutdown):
             translation_shutdown()
-        for name, resource in (("user", self.user), ("content", self.content)):
+        resources = [("user", self.user), ("content", self.content)]
+        if self.user is not self._guest:
+            resources.append(("guest", self._guest))
+        for name, resource in resources:
             try:
                 closed = resource.close()
                 if closed is False:

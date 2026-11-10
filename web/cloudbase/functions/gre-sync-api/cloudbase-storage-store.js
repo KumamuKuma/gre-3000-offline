@@ -129,10 +129,11 @@ export function createCloudBaseStorageStore(
   return {
     get: read,
 
-    async upsert({ spaceId, authHash, ciphertext, nonce, updatedAt }) {
+    async upsert({ spaceId, authHash, ciphertext, nonce, updatedAt, expectedNonce }) {
       return withLock(spaceId, async () => {
         const existing = await read(spaceId);
         if (existing && !authorized(existing.authHash, authHash)) return false;
+        if (expectedNonce !== undefined && (existing?.nonce ?? null) !== expectedNonce) return "conflict";
         if (!AUTH_HASH_PATTERN.test(authHash)) throw new Error("invalid storage auth hash");
 
         const encrypted = validateEncryptedPayload({

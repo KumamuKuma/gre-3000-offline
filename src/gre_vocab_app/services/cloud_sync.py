@@ -13,9 +13,7 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
-DEFAULT_CLOUD_ENDPOINT = (
-    "https://kuma-d9gnt6m3d6b8050f8-1472025206.ap-shanghai.app.tcloudbase.com"
-)
+DEFAULT_CLOUD_ENDPOINT = "https://gre-sync-kumamukuma.pages.dev"
 SYNC_CODE_PREFIX = "GRE1-"
 _SPACE_CONTEXT = b"gre-sync-space-v1:"
 _AUTH_CONTEXT = b"gre-sync-auth-v1:"
@@ -24,6 +22,12 @@ _KEY_CONTEXT = b"gre-sync-encryption-v1:"
 
 class CloudSyncError(RuntimeError):
     """Raised when the optional progress cloud cannot be used safely."""
+
+
+class CloudSyncHTTPError(CloudSyncError):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
 
 
 def _base64url_encode(value: bytes) -> str:
@@ -51,9 +55,10 @@ def normalize_sync_code(code: str) -> str:
     normalized = "".join(str(code).split())
     if not normalized.startswith(SYNC_CODE_PREFIX):
         raise CloudSyncError("同步码应以 GRE1- 开头。")
-    if len(_base64url_decode(normalized.removeprefix(SYNC_CODE_PREFIX))) != 32:
+    secret = _base64url_decode(normalized.removeprefix(SYNC_CODE_PREFIX))
+    if len(secret) != 32:
         raise CloudSyncError("同步码格式不正确。")
-    return normalized
+    return SYNC_CODE_PREFIX + _base64url_encode(secret)
 
 
 def _endpoint_root(endpoint: str) -> str:
@@ -76,15 +81,16 @@ def _sync_credentials(code: str) -> tuple[str, str, bytes]:
 def _request(
     method: str,
     url: str,
-    token: str,
+    token: str | None,
     payload: object | None = None,
 ) -> dict[str, Any]:
     data = None
     headers = {
         "accept": "application/json",
-        "authorization": f"Bearer {token}",
         "user-agent": "GRE-3000-Windows/1.0.1",
     }
+    if token:
+        headers["authorization"] = f"Bearer {token}"
     if payload is not None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         headers["content-type"] = "application/json; charset=utf-8"
@@ -94,8 +100,8 @@ def _request(
             decoded = json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
         if error.code == 401:
-            raise CloudSyncError("同步码无效或与云端空间不匹配。") from error
-        raise CloudSyncError(f"云端返回错误：HTTP {error.code}") from error
+            raise CloudSyncHTTPError(401, "同步码无效或与云端空间不匹配。") from error
+        raise CloudSyncHTTPError(error.code, f"云端返回错误：HTTP {error.code}") from error
     except (OSError, URLError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise CloudSyncError("暂时无法连接云同步服务。") from error
     if not isinstance(decoded, dict):

@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "gre-3000-sync",
+  "main": "worker/github-sync.ts",
+  "compatibility_date": "2026-05-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "ratelimits": [{ "name": "ACCOUNT_LIMIT", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gre-3000-sync",
+      "database_id": "9cbf21ed-ca33-47ea-9d84-0e318cc21420",
+      "migrations_dir": "drizzle"
+    }
+  ]
+}

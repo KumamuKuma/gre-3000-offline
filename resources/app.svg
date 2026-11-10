@@ -1,17 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
-  <title id="title">GRE 3000 Vocabulary Trainer 图标</title>
-  <desc id="description">绿色圆角方形中的打开书本和 GRE 字母</desc>
-  <rect x="24" y="24" width="464" height="464" rx="96" fill="#0F6A57"/>
-  <rect x="42" y="42" width="428" height="428" rx="78" fill="none" stroke="#58B69A" stroke-width="8"/>
-
-  <path d="M76 151 Q156 107 244 145 L244 342 Q158 304 76 342 Z" fill="#F8FCFA" stroke="#153F36" stroke-width="12" stroke-linejoin="round"/>
-  <path d="M436 151 Q356 107 268 145 L268 342 Q354 304 436 342 Z" fill="#F8FCFA" stroke="#153F36" stroke-width="12" stroke-linejoin="round"/>
-  <path d="M256 151 L256 348" fill="none" stroke="#58B69A" stroke-width="12" stroke-linecap="round"/>
-  <path d="M105 181 Q165 153 219 174 M105 225 Q165 197 219 218 M105 269 Q165 241 219 262" fill="none" stroke="#91CDBB" stroke-width="9" stroke-linecap="round"/>
-  <path d="M407 181 Q347 153 293 174 M407 225 Q347 197 293 218 M407 269 Q347 241 293 262" fill="none" stroke="#91CDBB" stroke-width="9" stroke-linecap="round"/>
-
-  <path d="M170 376 H148 A31 31 0 1 0 170 407 V395 H153" fill="none" stroke="#F1FBF6" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M214 422 V360 H241 A21 21 0 0 1 241 402 H214 M238 402 L263 422" fill="none" stroke="#F1FBF6" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M333 360 H288 V422 H333 M288 391 H325" fill="none" stroke="#F1FBF6" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">GRE 3000 · 翻开的书</title>
+  <desc id="desc">炭黑底上是纸白展开书页与橙色书签。</desc>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="#252724"/>
+  <path fill="#fffefa" d="M93 154Q93 141 106 136C150 119 200 123 242 151V373C203 350 154 344 108 359Q93 363 93 347Z"/>
+  <path fill="#fffefa" d="M270 151C312 123 362 119 406 136Q419 141 419 154V347Q419 363 404 359C358 344 309 350 270 373Z"/>
+  <path fill="#e76f35" d="M336 125Q362 119 388 125V248Q388 255 382 251L362 237L342 251Q336 255 336 248Z"/>
+  <path d="M132 233Q167 222 204 237M132 281Q167 270 204 285" fill="none" stroke="#252724" stroke-width="16" stroke-linecap="round"/>
 </svg>

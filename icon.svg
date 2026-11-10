@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">GRE 3000 · 翻开的书</title>
+  <desc id="desc">炭黑底上是纸白展开书页与橙色书签。</desc>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="#252724"/>
+  <path fill="#fffefa" d="M93 154Q93 141 106 136C150 119 200 123 242 151V373C203 350 154 344 108 359Q93 363 93 347Z"/>
+  <path fill="#fffefa" d="M270 151C312 123 362 119 406 136Q419 141 419 154V347Q419 363 404 359C358 344 309 350 270 373Z"/>
+  <path fill="#e76f35" d="M336 125Q362 119 388 125V248Q388 255 382 251L362 237L342 251Q336 255 336 248Z"/>
+  <path d="M132 233Q167 222 204 237M132 281Q167 270 204 285" fill="none" stroke="#252724" stroke-width="16" stroke-linecap="round"/>
+</svg>

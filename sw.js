@@ -1,6 +1,6 @@
 const scope = new URL(self.registration.scope);
 const scopePath = scope.pathname.slice(0, -1);
-const cacheVersion = "gre-3000-pwa-v28";
+const cacheVersion = "gre-3000-pwa-v29";
 const CACHE = scopePath ? `${cacheVersion}:${scopePath}` : cacheVersion;
 const CORE = [
   "/",

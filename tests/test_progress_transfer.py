@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import sqlite3
 
 import pytest
 
@@ -53,6 +54,52 @@ class FakeContent:
 
     def in_machine7(self, word_id):
         return word_id in {1, 4}
+
+
+def test_history_recovers_records_replaced_by_a_progress_import(tmp_path):
+    path = tmp_path / "user.db"
+    content = FakeContent()
+    with UserRepository(path) as user:
+        user.set_word_note("word1", "原来的备注\n第二行")
+        user.set_word_note("word2", "被清空的备注")
+        user.set_star_rating(1, 3)
+        user.set_mark_count("word1", "12")
+        cloud = export_progress(user, content)
+        cloud.update(notes={"word1": "云端备注"}, stars={}, marks={})
+
+    with sqlite3.connect(path) as db:
+        for kind in ("note", "star", "mark"):
+            for event in ("update", "delete"):
+                db.execute(f"drop trigger archive_{kind}_{event}")
+        db.execute("drop table word_record_history")
+        db.execute("pragma user_version=6")
+
+    with UserRepository(path) as user:
+        import_progress(user, content, cloud)
+        history = user.word_record_history()
+        assert {(row.kind, row.word_key, row.value) for row in history} == {
+            ("note", "word1", "原来的备注\n第二行"),
+            ("note", "word2", "被清空的备注"),
+            ("star", "1", "3"),
+            ("mark", "word1", "12"),
+        }
+        import_progress(user, content, cloud)
+        assert user.word_record_history() == history
+
+    with UserRepository(path) as user:
+        assert user.word_record_history() == history
+        with sqlite3.connect(path) as lock:
+            lock.execute("begin immediate")
+            with pytest.raises(sqlite3.OperationalError, match="locked"):
+                user.restore_word_records(history)
+        assert user.word_note("word1") == "云端备注"
+        assert user.word_record_history() == history
+        assert user.restore_word_records(history)
+        assert user.word_note("word1") == "原来的备注\n第二行"
+        assert user.word_note("word2") == "被清空的备注"
+        assert user.star_rating(1) == 3
+        assert user.mark_count("word1") == "12"
+        assert user.word_record_history(note_for=" WORD1 ")[0].value == "云端备注"
 
 
 def test_progress_round_trip_preserves_stars_lists_positions_and_settings(
@@ -316,30 +363,34 @@ def test_invalid_mark_import_cannot_change_existing_progress(tmp_path, marks):
 
 def test_recent_mark_progress_round_trip_and_legacy_preservation(tmp_path):
     content = FakeContent()
+    recent = tuple(range(100, 0, -1))
+    content.ids_in_source_order = lambda: recent
     with UserRepository(tmp_path / 'recent-source.db') as source, UserRepository(tmp_path / 'recent-target.db') as target:
-        source.set_recent_marked_ids([3, 1, 5])
+        source.set_recent_marked_ids(recent)
         source.set_mark_count('word3', '1')
         source.set_mark_count('word1', '100')
         payload = export_progress(source, content)
         import_progress(target, content, payload)
-        assert target.recent_marked_ids() == (3, 1, 5)
+        assert target.recent_marked_ids() == recent
         del payload['recent_marks']
         import_progress(target, content, payload)
-        assert target.recent_marked_ids() == (3, 1, 5)
+        assert target.recent_marked_ids() == recent
         payload['recent_marks'] = []
         import_progress(target, content, payload)
         assert target.recent_marked_ids() == ()
 
 
-@pytest.mark.parametrize('recent', [None, [1, 1], [999], [True], list(range(1, 32))])
+@pytest.mark.parametrize('recent', [None, [1, 1], [999], [True], list(range(1, 102))])
 def test_invalid_recent_mark_import_changes_nothing(tmp_path, recent):
+    content = FakeContent()
+    content.ids_in_source_order = lambda: tuple(range(1, 102))
     with UserRepository(tmp_path / 'bad-recent.db') as user:
         user.set_star_rating(1, 3)
         user.set_recent_marked_ids([1])
-        payload = export_progress(user, FakeContent())
+        payload = export_progress(user, content)
         payload['stars'] = {}
         payload['recent_marks'] = recent
         with pytest.raises(ProgressFormatError):
-            import_progress(user, FakeContent(), payload)
+            import_progress(user, content, payload)
         assert user.star_rating(1) == 3
         assert user.recent_marked_ids() == (1,)

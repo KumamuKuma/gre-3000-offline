@@ -61,23 +61,27 @@ def test_cloud_sync_uploads_and_downloads_progress(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("method", "fail_after_sending", "sent_to"),
+    ("method", "failure_stage", "use_backup_dns"),
     [
-        ("PUT", False, ["8.8.4.4"]),
-        ("GET", True, ["1.1.1.1", "8.8.4.4"]),
-        ("PUT", True, ["1.1.1.1"]),
-        ("POST", True, ["1.1.1.1"]),
+        ("PUT", "connect", True),
+        ("PUT", "connect", False),
+        ("GET", "response", False),
+        ("PUT", "response", False),
+        ("POST", "response", False),
     ],
 )
-def test_cloud_sync_retries_backup_addresses_only_when_safe(monkeypatch, method, fail_after_sending, sent_to):
+def test_cloud_sync_retries_backup_addresses_only_when_safe(monkeypatch, method, failure_stage, use_backup_dns):
     addresses = ["1.1.1.1", "8.8.4.4"]
     dns_requests = []
     connections = []
     account_requests = []
 
+    def fake_getaddrinfo(*_args, **_kwargs):
+        if use_backup_dns:
+            raise socket.gaierror(11002, "DNS lookup failed")
+        return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", (address, 443)) for address in addresses]
+
     def fake_urlopen(request, timeout):
-        if isinstance(request, Request):
-            raise URLError(socket.gaierror(11002, "DNS lookup failed"))
         dns_requests.append(request)
         return io.BytesIO(json.dumps({
             "Status": 0,
@@ -90,7 +94,7 @@ def test_cloud_sync_retries_backup_addresses_only_when_safe(monkeypatch, method,
 
         def connect(self):
             connections.append(self.address)
-            if self.address == addresses[0] and not fail_after_sending:
+            if self.address == addresses[0] and failure_stage == "connect":
                 raise TimeoutError()
 
         def request(self, method, path, body, headers):
@@ -98,7 +102,7 @@ def test_cloud_sync_retries_backup_addresses_only_when_safe(monkeypatch, method,
                                      headers["Authorization"]))
 
         def getresponse(self):
-            if self.address == addresses[0] and fail_after_sending:
+            if self.address == addresses[0] and failure_stage == "response":
                 raise TimeoutError()
             response = FakeResponse({"ok": True})
             response.status = 200
@@ -108,21 +112,27 @@ def test_cloud_sync_retries_backup_addresses_only_when_safe(monkeypatch, method,
             pass
 
     monkeypatch.setattr(cloud_sync, "urlopen", fake_urlopen)
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
     monkeypatch.setattr(cloud_sync, "getproxies", dict)
     monkeypatch.setattr(cloud_sync, "_DNS_CACHE", (0, ()))
+    monkeypatch.setattr(cloud_sync, "_PREFERRED_ADDRESS", "")
     monkeypatch.setattr(cloud_sync, "_ResolvedHTTPSConnection", FakeConnection)
 
     path = "/api/sync-account?username=example"
     payload = {"vault": "example"} if method == "PUT" else None
     url = cloud_sync.DEFAULT_CLOUD_ENDPOINT + path
-    if sent_to[-1] == addresses[0]:
+    if method != "GET" and failure_stage == "response":
+        sent_to = addresses[:1]
         with pytest.raises(cloud_sync.CloudSyncError, match="暂时无法连接"):
             cloud_sync._request(method, url, "test-token", payload)
     else:
+        sent_to = addresses if failure_stage == "response" else addresses[1:]
         assert cloud_sync._request(method, url, "test-token", payload) == {"ok": True}
-    assert len(dns_requests) == 1
-    assert dns_requests[0].split("?")[1] == "name=gre-sync-kumamukuma.pages.dev&type=A"
-    assert connections == (addresses if sent_to[-1] == addresses[-1] else addresses[:1])
+        assert cloud_sync._PREFERRED_ADDRESS == addresses[-1]
+    assert len(dns_requests) == int(use_backup_dns)
+    if use_backup_dns:
+        assert dns_requests[0].split("?")[1] == "name=gre-sync-kumamukuma.pages.dev&type=A"
+    assert connections == (addresses if addresses[-1] in sent_to else addresses[:1])
     assert account_requests == [(address, method, path, payload, "Bearer test-token") for address in sent_to]
 
 

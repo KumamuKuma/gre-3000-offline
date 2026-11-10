@@ -7,10 +7,11 @@ import json
 import secrets
 import socket
 import ssl
+from collections.abc import Iterator
 from http.client import HTTPSConnection, HTTPException
 from time import monotonic
 from typing import Any
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, getproxies, proxy_bypass, urlopen
 
@@ -22,6 +23,7 @@ _SYNC_HOST = "gre-sync-kumamukuma.pages.dev"
 DEFAULT_CLOUD_ENDPOINT = f"https://{_SYNC_HOST}"
 _DNS_RESOLVERS = ("https://223.5.5.5/resolve", "https://8.8.8.8/resolve")
 _DNS_CACHE: tuple[float, tuple[str, ...]] = (0, ())
+_PREFERRED_ADDRESS = ""
 SYNC_CODE_PREFIX = "GRE1-"
 _SPACE_CONTEXT = b"gre-sync-space-v1:"
 _AUTH_CONTEXT = b"gre-sync-auth-v1:"
@@ -119,6 +121,7 @@ class _ResolvedHTTPSConnection(HTTPSConnection):
     def __init__(self, address: str):
         self._resolved_address = address
         self._tls = ssl.create_default_context()
+        self._tls.set_alpn_protocols(["http/1.1"])
         super().__init__(_SYNC_HOST, timeout=6, context=self._tls)
 
     def connect(self) -> None:
@@ -132,19 +135,39 @@ class _ResolvedHTTPSConnection(HTTPSConnection):
             raise
 
 
-def _read_sync_response(request: Request) -> bytes:
-    global _DNS_CACHE
+def _sync_addresses() -> Iterator[str]:
     try:
+        entries = socket.getaddrinfo(_SYNC_HOST, 443, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        entries = []
+    addresses = dict.fromkeys(entry[4][0] for entry in entries)
+    preferred = _PREFERRED_ADDRESS
+    if preferred in addresses:
+        yield preferred
+    for address in addresses:
+        if address != preferred:
+            yield address
+
+    try:
+        backup = _resolve_sync_host()
+    except CloudSyncError:
+        if not addresses:
+            raise
+        return
+    for address in backup:
+        if address not in addresses:
+            yield address
+
+
+def _read_sync_response(request: Request) -> bytes:
+    global _PREFERRED_ADDRESS
+    uses_proxy = getproxies().get("https") and not proxy_bypass(_SYNC_HOST)
+    if request.type != "https" or request.host != _SYNC_HOST or uses_proxy:
         with urlopen(request, timeout=15) as response:
             return response.read()
-    except URLError as error:
-        if not isinstance(error.reason, socket.gaierror) or request.type != "https" or request.host != _SYNC_HOST:
-            raise
-        if getproxies().get("https") and not proxy_bypass(_SYNC_HOST):
-            raise
 
     method = request.get_method()
-    for address in _resolve_sync_host():
+    for address in _sync_addresses():
         connection = _ResolvedHTTPSConnection(address)
         try:
             connection.connect()
@@ -154,13 +177,11 @@ def _read_sync_response(request: Request) -> bytes:
         try:
             connection.request(method, request.selector, request.data, dict(request.header_items()))
             with connection.getresponse() as response:
-                # The next login step can start with the route that just responded.
-                expires, cached = _DNS_CACHE
-                if address in cached and address != cached[0]:
-                    _DNS_CACHE = (expires, (address,) + tuple(ip for ip in cached if ip != address))
                 if not 200 <= response.status < 300:
                     raise HTTPError(request.full_url, response.status, response.reason, response.headers, None)
-                return response.read()
+                body = response.read()
+                _PREFERRED_ADDRESS = address
+                return body
         except HTTPError:
             raise
         except (OSError, HTTPException):

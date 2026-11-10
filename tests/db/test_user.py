@@ -593,6 +593,19 @@ def test_word_notes_migrate_v4_persist_retry_and_clear(tmp_path):
         assert repo.word_notes() == {}
 
 
+def test_clear_keeps_a_pending_note_in_history(tmp_path):
+    path = tmp_path / "user.db"
+    with UserRepository(path) as repo:
+        with sqlite3.connect(path) as lock:
+            lock.execute("begin immediate")
+            assert not repo.set_word_note("inevitable", "刚写的备注")
+            assert not repo.clear_all()
+        assert repo.flush_pending()
+    with UserRepository(path) as repo:
+        assert repo.word_note("inevitable") == ""
+        assert [row.value for row in repo.word_record_history()] == ["刚写的备注"]
+
+
 def test_mark_counter_migrates_persists_large_values_and_keeps_other_data(tmp_path):
     path = tmp_path / 'marks.db'
     with UserRepository(path) as user:
@@ -626,13 +639,13 @@ def test_mark_counter_migrates_persists_large_values_and_keeps_other_data(tmp_pa
 def test_recent_mark_history_is_unique_capped_and_persistent(tmp_path):
     path = tmp_path / 'recent.db'
     with UserRepository(path) as user:
-        for word_id in range(1, 36):
+        for word_id in range(1, 106):
             user.record_recent_marked(word_id)
-        assert user.recent_marked_ids() == tuple(range(35, 5, -1))
+        assert user.recent_marked_ids() == tuple(range(105, 5, -1))
         user.record_recent_marked(10)
         assert user.recent_marked_ids()[0] == 10
-        assert len(user.recent_marked_ids()) == 30
-        assert len(set(user.recent_marked_ids())) == 30
+        assert len(user.recent_marked_ids()) == 100
+        assert len(set(user.recent_marked_ids())) == 100
         user.adjust_mark_count('word10', -1)
         assert user.recent_marked_ids()[0] == 10
     with UserRepository(path) as user:

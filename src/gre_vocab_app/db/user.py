@@ -11,7 +11,7 @@ from typing import Any, Self, Sequence
 
 from .schema import USER_SCHEMA_VERSION
 from gre_vocab_app.word_notes import note_key, validate_notes
-from gre_vocab_app.word_marks import adjust_count, validate_marks
+from gre_vocab_app.word_marks import RECENT_MARK_LIMIT, adjust_count, validate_marks
 
 
 USER_SCHEMA = """
@@ -77,7 +77,48 @@ create table list_progress(
 """
 
 
+WORD_RECORD_HISTORY_SCHEMA = """
+create table if not exists word_record_history(
+  id integer primary key,
+  kind text not null check(kind in ('note', 'star', 'mark')),
+  word_key text not null,
+  value text not null,
+  archived_at text not null
+);
+create index if not exists word_record_history_word on word_record_history(kind, word_key, id);
+"""
+
+
+def _word_record_history_triggers() -> str:
+    scripts = []
+    for kind, table, key, value, empty in (
+        ("note", "word_notes", "headword", "note", "''"),
+        ("star", "word_annotations", "word_id", "star_rating", "0"),
+        ("mark", "word_marks", "headword", "count", "'0'"),
+    ):
+        archive = f"""
+          insert into word_record_history(kind, word_key, value, archived_at)
+          values ('{kind}', old.{key}, old.{value}, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+        """
+        scripts.append(f"""
+        create trigger if not exists archive_{kind}_update after update on {table}
+        when old.{value} <> {empty} and old.{value} <> new.{value}
+        begin {archive} end;
+        create trigger if not exists archive_{kind}_delete after delete on {table}
+        when old.{value} <> {empty}
+        begin {archive} end;
+        """)
+    return "\n".join(scripts)
+
+
 _EXPECTED_SCHEMA = {
+    "word_record_history": (
+        ("id", "INTEGER", 0, None, 1),
+        ("kind", "TEXT", 1, None, 0),
+        ("word_key", "TEXT", 1, None, 0),
+        ("value", "TEXT", 1, None, 0),
+        ("archived_at", "TEXT", 1, None, 0),
+    ),
     "word_marks": (
         ("headword", "TEXT", 0, None, 1),
         ("count", "TEXT", 1, None, 0),
@@ -149,6 +190,14 @@ class QueueState:
 
 
 @dataclass(frozen=True, slots=True)
+class WordRecordVersion:
+    kind: str
+    word_key: str
+    value: str
+    archived_at: str
+
+
+@dataclass(frozen=True, slots=True)
 class _Mutation:
     kind: str
     values: tuple[Any, ...]
@@ -200,6 +249,11 @@ class UserRepository:
                 self._run_migration(
                     "create table word_marks(headword text primary key, count text not null);",
                     target_version=6,
+                )
+            elif version == 6:
+                self._run_migration(
+                    WORD_RECORD_HISTORY_SCHEMA + _word_record_history_triggers(),
+                    target_version=7,
                 )
             else:  # pragma: no cover - guarded by the version bounds above
                 raise UserSchemaError(f"no migration from user schema {version}")
@@ -598,6 +652,20 @@ class UserRepository:
         self._pending.append(mutation)
         return self.flush_pending()
 
+    def _write_mutations(self, mutations: Sequence[_Mutation]) -> None:
+        try:
+            self.db.execute("begin immediate")
+            for mutation in mutations:
+                self._apply_mutation(mutation)
+            self.db.commit()
+        except sqlite3.DatabaseError:
+            try:
+                if self.db.in_transaction:
+                    self.db.rollback()
+            except sqlite3.DatabaseError:
+                pass
+            raise
+
     def flush_pending(self) -> bool:
         if not self._pending:
             self._last_issue = None
@@ -609,16 +677,8 @@ class UserRepository:
             )
             return False
         try:
-            self.db.execute("begin immediate")
-            for mutation in self._pending:
-                self._apply_mutation(mutation)
-            self.db.commit()
+            self._write_mutations(self._pending)
         except sqlite3.DatabaseError as error:
-            try:
-                if self.db.in_transaction:
-                    self.db.rollback()
-            except sqlite3.DatabaseError:
-                pass
             self._last_issue = PersistenceIssue(
                 "本地数据暂时无法保存；操作已保留，将在下次更改时重试。",
                 f"{type(error).__name__}: {error}",
@@ -706,10 +766,10 @@ class UserRepository:
 
     @staticmethod
     def _validate_recent_marks(values) -> None:
-        if (not isinstance(values, (list, tuple)) or len(values) > 30
+        if (not isinstance(values, (list, tuple)) or len(values) > RECENT_MARK_LIMIT
             or any(type(value) is not int or value <= 0 for value in values)
             or len(set(values)) != len(values)):
-            raise ValueError("最近标记必须包含最多 30 个不重复的单词编号。")
+            raise ValueError(f"最近标记必须包含最多 {RECENT_MARK_LIMIT} 个不重复的单词编号。")
 
     def set_recent_marked_ids(self, values) -> bool:
         self._validate_recent_marks(values)
@@ -717,11 +777,51 @@ class UserRepository:
 
     def record_recent_marked(self, word_id: int) -> bool:
         return self.set_recent_marked_ids(
-            (word_id, *(value for value in self.recent_marked_ids() if value != word_id))[:30]
+            (word_id, *(value for value in self.recent_marked_ids() if value != word_id))[:RECENT_MARK_LIMIT]
         )
 
     def word_notes(self) -> dict[str, str]:
         return dict(self._notes)
+
+    def word_record_history(
+        self, *, note_for: str | None = None
+    ) -> tuple[WordRecordVersion, ...]:
+        query = "select kind, word_key, value, archived_at from word_record_history"
+        args = ()
+        if note_for is not None:
+            query += " where kind='note' and word_key=?"
+            args = (note_key(note_for),)
+        return tuple(
+            WordRecordVersion(*row)
+            for row in self.db.execute(query + " order by id desc", args)
+        )
+
+    def restore_word_records(self, versions: Sequence[WordRecordVersion]) -> bool:
+        mutations = []
+        keys = set()
+        for version in versions:
+            kind, key, value = version.kind, version.word_key, version.value
+            if (kind, key) in keys:
+                raise ValueError("每项记录只能选择一个版本。")
+            keys.add((kind, key))
+            if kind == "star":
+                args = (
+                    self._annotation_word_id(int(key)), self._star_value(int(value)), self._now()
+                )
+                mutations.append(_Mutation("annotation", args))
+            elif kind == "note":
+                validate_notes({key: value})
+                mutations.append(_Mutation("note", (key, value)))
+            elif kind == "mark":
+                validate_marks({key: value})
+                mutations.append(_Mutation("mark", (key, value)))
+            else:
+                raise ValueError("未知的单词记录类型。")
+        if not self.flush_pending():
+            return False
+        self._write_mutations(mutations)
+        self._load_state()
+        return True
 
     def set_word_note(self, headword: str, text: str) -> bool:
         key = note_key(headword)
@@ -918,8 +1018,11 @@ class UserRepository:
         self._notes.clear()
         self._marks.clear()
         self._list_progress.clear()
-        self._pending = [_Mutation("clear", ())]
-        return self.flush_pending()
+        self._pending = [
+            mutation for mutation in self._pending
+            if mutation.kind in ("note", "annotation", "mark")
+        ]
+        return self._enqueue(_Mutation("clear", ()))
 
 
 @dataclass(frozen=True, slots=True)

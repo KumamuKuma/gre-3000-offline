@@ -5,6 +5,9 @@ import re
 from gre_vocab_app.word_notes import note_key
 
 
+RECENT_MARK_LIMIT = 100
+
+
 def validate_marks(value: object) -> dict[str, str]:
     if not isinstance(value, dict):
         raise ValueError("累计标记必须是对象。")

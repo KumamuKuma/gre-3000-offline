@@ -2,12 +2,9 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
-    QApplication,
     QDialog,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPushButton,
     QSlider,
@@ -33,12 +30,7 @@ class SettingsDialog(QDialog):
     quizCorrectStarDownChanged = Signal(bool)
     exportProgressRequested = Signal()
     importProgressRequested = Signal()
-    cloudTokenChanged = Signal(str)
-    cloudCreateCodeRequested = Signal()
-    cloudUploadRequested = Signal()
-    cloudDownloadRequested = Signal()
-    cloudAccountRequested = Signal(str, str, bool)
-    cloudAccountLogoutRequested = Signal()
+    wordHistoryRequested = Signal()
     resetPositionRequested = Signal()
     clearAllRequested = Signal()
 
@@ -64,7 +56,7 @@ class SettingsDialog(QDialog):
         header.addWidget(self.close_button)
         root.addLayout(header)
 
-        self.navigation = SegmentedControl((("学习与朗读", 0), ("本地数据", 1), ("云端同步", 2)), navigation=True)
+        self.navigation = SegmentedControl((("学习与朗读", 0), ("本地数据", 1)), navigation=True)
         root.addWidget(self.navigation)
         self.pages = QStackedWidget()
         self.navigation.currentIndexChanged.connect(self.pages.setCurrentIndex)
@@ -140,80 +132,23 @@ class SettingsDialog(QDialog):
         transfer_row.addWidget(self.export_button)
         transfer_row.addWidget(self.import_button)
         data_layout.addLayout(transfer_row)
+        self.history_button = QPushButton("查看历史")
+        self.history_button.setAccessibleName("查看单词记录历史")
+        self._control_row(
+            data_layout, "单词记录历史", self.history_button,
+            "自动保留被替换的备注、星级和累计标记", stretch=False,
+        )
         self._section(data_layout, "学习位置")
         self.reset_button = QPushButton("重置")
         self.reset_button.setAccessibleName("重置学习位置")
         self._control_row(data_layout, "重置学习位置", self.reset_button, "保留星级、备注和累计标记", stretch=False)
         self._section(data_layout, "本地数据")
         self.clear_button = QPushButton("清空数据")
-        self.clear_button.setAccessibleName("清空全部本地数据")
+        self.clear_button.setAccessibleName("清空当前本地数据")
         self.clear_button.setObjectName("dangerButton")
-        self._control_row(data_layout, "清空全部本地数据", self.clear_button, "删除本机进度和设置", stretch=False)
+        self._control_row(data_layout, "清空当前本地数据", self.clear_button, "清空当前进度和设置，保留单词记录历史", stretch=False)
         data_layout.addStretch(1)
         self._add_page(data_panel)
-
-        cloud_panel = QWidget()
-        cloud_panel.setObjectName("settingsPage")
-        cloud_layout = QVBoxLayout(cloud_panel)
-        cloud_layout.setContentsMargins(2, 0, 8, 0)
-        cloud_layout.setSpacing(16)
-        self._section(cloud_layout, "账号同步")
-        self.cloud_account_status = QLabel("用网页端的用户名和密码登录即可自动同步。")
-        self.cloud_account_status.setWordWrap(True)
-        cloud_layout.addWidget(self.cloud_account_status)
-        self.cloud_account_form = QWidget()
-        account_form = QVBoxLayout(self.cloud_account_form)
-        account_form.setContentsMargins(0, 0, 0, 0)
-        self.cloud_username = QLineEdit()
-        self.cloud_username.setPlaceholderText("用户名")
-        self.cloud_username.setAccessibleName("同步账号用户名")
-        self.cloud_password = QLineEdit()
-        self.cloud_password.setEchoMode(QLineEdit.Password)
-        self.cloud_password.setPlaceholderText("密码")
-        self.cloud_password.setAccessibleName("同步账号密码")
-        account_form.addWidget(self.cloud_username)
-        account_form.addWidget(self.cloud_password)
-        account_buttons = QHBoxLayout()
-        self.cloud_login_button = QPushButton("登录并同步")
-        self.cloud_register_button = QPushButton("注册并同步")
-        account_buttons.addWidget(self.cloud_login_button)
-        account_buttons.addWidget(self.cloud_register_button)
-        account_form.addLayout(account_buttons)
-        cloud_layout.addWidget(self.cloud_account_form)
-        self.cloud_logout_button = QPushButton("退出账号")
-        cloud_layout.addWidget(self.cloud_logout_button)
-        self.cloud_logout_button.hide()
-        self.cloud_legacy_toggle = QPushButton("使用同步码")
-        self.cloud_legacy_toggle.setCheckable(True)
-        cloud_layout.addWidget(self.cloud_legacy_toggle)
-        self.cloud_legacy = QWidget()
-        legacy_layout = QVBoxLayout(self.cloud_legacy)
-        legacy_layout.setContentsMargins(0, 0, 0, 0)
-        self.cloud_token_input = QLineEdit()
-        self.cloud_token_input.setAccessibleName("云端同步码")
-        self.cloud_token_input.setPlaceholderText("GRE1- 开头的同步码")
-        self.cloud_token_input.setEchoMode(QLineEdit.Password)
-        legacy_layout.addWidget(self.cloud_token_input)
-        self.cloud_create_button = QPushButton("生成新同步码")
-        self.cloud_copy_button = QPushButton("复制同步码")
-        self.cloud_copy_button.setAccessibleName("复制同步码")
-        cloud_code_buttons = QHBoxLayout()
-        cloud_code_buttons.addWidget(self.cloud_create_button)
-        cloud_code_buttons.addWidget(self.cloud_copy_button)
-        legacy_layout.addLayout(cloud_code_buttons)
-        cloud_layout.addWidget(self.cloud_legacy)
-        self.cloud_legacy.hide()
-        self.cloud_backup_button = QPushButton("复制备用同步码")
-        cloud_layout.addWidget(self.cloud_backup_button)
-        self.cloud_backup_button.hide()
-        self._section(cloud_layout, "进度同步")
-        self.cloud_upload_button = QPushButton("上传本机进度")
-        self.cloud_upload_button.setObjectName("primaryButton")
-        self.cloud_download_button = QPushButton("从云端恢复")
-        self._control_row(cloud_layout, "保存到云端", self.cloud_upload_button, "上传本机当前进度", stretch=False)
-        self._control_row(cloud_layout, "恢复到本机", self.cloud_download_button, "下载云端保存的进度", stretch=False)
-        cloud_layout.addStretch(1)
-        self._add_page(cloud_panel)
 
         saved_hint = QLabel("更改自动保存")
         saved_hint.setObjectName("settingsHint")
@@ -235,19 +170,7 @@ class SettingsDialog(QDialog):
         )
         self.export_button.clicked.connect(self.exportProgressRequested.emit)
         self.import_button.clicked.connect(self.importProgressRequested.emit)
-        self.cloud_token_input.editingFinished.connect(
-            lambda: self.cloudTokenChanged.emit(self.cloud_token_input.text().strip())
-        )
-        self.cloud_create_button.clicked.connect(self._confirm_create_sync_code)
-        self.cloud_copy_button.clicked.connect(self._copy_cloud_code)
-        self.cloud_upload_button.clicked.connect(self.cloudUploadRequested.emit)
-        self.cloud_download_button.clicked.connect(self.cloudDownloadRequested.emit)
-        self.cloud_legacy_toggle.toggled.connect(self.cloud_legacy.setVisible)
-        self.cloud_login_button.clicked.connect(lambda: self._submit_cloud_account(False))
-        self.cloud_register_button.clicked.connect(lambda: self._submit_cloud_account(True))
-        self.cloud_password.returnPressed.connect(lambda: self._submit_cloud_account(False))
-        self.cloud_logout_button.clicked.connect(self.cloudAccountLogoutRequested.emit)
-        self.cloud_backup_button.clicked.connect(self._copy_cloud_code)
+        self.history_button.clicked.connect(self.wordHistoryRequested.emit)
         self.reset_button.clicked.connect(self.resetPositionRequested.emit)
         self.clear_button.clicked.connect(self._confirm_clear)
 
@@ -381,63 +304,6 @@ class SettingsDialog(QDialog):
                 bool(remove_on_correct)
             )
 
-    def set_cloud_token(self, token: str | None) -> None:
-        with QSignalBlocker(self.cloud_token_input):
-            self.cloud_token_input.setEchoMode(QLineEdit.Password)
-            self.cloud_token_input.setText(token or "")
-
-    def set_cloud_account(self, username: str) -> None:
-        self.cloud_account_form.setVisible(not username)
-        self.cloud_logout_button.setVisible(bool(username))
-        self.cloud_backup_button.setVisible(bool(username))
-        self.cloud_legacy_toggle.setVisible(not username)
-        self.cloud_legacy_toggle.setChecked(False)
-        self.cloud_account_status.setText(f"已登录 {username}" if username else "用网页端的用户名和密码登录即可自动同步。注册时会绑定当前同步码。")
-
-    def set_cloud_account_busy(self, busy: bool) -> None:
-        self.cloud_account_form.setEnabled(not busy)
-
-    def _submit_cloud_account(self, register: bool) -> None:
-        password = self.cloud_password.text()
-        if not password:
-            self.cloud_account_status.setText("请输入密码。")
-            return
-        if register:
-            repeated, accepted = QInputDialog.getText(self, "确认密码", "请再输入一次密码", QLineEdit.Password)
-            if not accepted:
-                return
-            if repeated != password:
-                self.cloud_account_status.setText("两次输入的密码不一致。")
-                return
-        self.cloud_password.clear()
-        self.cloudAccountRequested.emit(self.cloud_username.text(), password, register)
-
-    def reveal_cloud_token(self) -> None:
-        self.cloud_token_input.setEchoMode(QLineEdit.Normal)
-        self.cloud_token_input.selectAll()
-        self.cloud_token_input.setFocus()
-
-    def _copy_cloud_code(self) -> None:
-        code = self.cloud_token_input.text().strip()
-        if not code:
-            return
-        QApplication.clipboard().setText(code)
-        self.cloud_copy_button.setText("已复制")
-        self.cloud_backup_button.setText("已复制备用同步码")
-
-    def _confirm_create_sync_code(self) -> None:
-        if self.cloud_token_input.text().strip():
-            answer = QMessageBox.question(
-                self,
-                "更换同步码",
-                "生成新同步码会断开当前云端进度。请确认旧同步码已经备份，是否继续？",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            if answer != QMessageBox.Yes:
-                return
-        self.cloudCreateCodeRequested.emit()
-
     def _voice_changed(self, name: str) -> None:
         if self.voice_combo.isEnabled() and name:
             self.voiceSelected.emit(name)
@@ -459,11 +325,11 @@ class SettingsDialog(QDialog):
     def _confirm_clear(self) -> None:
         message = (
             "这会清空本机保存的星级评分、备注、累计标记、List 完成次数、学习位置和应用设置。"
-            "词库文件不会被删除。此操作无法撤销，是否继续？"
+            "星级、备注和累计标记可从单词记录历史恢复。是否继续？"
         )
         answer = QMessageBox.question(
             self,
-            "清空全部本地数据",
+            "清空当前本地数据",
             message,
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,

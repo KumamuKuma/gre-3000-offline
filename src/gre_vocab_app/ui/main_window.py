@@ -14,6 +14,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gre_vocab_app.word_marks import RECENT_MARK_LIMIT
+
+from .account_dialog import AccountDialog
 from .home_page import HomePage
 from .long_sentence_page import LongSentencePage
 from .settings_dialog import SettingsDialog
@@ -71,6 +74,8 @@ class MainWindow(QMainWindow):
 
         self.home_action = QAction("首页", self)
         self.word_list_action = QAction("词表", self)
+        self.account_action = QAction("账号", self)
+        self.account_action.setToolTip("登录、注册和管理云端同步")
         self.settings_action = QAction("设置", self)
         self.home_action.setCheckable(True)
         self.word_list_action.setCheckable(True)
@@ -78,12 +83,15 @@ class MainWindow(QMainWindow):
         self.toolbar.addAction(self.home_action)
         self.toolbar.addAction(self.word_list_action)
         self.recent_marks_action = QAction("最近标记", self)
-        self.recent_marks_action.setToolTip("随时进入最近添加标记的 30 个词，退出后回到原位置")
+        self.recent_marks_action.setToolTip(
+            f"随时进入最近添加标记的 {RECENT_MARK_LIMIT} 个词，退出后回到原位置"
+        )
         self.recent_marks_action.triggered.connect(self.recentMarksRequested.emit)
         self.toolbar.addAction(self.recent_marks_action)
         toolbar_spacer = QWidget()
         toolbar_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.toolbar.addWidget(toolbar_spacer)
+        self.toolbar.addAction(self.account_action)
         self.toolbar.addAction(self.settings_action)
         self.home_search_action = self.toolbar.addWidget(self.home_page.take_search_edit())
         self.stack.currentChanged.connect(
@@ -107,8 +115,10 @@ class MainWindow(QMainWindow):
         self.study_page.findRequested.connect(self.findRequested.emit)
 
         self.settings_dialog = SettingsDialog(self)
+        self.account_dialog = AccountDialog(self)
         self.lookup_dialog = LookupDialog(self)
         self.settings_action.triggered.connect(self.show_settings)
+        self.account_action.triggered.connect(self.show_account)
         self.statusBar().showMessage("离线模式  /  学习记录保存在本机")
 
     def show_home(self) -> None:
@@ -135,6 +145,11 @@ class MainWindow(QMainWindow):
         self.settings_dialog.show()
         self.settings_dialog.raise_()
         self.settings_dialog.activateWindow()
+
+    def show_account(self) -> None:
+        self.account_dialog.show()
+        self.account_dialog.raise_()
+        self.account_dialog.activateWindow()
 
     def geometry_state(self) -> str:
         geometry = self.geometry()
@@ -278,11 +293,12 @@ class MainWindow(QMainWindow):
         self._close_guard_installed = True
         self._close_guard_enabled = True
 
-    def _close_settings_windows(self) -> None:
-        for dialog in self.settings_dialog.findChildren(QDialog):
-            if dialog.isWindow():
-                dialog.close()
-        self.settings_dialog.close()
+    def _close_auxiliary_windows(self) -> None:
+        for auxiliary in (self.settings_dialog, self.account_dialog):
+            for dialog in auxiliary.findChildren(QDialog):
+                if dialog.isWindow():
+                    dialog.close()
+            auxiliary.close()
         self.lookup_dialog.close()
 
     def closeEvent(self, event: QCloseEvent) -> None:
@@ -290,12 +306,12 @@ class MainWindow(QMainWindow):
             if not self._close_guard_installed:
                 self.closing.emit(event)
             if event.isAccepted():
-                self._close_settings_windows()
+                self._close_auxiliary_windows()
                 super().closeEvent(event)
             return
         event.ignore()
         self.closing.emit(event)
         if event.isAccepted():
             self._close_guard_enabled = False
-            self._close_settings_windows()
+            self._close_auxiliary_windows()
             super().closeEvent(event)

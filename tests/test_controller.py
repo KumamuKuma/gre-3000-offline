@@ -15,6 +15,7 @@ from gre_vocab_app.services.dictionary import LookupResult
 from gre_vocab_app.services.long_sentences import LongSentence, LongSentenceNote
 from gre_vocab_app.services.study import StudySession
 from gre_vocab_app.ui.main_window import MainWindow
+from gre_vocab_app.ui.word_record_history import WordRecordHistoryDialog
 
 
 class FakeContent:
@@ -103,7 +104,7 @@ class FakeUser:
 
     def record_recent_marked(self, word_id):
         self.recent = [word_id] + [value for value in self.recent if value != word_id]
-        self.recent = self.recent[:30]
+        self.recent = self.recent[:100]
         return True
 
     def mark_count(self, word):
@@ -340,6 +341,31 @@ def make_controller(
     )
     controller.start()
     return controller, window, content, user, speech
+
+
+def test_settings_restores_a_deleted_note_from_history(qtbot, tmp_path, monkeypatch):
+    with UserRepository(tmp_path / "user.db") as user:
+        user.set_word_note("word1", "词根\n联想")
+        user.set_word_note("word1", "")
+        user.set_star_rating(2, 2)
+        user.set_star_rating(2, 0)
+        _controller, window, *_ = make_controller(qtbot, user=user)
+
+        def choose_note(dialog):
+            dialog.search.setText("word1")
+            dialog.kind.setCurrentIndex(dialog.kind.findData("note"))
+            assert dialog.table.isRowHidden(0)
+            dialog.table.selectRow(1)
+            assert dialog.preview.toPlainText() == "词根\n联想"
+            dialog.restore_button.click()
+            return dialog.result()
+
+        monkeypatch.setattr(WordRecordHistoryDialog, "exec", choose_note)
+        monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.Yes)
+        window.settings_dialog.history_button.click()
+        assert user.word_note("word1") == "词根\n联想"
+        assert user.star_rating(2) == 0
+        window.close()
 
 
 def test_controller_opens_long_sentences_and_reuses_dictionary_lookup(qtbot):
@@ -1100,23 +1126,22 @@ def test_recent_marks_freeze_until_reopened_and_restore_original_quiz(qtbot):
 
 
 def test_recent_marks_keep_current_word_when_new_marks_evict_it_from_history(qtbot):
-    controller, window, _content, user, _speech = make_controller(qtbot, word_count=60)
-    for word_id in range(1, 31):
+    controller, window, _content, user, _speech = make_controller(qtbot, word_count=101)
+    for word_id in range(1, 101):
         controller._adjust_word_mark(f'word{word_id}', 1)
     window.recent_marks_action.trigger()
-    controller._jump(20)
-    controller._jump(10)
+    controller._last()
     controller._set_mode(StudyMode.QUIZ)
     controller._answer_quiz(0)
     before = window.study_page.snapshot
-    controller._adjust_word_mark('word31', 1)
+    controller._adjust_word_mark('word101', 1)
     assert 1 not in user.recent_marked_ids()
-    assert controller.study._ids == tuple(range(30, 0, -1))
+    assert controller.study._ids == tuple(range(100, 0, -1))
     assert window.study_page.snapshot == before
     window.study_page.back_button.click()
     window.recent_marks_action.trigger()
-    assert controller.study._ids == tuple(range(31, 1, -1))
-    assert window.study_page.snapshot.word.id == 31
+    assert controller.study._ids == tuple(range(101, 1, -1))
+    assert window.study_page.snapshot.word.id == 101
 
 
 def test_recent_marks_door_opens_empty_and_returns_home(qtbot):

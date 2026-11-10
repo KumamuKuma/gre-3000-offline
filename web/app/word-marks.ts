@@ -1,16 +1,17 @@
 import { noteKey } from "./word-notes.ts";
 
 export type WordMarks = Record<string, string>;
+export const RECENT_MARK_LIMIT = 100;
 
 export function normalizeRecentMarks(value: unknown, validIds: Set<number>): number[] {
-  if (!Array.isArray(value) || value.length > 30 || value.some(id => !Number.isInteger(id) || !validIds.has(id)) || new Set(value).size !== value.length) {
+  if (!Array.isArray(value) || value.length > RECENT_MARK_LIMIT || value.some(id => !Number.isInteger(id) || !validIds.has(id)) || new Set(value).size !== value.length) {
     throw new Error("最近标记包含无效、重复或过多的单词编号");
   }
   return [...value];
 }
 
 export function rememberMarkedWord(ids: number[], wordId: number): number[] {
-  return [wordId, ...ids.filter(id => id !== wordId)].slice(0, 30);
+  return [wordId, ...ids.filter(id => id !== wordId)].slice(0, RECENT_MARK_LIMIT);
 }
 
 export function getMarkCount(marks: WordMarks, word: string): string {

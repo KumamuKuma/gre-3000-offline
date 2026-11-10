@@ -41,18 +41,18 @@ test('dictionary words with Object prototype names start from zero', () => {
 
 import { rememberMarkedWord, normalizeRecentMarks } from '../app/word-marks.ts';
 
-test('recent thirty tracks addition order, deduplicates and ignores counter magnitude', () => {
+test('recent 100 tracks addition order, deduplicates and ignores counter magnitude', () => {
   let ids = [];
-  for (let id=1; id<=35; id++) ids = rememberMarkedWord(ids,id);
-  assert.deepEqual(ids, Array.from({length:30},(_,i)=>35-i));
+  for (let id=1; id<=105; id++) ids = rememberMarkedWord(ids,id);
+  assert.deepEqual(ids, Array.from({length:100},(_,i)=>105-i));
   ids = rememberMarkedWord(ids,10);
   assert.equal(ids[0],10);
-  assert.equal(ids.length,30);
-  assert.equal(new Set(ids).size,30);
-  assert.deepEqual(normalizeRecentMarks(ids,new Set(Array.from({length:40},(_,i)=>i+1))),ids);
+  assert.equal(ids.length,100);
+  assert.equal(new Set(ids).size,100);
+  assert.deepEqual(normalizeRecentMarks(ids,new Set(Array.from({length:105},(_,i)=>i+1))),ids);
 });
 
 test('invalid recent histories cannot be imported', () => {
-  const valid = new Set([1,2,3]);
-  for (const value of [null,[1,1],[999],[true],Array.from({length:31},(_,i)=>i+1)]) assert.throws(()=>normalizeRecentMarks(value,valid));
+  const valid = new Set(Array.from({length:101},(_,i)=>i+1));
+  for (const value of [null,[1,1],[999],[true],Array.from({length:101},(_,i)=>i+1)]) assert.throws(()=>normalizeRecentMarks(value,valid));
 });

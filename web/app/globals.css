@@ -98,7 +98,7 @@ button { color: inherit; }
 .install-icon { flex: 0 0 auto; width: 36px; height: 36px; display: grid; place-items: center; color: white; background: var(--green); border-radius: 10px; font-size: 22px; }
 .install-card strong { font-size: 13px; }
 .install-card p { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
-.bottom-nav { position: fixed; z-index: 30; bottom: 0; left: 50%; transform: translateX(-50%); width: var(--shell-width); height: calc(70px + var(--safe-bottom)); padding: 8px 20px var(--safe-bottom); display: grid; grid-template-columns: repeat(3, 1fr); background: rgba(255,254,250,.93); border-top: 1px solid var(--line); backdrop-filter: blur(20px); }
+.bottom-nav { position: fixed; z-index: 30; bottom: 0; left: 50%; transform: translateX(-50%); width: var(--shell-width); height: calc(70px + var(--safe-bottom)); padding: 8px 20px var(--safe-bottom); display: grid; grid-template-columns: repeat(4, 1fr); background: rgba(255,254,250,.93); border-top: 1px solid var(--line); backdrop-filter: blur(20px); }
 .bottom-nav button { border: 0; background: none; color: var(--muted); font-size: 10px; cursor: pointer; }
 .bottom-nav span { display: block; font-size: 22px; line-height: 24px; }
 .bottom-nav button.active { color: var(--orange); font-weight: 750; }
@@ -350,7 +350,7 @@ button.signout { padding: 0; border: 0; background: transparent; cursor: pointer
   .filter, .list-scope-picker summary, .scope-list, .study-mode-switcher button,
   .quick-jumps button, .study-jumps button, .star-button, .word-marks button { min-height: 44px; }
   .lookup-sheet header > button { flex: 0 0 44px; width: 44px; height: 44px; }
-  .bottom-nav { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 12px; align-items: center; }
+  .bottom-nav { grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 12px; align-items: center; }
   .bottom-nav button { min-height: 44px; font-size: 12px; }
   .bottom-nav .recent-gate { position: static; min-height: 44px; box-shadow: none; }
 }

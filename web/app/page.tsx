@@ -12,11 +12,11 @@ import { connectSyncAccount, type SyncAccount } from "./sync-account";
 import { isSyncUsername } from "./sync-account-name";
 import { dictionaryEntryForDisplay } from "./dictionary-senses";
 import { MAX_NOTE_LENGTH, WordNotes, noteKey, normalizeNotes, setWordNote } from "./word-notes";
-import { WordMarks as WordMarkCounts, adjustMarkCount, getMarkCount, normalizeMarks, normalizeRecentMarks, rememberMarkedWord, sortByMarks } from "./word-marks";
+import { RECENT_MARK_LIMIT, WordMarks as WordMarkCounts, adjustMarkCount, getMarkCount, normalizeMarks, normalizeRecentMarks, rememberMarkedWord, sortByMarks } from "./word-marks";
 import { ListProgress, Progress, SyncBase, planProgressSync, progressSignature } from "./progress-sync";
 
 type StudyMode = "reading" | "brief" | "recall" | "quiz";
-type Screen = "home" | "study" | "sentences" | "words" | "settings";
+type Screen = "home" | "study" | "sentences" | "words" | "settings" | "account";
 
 type SourceList = {
   key: string;
@@ -1817,7 +1817,7 @@ export default function Home() {
             </div>
           </div>
           {marksDesc && !recentMode && <p className="list-hint">累计标记倒序 · 本轮顺序固定，重新进入时按最新次数排序</p>}
-          {recentMode && <p className="list-hint">最近添加的 30 个不同单词 · 标记次数立即保存，本轮顺序固定，再次打开时更新排序 · 退出后回到原位置</p>}
+          {recentMode && <p className="list-hint">最近添加的 {RECENT_MARK_LIMIT} 个不同单词 · 标记次数立即保存，本轮顺序固定，再次打开时更新排序 · 退出后回到原位置</p>}
           <div className="study-actions">
             <button onClick={() => move(-1)} disabled={activeQueueIndex === 0}>← 上一词</button>
             {activeQueueIndex >= studyQueue.length - 1
@@ -1956,7 +1956,7 @@ export default function Home() {
 
       {screen === "settings" && (
         <section className="page settings-page">
-          <div className="page-title"><p className="eyebrow">YOUR DATA</p><h1>设置与同步</h1><span>进度默认只保存在当前设备</span></div>
+          <div className="page-title"><p className="eyebrow">YOUR DATA</p><h1>设置</h1><span>学习偏好与本机进度备份</span></div>
           <div className="settings-card">
             <label className="toggle-row"><span><strong>切换到下一词时自动朗读</strong><small>使用 iPhone 系统英文语音</small></span><input type="checkbox" checked={progress.settings.auto_speak === "1"} onChange={(event) => setSetting("auto_speak", event.target.checked ? "1" : "0")} /></label>
             <label className="toggle-row"><span><strong>答错时自动加 1 星</strong><small>仅在四选一模式首次作答时生效</small></span><input type="checkbox" checked={progress.settings.quiz_wrong_star_up === "1"} onChange={(event) => setSetting("quiz_wrong_star_up", event.target.checked ? "1" : "0")} /></label>
@@ -1970,6 +1970,12 @@ export default function Home() {
             <button className="secondary" onClick={() => importRef.current?.click()}>导入进度文件</button>
             <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={importFile} />
           </div>
+        </section>
+      )}
+
+      {screen === "account" && (
+        <section className="page settings-page">
+          <div className="page-title"><p className="eyebrow">ACCOUNT</p><h1>账号与同步</h1><span>在设备之间同步学习进度</span></div>
           <div className="settings-card transfer-card cloud-card">
             <span className="transfer-badge">CLOUD</span>
             <h2>{accountsAvailable ? "账号同步" : "免账号同步码"}</h2>
@@ -2008,7 +2014,7 @@ export default function Home() {
             </>}
             {cloud.status === "conflict" && <>
               <p>{cloud.message}</p>
-              <p>自动上传已暂停。可先导出本机进度备份，再选择要保留的版本。</p>
+              <p>自动上传已暂停。可先在设置中导出本机进度备份，再选择要保留的版本。</p>
               {cloud.nonce && <button className="secondary" onClick={() => requestSync.current?.(0, { source: "cloud", nonce: cloud.nonce ?? null })}>使用云端进度</button>}
               <button className="secondary" onClick={() => requestSync.current?.(0, { source: "local", nonce: cloud.nonce ?? null })}>上传本机进度</button>
               {!accountName && <button className="signout" disabled={accountBusy} onClick={disconnectSyncCode}>断开这组同步码</button>}
@@ -2156,8 +2162,9 @@ export default function Home() {
       <nav className="bottom-nav" aria-label="主导航">
         <button className={screen === "home" || screen === "study" || screen === "sentences" ? "active" : ""} onClick={() => navigate("home")}><span>⌂</span>学习</button>
         <button className={screen === "words" ? "active" : ""} onClick={() => navigate("words")}><span>≡</span>词表</button>
+        <button className={screen === "account" ? "active" : ""} onClick={() => navigate("account")}><span>◎</span>账号</button>
         <button className={screen === "settings" ? "active" : ""} onClick={() => navigate("settings")}><span>⚙</span>设置</button>
-        <button className="recent-gate" aria-label={recentMode ? "退出最近标记" : "打开最近标记"} onClick={() => recentMode ? exitRecent() : openRecent()}>{recentMode ? "退出最近标记 ↩" : `最近标记 ${progress.recent_marks.length}/30`}</button>
+        <button className="recent-gate" aria-label={recentMode ? "退出最近标记" : "打开最近标记"} onClick={() => recentMode ? exitRecent() : openRecent()}>{recentMode ? "退出最近标记 ↩" : `最近标记 ${progress.recent_marks.length}/${RECENT_MARK_LIMIT}`}</button>
       </nav>
     </main>
   );

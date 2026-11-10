@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 
@@ -114,7 +115,8 @@ def test_release_script_embeds_and_verifies_windows_version_metadata():
         encoding="utf-8-sig"
     )
 
-    assert '$ReleaseVersion = "1.1.1"' in script
+    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert f'$ReleaseVersion = "{metadata["project"]["version"]}"' in script
     assert '"--product-name=$ExpectedTitle"' in script
     assert '"--file-description=$ExpectedTitle"' in script
     assert '"--file-version=$ReleaseVersion"' in script

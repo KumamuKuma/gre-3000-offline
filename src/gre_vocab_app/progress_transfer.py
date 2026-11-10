@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from gre_vocab_app.word_notes import validate_notes
-from gre_vocab_app.word_marks import validate_marks
+from gre_vocab_app.word_marks import RECENT_MARK_LIMIT, validate_marks
 
 
 PROGRESS_SCHEMA = "gre-vocab-progress"
@@ -101,7 +101,7 @@ def import_progress(user: Any, content: Any, payload: object) -> ImportSummary:
     recent_marks = None
     if "recent_marks" in document:
         recent_marks = document["recent_marks"]
-        if (not isinstance(recent_marks, list) or len(recent_marks) > 30
+        if (not isinstance(recent_marks, list) or len(recent_marks) > RECENT_MARK_LIMIT
             or any(type(value) is not int or value not in valid_word_ids for value in recent_marks)
             or len(set(recent_marks)) != len(recent_marks)):
             raise ProgressFormatError("最近标记包含无效、重复或过多的单词编号。")

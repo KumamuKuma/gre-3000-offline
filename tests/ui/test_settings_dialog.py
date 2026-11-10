@@ -2,6 +2,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLineEdit, QMessageBox
 
 from gre_vocab_app.domain import StudyMode
+from gre_vocab_app.ui.main_window import MainWindow
 from gre_vocab_app.ui.settings_dialog import SettingsDialog
 from gre_vocab_app.services.speech import ONLINE_VOICE_NAME
 
@@ -61,6 +62,34 @@ def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
         dialog.export_button.click()
     with qtbot.waitSignal(dialog.importProgressRequested):
         dialog.import_button.click()
+    with qtbot.waitSignal(dialog.wordHistoryRequested):
+        dialog.history_button.click()
+
+    dialog.set_auto_speak(False)
+    assert not dialog.auto_speak_checkbox.isChecked()
+    dialog.set_quiz_star_adjustments(
+        add_on_wrong=False,
+        remove_on_correct=False,
+    )
+    assert not dialog.quiz_wrong_star_up_checkbox.isChecked()
+    assert not dialog.quiz_correct_star_down_checkbox.isChecked()
+
+
+def test_account_has_a_separate_toolbar_entry(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    window.account_action.trigger()
+    dialog = window.account_dialog
+    assert dialog.isVisible()
+    assert not window.settings_dialog.isVisible()
+    assert window.settings_dialog.pages.count() == 2
+
+    dialog.cloud_username.setText("learner")
+    dialog.cloud_password.setText("secret")
+    with qtbot.waitSignal(dialog.cloudAccountRequested) as login:
+        dialog.cloud_login_button.click()
+    assert login.args == ["learner", "secret", False]
     with qtbot.waitSignal(dialog.cloudTokenChanged) as token:
         dialog.cloud_token_input.setText("GRE1-test")
         dialog.cloud_token_input.editingFinished.emit()
@@ -78,14 +107,8 @@ def test_settings_voice_rate_and_mode_emit_typed_values(qtbot):
     assert dialog.cloud_token_input.echoMode() == QLineEdit.Normal
     dialog.cloud_copy_button.click()
     assert QApplication.clipboard().text() == "GRE1-secret"
-    dialog.set_auto_speak(False)
-    assert not dialog.auto_speak_checkbox.isChecked()
-    dialog.set_quiz_star_adjustments(
-        add_on_wrong=False,
-        remove_on_correct=False,
-    )
-    assert not dialog.quiz_wrong_star_up_checkbox.isChecked()
-    assert not dialog.quiz_correct_star_down_checkbox.isChecked()
+    window.close()
+    assert not dialog.isVisible()
 
 
 def test_clear_all_requires_named_confirmation(qtbot, monkeypatch):
@@ -150,7 +173,7 @@ def test_settings_segments_emit_modes_and_navigation_preserves_controls(qtbot):
     with qtbot.assertNotEmitted(dialog.defaultModeChanged):
         dialog.set_default_mode(StudyMode.BRIEF)
     assert dialog.mode_control.buttons[1].isChecked()
-    for index in (1, 2, 0):
+    for index in (1, 0):
         qtbot.mouseClick(dialog.navigation.buttons[index], Qt.LeftButton)
         assert dialog.pages.currentIndex() == index
     assert dialog.mode_control.currentData() == StudyMode.BRIEF

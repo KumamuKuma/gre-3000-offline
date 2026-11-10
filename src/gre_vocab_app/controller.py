@@ -36,6 +36,7 @@ from gre_vocab_app.services.sync_account import connect_account, has_learning, p
 from gre_vocab_app.ui.main_window import MainWindow
 from gre_vocab_app.ui.word_list_page import WordListRow
 from gre_vocab_app.ui.word_note import WordNoteDialog
+from gre_vocab_app.ui.word_record_history import WordRecordHistoryDialog
 
 
 LOGGER = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ class ApplicationController:
         home = self.window.home_page
         study_page = self.window.study_page
         settings = self.window.settings_dialog
+        account = self.window.account_dialog
         self._mark_widgets = (
             study_page.word_detail.word_marks,
             self.window.lookup_dialog.word_marks,
@@ -196,12 +198,13 @@ class ApplicationController:
         )
         settings.exportProgressRequested.connect(self._export_progress)
         settings.importProgressRequested.connect(self._import_progress)
-        settings.cloudTokenChanged.connect(self._set_cloud_token)
-        settings.cloudCreateCodeRequested.connect(self._create_cloud_code)
-        settings.cloudUploadRequested.connect(self._upload_cloud_progress)
-        settings.cloudDownloadRequested.connect(self._download_cloud_progress)
-        settings.cloudAccountRequested.connect(self._connect_cloud_account)
-        settings.cloudAccountLogoutRequested.connect(self._logout_cloud_account)
+        settings.wordHistoryRequested.connect(self._open_word_record_history)
+        account.cloudTokenChanged.connect(self._set_cloud_token)
+        account.cloudCreateCodeRequested.connect(self._create_cloud_code)
+        account.cloudUploadRequested.connect(self._upload_cloud_progress)
+        account.cloudDownloadRequested.connect(self._download_cloud_progress)
+        account.cloudAccountRequested.connect(self._connect_cloud_account)
+        account.cloudAccountLogoutRequested.connect(self._logout_cloud_account)
         settings.resetPositionRequested.connect(self._reset_positions)
         settings.clearAllRequested.connect(self._clear_all)
 
@@ -357,10 +360,10 @@ class ApplicationController:
             self.user.load_setting("quiz_correct_star_down") == "1"
         )
         self._sync_quiz_star_adjustment_controls()
-        self.window.settings_dialog.set_cloud_token(
+        self.window.account_dialog.set_cloud_token(
             self.user.load_setting("cloud_token")
         )
-        self.window.settings_dialog.set_cloud_account(self._account_name)
+        self.window.account_dialog.set_cloud_account(self._account_name)
 
         take_notice = getattr(self.speech, "take_availability_notice", None)
         if callable(take_notice):
@@ -754,10 +757,19 @@ class ApplicationController:
         self.window.lookup_dialog.show_result(result)
 
     def _edit_word_note(self, headword: str) -> None:
-        dialog = WordNoteDialog(headword, self.user.word_note(headword), self.window)
+        repository = self.user
+        history = ()
+        if isinstance(repository, UserRepository):
+            try:
+                history = repository.word_record_history(note_for=headword)
+            except sqlite3.DatabaseError:
+                LOGGER.exception("Unable to read note history")
+        dialog = WordNoteDialog(headword, repository.word_note(headword), self.window, history=history)
         if dialog.exec() != QDialog.Accepted:
             return
-        saved = self.user.set_word_note(headword, dialog.editor.toPlainText())
+        if self.user is not repository:
+            return
+        saved = repository.set_word_note(headword, dialog.editor.toPlainText())
         self.window.study_page.word_detail.word_note.refresh()
         self.window.lookup_dialog.word_note.refresh()
         self._show_status("备注已保存，将随学习进度同步。" if saved else "备注暂存于内存，正在等待写入本机。")
@@ -1208,6 +1220,45 @@ class ApplicationController:
             return
         self._show_status("学习进度已导出，可在 iPhone 网页版中导入。")
 
+    def _open_word_record_history(self) -> None:
+        repository = self.user
+        parent = self.window.settings_dialog
+        try:
+            versions = repository.word_record_history()
+        except sqlite3.DatabaseError:
+            LOGGER.exception("Unable to read word record history")
+            QMessageBox.warning(parent, "无法读取历史", "请稍后重试。")
+            return
+        entries = []
+        for version in versions:
+            word = version.word_key
+            if version.kind == "star":
+                try:
+                    word = self.content.get(int(word)).headword
+                except KeyError:
+                    word = f"词条 #{word}"
+            entries.append((word, version))
+        dialog = WordRecordHistoryDialog(entries, parent)
+        if dialog.exec() != QDialog.Accepted or not (selected := dialog.selected_versions()):
+            return
+        answer = QMessageBox.question(
+            parent, "恢复单词记录",
+            f"用选中的历史版本替换 {len(selected)} 项当前记录？当前值也会留在历史里。",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes or self.user is not repository:
+            return
+        try:
+            saved = repository.restore_word_records(selected)
+        except sqlite3.DatabaseError:
+            LOGGER.exception("Unable to restore word record history")
+            saved = False
+        if not saved:
+            QMessageBox.warning(parent, "恢复暂未保存", "本机数据库暂时无法写入，请稍后重试。")
+            return
+        self._refresh_account_progress()
+        self._show_status(f"已恢复 {len(selected)} 项单词记录。")
+
     def _import_progress(self) -> None:
         path, _selected_filter = QFileDialog.getOpenFileName(
             self.window.settings_dialog,
@@ -1250,7 +1301,7 @@ class ApplicationController:
     def _create_cloud_code(self) -> None:
         code = create_sync_code()
         self.user.save_setting("cloud_token", code)
-        self.window.settings_dialog.set_cloud_token(code)
+        self.window.account_dialog.set_cloud_token(code)
         self._show_status("新同步码已生成，请点击复制同步码保存。")
         self._report_persistence_issue()
 
@@ -1314,7 +1365,7 @@ class ApplicationController:
         self.window.show_home()
 
     def _account_status(self, message: str) -> None:
-        self.window.settings_dialog.cloud_account_status.setText(message)
+        self.window.account_dialog.cloud_account_status.setText(message)
         self._show_status(message)
 
     def _start_account_job(self, work, on_success, on_error) -> None:
@@ -1340,7 +1391,7 @@ class ApplicationController:
         if self._account_name or self._account_job is not None:
             return
         existing = self._cloud_token()
-        dialog = self.window.settings_dialog
+        dialog = self.window.account_dialog
         dialog.set_cloud_account_busy(True)
 
         def connected(account):
@@ -1428,7 +1479,7 @@ class ApplicationController:
                 self._refresh_account_progress()
             if result.nonce:
                 repository.save_setting("cloud_baseline", json.dumps({"nonce": result.nonce, "signature": saved_signature}))
-            self.window.settings_dialog.cloud_account_status.setText(f"已登录 {username}，自动同步已开启。")
+            self.window.account_dialog.cloud_account_status.setText(f"已登录 {username}，自动同步已开启。")
 
         def failed(error):
             if self.user is repository:

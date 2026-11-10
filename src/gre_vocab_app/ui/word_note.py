@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gre_vocab_app.ui.word_record_history import WordRecordHistoryDialog
 from gre_vocab_app.word_notes import MAX_NOTE_LENGTH, note_key
 
 
@@ -97,7 +98,7 @@ class WordNote(QWidget):
 
 
 class WordNoteDialog(QDialog):
-    def __init__(self, headword: str, text: str, parent=None):
+    def __init__(self, headword: str, text: str, parent=None, *, history=()):
         super().__init__(parent)
         self.setWindowTitle(f"{headword} · 我的备注")
         self.resize(540, 360)
@@ -118,12 +119,24 @@ class WordNoteDialog(QDialog):
         save_button.setText("保存备注")
         save_button.setObjectName("primaryButton")
         self.buttons.button(QDialogButtonBox.Cancel).setText("取消")
+        if history:
+            history_button = self.buttons.addButton("备注历史", QDialogButtonBox.ActionRole)
+            history_button.clicked.connect(lambda: self._choose_history(headword, history))
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
         self.editor.textChanged.connect(self._validate)
         self.editor.setFocus()
         self._validate()
+
+    def _choose_history(self, headword, history):
+        dialog = WordRecordHistoryDialog(
+            [(headword, version) for version in history], self, note_for=headword
+        )
+        if dialog.exec() == QDialog.Accepted and (versions := dialog.selected_versions()):
+            self.editor.selectAll()
+            self.editor.insertPlainText(versions[0].value)
+            self.editor.setFocus()
 
     def _validate(self):
         valid = len(self.editor.toPlainText()) <= MAX_NOTE_LENGTH

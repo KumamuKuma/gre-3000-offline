@@ -1,4 +1,4 @@
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtCore import QDateTime, QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -100,6 +100,10 @@ class AccountDialog(QDialog):
         sync_title = QLabel("进度同步")
         sync_title.setObjectName("settingsSection")
         cloud_layout.addWidget(sync_title)
+        self.cloud_updated_at = QLabel()
+        self.cloud_updated_at.setWordWrap(True)
+        self.cloud_updated_at.hide()
+        cloud_layout.addWidget(self.cloud_updated_at)
         self.cloud_upload_button = QPushButton("上传本机进度")
         self.cloud_upload_button.setObjectName("primaryButton")
         self.cloud_download_button = QPushButton("从云端恢复")
@@ -141,6 +145,16 @@ class AccountDialog(QDialog):
         self.cloud_legacy_toggle.setVisible(not username)
         self.cloud_legacy_toggle.setChecked(False)
         self.cloud_account_status.setText(f"已登录 {username}" if username else "用网页端的用户名和密码登录即可自动同步。注册时会绑定当前同步码。")
+
+    def set_cloud_updated_at(self, updated_at: str | None, *, empty: bool = False) -> None:
+        when = QDateTime.fromString(updated_at or "", Qt.ISODateWithMs)
+        text = ""
+        if when.isValid():
+            text = f"云端更新于 {when.toLocalTime().toString('yyyy/M/d HH:mm:ss')}"
+        elif empty:
+            text = "云端暂无学习进度"
+        self.cloud_updated_at.setText(text)
+        self.cloud_updated_at.setVisible(bool(text))
 
     def set_cloud_account_busy(self, busy: bool) -> None:
         self.cloud_account_form.setEnabled(not busy)

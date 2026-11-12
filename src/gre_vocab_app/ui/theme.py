@@ -42,17 +42,6 @@ QToolBar#mainToolbar QToolButton:checked {
     background: #eeece6;
     border-color: #d6d3cc;
 }
-QLabel#brandGlyph {
-    color: #575348;
-    background: #eeece6;
-    border: 1px solid #d8d5cf;
-    border-radius: 14px;
-    font-family: "Cambria", "Georgia", serif;
-    font-size: 21px;
-    font-weight: 700;
-}
-QLabel#brandMark { color: #252724; font-size: 16px; font-weight: 650; }
-
 QLabel#eyebrow, QLabel#heroEyebrow {
     color: #292b28;
     font-size: 11px;
@@ -65,12 +54,12 @@ QLabel#pageTitle {
     font-size: 30px;
     font-weight: 650;
 }
-QLabel#headword, QLabel#lookupHeadword, QLabel#noteTitle, QLabel#heroTitle {
+QLabel#headword, QLabel#lookupHeadword, QLabel#heroTitle {
     color: #252724;
     font-family: "Cambria", "Georgia", "Microsoft YaHei";
     font-weight: 400;
 }
-QLabel#lookupHeadword, QLabel#noteTitle { font-size: 34px; }
+QLabel#lookupHeadword { font-size: 34px; }
 QLabel#sectionTitle { color: #343630; font-size: 17px; font-weight: 650; }
 QLabel#sectionHint, QLabel#muted { color: #77766f; }
 QLabel#fieldLabel { color: #62625b; font-size: 13px; font-weight: 600; }

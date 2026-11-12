@@ -1609,7 +1609,7 @@ export default function Home() {
   if (!data || !progress) {
     return (
       <main className="loading-shell">
-        <div className="brand-mark">G</div>
+        <span className="brand-mark" aria-hidden="true" />
         <p>{notice || "正在载入 3,292 个词…"}</p>
       </main>
     );
@@ -1641,7 +1641,7 @@ export default function Home() {
     <main className="app-shell">
       <header className="topbar">
         <button className="brand" onClick={() => navigate("home")} aria-label="返回首页">
-          <span className="brand-mark">G</span>
+          <span className="brand-mark" aria-hidden="true" />
           <span><strong>GRE 3000 Vocabulary Trainer</strong><small>原书词序 · 离线可用</small></span>
         </button>
         <span className="offline-pill">可离线</span>

@@ -1,11 +1,11 @@
 import pytest
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QInputMethodEvent, QInputMethodQueryEvent, QTextCursor
 from PySide6.QtWidgets import QApplication, QDialogButtonBox, QLabel
 
 from gre_vocab_app.ui.theme import APP_STYLESHEET
-from gre_vocab_app.ui.word_note import WordNote, WordNoteDialog
+from gre_vocab_app.ui.word_note import WordNoteEditor
 from gre_vocab_app.domain import StudyMode
 from gre_vocab_app.ui.word_detail import WordDetail
 
@@ -27,19 +27,21 @@ def test_notes_available_in_every_mode_and_literal_text(qtbot, sample_word):
         assert detail.word_note.edit_button.isVisible()
         detail.word_note.refresh()
         assert detail.word_note.preview.isVisible()
-        with qtbot.waitSignal(detail.word_note.editRequested) as signal:
-            detail.word_note.edit_button.click()
-        assert signal.args == [sample_word.headword]
+        detail.word_note.edit_button.click()
+        assert detail.word_note.edit_panel.isVisible()
+        assert detail.word_note.edit_panel.editor.toPlainText() == "<b>联想</b>\n词根记忆"
+        detail.word_note.edit_panel.buttons.button(QDialogButtonBox.Cancel).click()
         detail.word_note.button.click()
         assert not detail.word_note.preview.isVisible()
 
     detail.word_note.button.click()
     detail.word_note.set_word("another")
     assert not detail.word_note.preview.isVisible()
-    with qtbot.waitSignal(detail.word_note.editRequested) as signal:
-        detail.word_note.button.click()
-    assert signal.args == ["another"]
+    detail.word_note.button.click()
+    assert detail.word_note.edit_panel.isVisible()
+    assert not detail.word_note.edit_panel.editor.toPlainText()
     detail.word_note.set_word(sample_word.headword)
+    assert detail.word_note.edit_panel.isHidden()
     assert not detail.word_note.preview.isVisible()
     detail.word_note.button.click()
     detail.hide()
@@ -49,7 +51,8 @@ def test_notes_available_in_every_mode_and_literal_text(qtbot, sample_word):
 
 
 def test_editor_keeps_typing_keys_and_allows_delete(qtbot):
-    dialog = WordNoteDialog("inevitable", "", None)
+    dialog = WordNoteEditor(show_headword=True)
+    dialog.set_note("inevitable", "")
     qtbot.addWidget(dialog)
     dialog.show()
     assert dialog.editor.placeholderText() == ""
@@ -71,7 +74,8 @@ def test_editor_keeps_typing_keys_and_allows_delete(qtbot):
     ["", "中文备注\n第二行", "\n".join(f"第 {i} 行中文备注" for i in range(60))],
 )
 def test_ime_rectangles_match_the_padded_editor_after_scrolling(qtbot, text, zoom):
-    dialog = WordNoteDialog("inevitable", text)
+    dialog = WordNoteEditor()
+    dialog.set_note("inevitable", text)
     qtbot.addWidget(dialog)
     editor = dialog.editor
     editor.setStyleSheet(APP_STYLESHEET)
@@ -91,7 +95,8 @@ def test_ime_rectangles_match_the_padded_editor_after_scrolling(qtbot, text, zoo
 
 
 def test_ime_preedit_and_selection_keep_their_position_and_text(qtbot):
-    dialog = WordNoteDialog("inevitable", "中文备注")
+    dialog = WordNoteEditor()
+    dialog.set_note("inevitable", "中文备注")
     qtbot.addWidget(dialog)
     editor = dialog.editor
     editor.setStyleSheet(APP_STYLESHEET)

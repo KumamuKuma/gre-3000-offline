@@ -24,7 +24,7 @@ from gre_vocab_app.services.cloud_sync import (
     DEFAULT_CLOUD_ENDPOINT,
     CloudSyncError,
     create_sync_code,
-    download_progress,
+    download_progress_with_timestamp,
     normalize_sync_code,
     upload_progress,
 )
@@ -35,7 +35,6 @@ from gre_vocab_app.services.speech import ONLINE_VOICE_NAME
 from gre_vocab_app.services.sync_account import connect_account, has_learning, progress_signature, synchronize_account, valid_username
 from gre_vocab_app.ui.main_window import MainWindow
 from gre_vocab_app.ui.word_list_page import WordListRow
-from gre_vocab_app.ui.word_note import WordNoteDialog
 from gre_vocab_app.ui.word_record_history import WordRecordHistoryDialog
 
 
@@ -107,13 +106,15 @@ class ApplicationController:
         home.markSortChanged.connect(self._select_mark_sort)
         study_page.jumpRequested.connect(self._jump)
         self.window.recentMarksRequested.connect(self._open_recent_marks)
-        for widget in (
+        self._note_widgets = (
             study_page.word_detail.word_note,
             self.window.lookup_dialog.word_note,
-        ):
+            self.window.word_list_page.word_note,
+        )
+        for widget in self._note_widgets:
             widget.load_note = lambda word: self.user.word_note(word)
-            widget.editRequested.connect(self._edit_word_note)
-        self.window.word_list_page.noteRequested.connect(self._edit_word_note)
+            widget.load_history = self._load_word_note_history
+            widget.saveRequested.connect(self._save_word_note)
 
         home.searchRequested.connect(self._search_home)
         home.listStudyRequested.connect(self._open_list_study)
@@ -360,10 +361,10 @@ class ApplicationController:
             self.user.load_setting("quiz_correct_star_down") == "1"
         )
         self._sync_quiz_star_adjustment_controls()
-        self.window.account_dialog.set_cloud_token(
-            self.user.load_setting("cloud_token")
-        )
-        self.window.account_dialog.set_cloud_account(self._account_name)
+        account = self.window.account_dialog
+        account.set_cloud_token(self.user.load_setting("cloud_token"))
+        account.set_cloud_account(self._account_name)
+        account.set_cloud_updated_at(self.user.load_setting("cloud_updated_at"))
 
         take_notice = getattr(self.speech, "take_availability_notice", None)
         if callable(take_notice):
@@ -756,22 +757,18 @@ class ApplicationController:
             return
         self.window.lookup_dialog.show_result(result)
 
-    def _edit_word_note(self, headword: str) -> None:
-        repository = self.user
-        history = ()
-        if isinstance(repository, UserRepository):
+    def _load_word_note_history(self, headword: str):
+        if isinstance(self.user, UserRepository):
             try:
-                history = repository.word_record_history(note_for=headword)
+                return self.user.word_record_history(note_for=headword)
             except sqlite3.DatabaseError:
                 LOGGER.exception("Unable to read note history")
-        dialog = WordNoteDialog(headword, repository.word_note(headword), self.window, history=history)
-        if dialog.exec() != QDialog.Accepted:
-            return
-        if self.user is not repository:
-            return
-        saved = repository.set_word_note(headword, dialog.editor.toPlainText())
-        self.window.study_page.word_detail.word_note.refresh()
-        self.window.lookup_dialog.word_note.refresh()
+        return ()
+
+    def _save_word_note(self, headword: str, text: str) -> None:
+        saved = self.user.set_word_note(headword, text)
+        for widget in self._note_widgets:
+            widget.refresh()
         self._show_status("备注已保存，将随学习进度同步。" if saved else "备注暂存于内存，正在等待写入本机。")
         self._report_persistence_issue()
 
@@ -1292,18 +1289,27 @@ class ApplicationController:
         self._report_persistence_issue()
 
     def _set_cloud_token(self, token: str) -> None:
-        self.user.save_setting("cloud_token", token.strip())
+        token = token.strip()
+        if token != self._cloud_token():
+            self._set_cloud_updated_at("")
+        self.user.save_setting("cloud_token", token)
         self._report_persistence_issue()
 
     def _cloud_token(self) -> str:
         return (self.user.load_setting("cloud_token") or "").strip()
 
+    def _set_cloud_updated_at(self, updated_at: str | None, *, empty: bool = False) -> None:
+        if not isinstance(updated_at, str):
+            return
+        if updated_at != (self.user.load_setting("cloud_updated_at") or ""):
+            self.user.save_setting("cloud_updated_at", updated_at)
+        self.window.account_dialog.set_cloud_updated_at(updated_at, empty=empty)
+
     def _create_cloud_code(self) -> None:
         code = create_sync_code()
-        self.user.save_setting("cloud_token", code)
         self.window.account_dialog.set_cloud_token(code)
         self._show_status("新同步码已生成，请点击复制同步码保存。")
-        self._report_persistence_issue()
+        self._set_cloud_token(code)
 
     def _upload_cloud_progress(self) -> None:
         if self._account_name:
@@ -1311,10 +1317,11 @@ class ApplicationController:
             return
         try:
             payload = export_progress(self.user, self.content)
-            upload_progress(DEFAULT_CLOUD_ENDPOINT, self._cloud_token(), payload)
+            updated_at = upload_progress(DEFAULT_CLOUD_ENDPOINT, self._cloud_token(), payload)
         except (CloudSyncError, TypeError, ValueError) as error:
             self._show_status(f"云同步上传失败：{error}")
             return
+        self._set_cloud_updated_at(updated_at)
         self._show_status("本机学习进度已上传到云端。")
 
     def _download_cloud_progress(self) -> None:
@@ -1322,11 +1329,12 @@ class ApplicationController:
             self._sync_signed_in_account("download")
             return
         try:
-            payload = download_progress(
+            payload, updated_at = download_progress_with_timestamp(
                 DEFAULT_CLOUD_ENDPOINT,
                 self._cloud_token(),
             )
             if payload is None:
+                self._set_cloud_updated_at("", empty=True)
                 self._show_status("云端还没有学习进度，请先上传一次。")
                 return
             summary = import_progress(self.user, self.content, payload)
@@ -1335,6 +1343,7 @@ class ApplicationController:
             return
         self._detail_snapshot = None
         self._configure_settings()
+        self._set_cloud_updated_at(updated_at)
         self._configure_home_scope()
         self._refresh_stats()
         self._refresh_word_list()
@@ -1402,10 +1411,13 @@ class ApplicationController:
                     guest_code = normalize_sync_code(self._cloud_token())
                 except CloudSyncError:
                     guest_code = ""
-                if account_repo.load_setting("cloud_token") is None and (guest_code == code or (register and not existing)):
+                saved_code = account_repo.load_setting("cloud_token")
+                if saved_code is None and (guest_code == code or (register and not existing)):
                     local = export_progress(self.user, self.content)
                     if has_learning(local):
                         import_progress(account_repo, self.content, local)
+                if saved_code and saved_code != code:
+                    account_repo.save_setting("cloud_updated_at", "")
                 if not account_repo.save_setting("cloud_token", code):
                     raise CloudSyncError("无法保存账号到本机。")
                 if not self._guest.save_setting("active_cloud_account", name):
@@ -1468,9 +1480,13 @@ class ApplicationController:
                 if progress_signature(export_progress(repository, self.content)) != signature:
                     self._account_status("同步期间本机进度有变化，将在下次同步时重新检查。")
                     return
-                if not choice and self.window.stack.currentWidget() is self.window.study_page:
-                    self._account_status("检测到云端更新，回到首页后会自动同步。")
-                    return
+                if not choice:
+                    if any(widget.editing for widget in self._note_widgets):
+                        self._account_status("检测到云端更新，结束备注编辑后会自动同步。")
+                        return
+                    if self.window.stack.currentWidget() is self.window.study_page:
+                        self._account_status("检测到云端更新，回到首页后会自动同步。")
+                        return
                 import_progress(repository, self.content, result.progress)
                 if not repository.flush_pending():
                     self._account_status("读取了云端进度，本机保存失败，将在下次同步时重试。")
@@ -1479,6 +1495,10 @@ class ApplicationController:
                 self._refresh_account_progress()
             if result.nonce:
                 repository.save_setting("cloud_baseline", json.dumps({"nonce": result.nonce, "signature": saved_signature}))
+            if result.status == "empty":
+                self._set_cloud_updated_at("", empty=True)
+            else:
+                self._set_cloud_updated_at(result.updated_at)
             self.window.account_dialog.cloud_account_status.setText(f"已登录 {username}，自动同步已开启。")
 
         def failed(error):

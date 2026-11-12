@@ -167,6 +167,9 @@ def test_accountless_sync_code_encrypts_progress_before_upload(monkeypatch):
     assert stored["algorithm"] == "AES-256-GCM"
     assert "仅设备可见" not in calls[0][0].data.decode("utf-8")
     assert cloud_sync.download_progress("https://example.com", code) == progress
+    assert cloud_sync.download_progress_with_timestamp("https://example.com", code) == (
+        progress, "2026-07-22T01:00:00Z",
+    )
     assert "/api/code-progress?space=" in calls[0][0].full_url
     assert calls[0][0].headers["Authorization"].startswith("Bearer gsa_")
 

@@ -27,7 +27,7 @@ button { color: inherit; }
 .app-shell { width: var(--shell-width); min-height: 100dvh; margin: 0 auto; padding-bottom: calc(88px + var(--safe-bottom)); }
 .topbar { height: calc(76px + var(--safe-top)); display: flex; align-items: center; justify-content: space-between; padding: calc(14px + var(--safe-top)) 20px 14px; position: sticky; top: 0; z-index: 20; background: rgba(245, 242, 234, .86); backdrop-filter: blur(18px); border-bottom: 1px solid rgba(228, 222, 210, .8); }
 .brand { display: flex; align-items: center; gap: 11px; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
-.brand-mark { width: 42px; height: 42px; display: grid; place-items: center; color: white; font-family: Georgia, serif; font-size: 24px; font-weight: 700; background: var(--ink); border-radius: 13px 13px 13px 4px; box-shadow: 0 8px 18px rgba(24, 34, 56, .18); }
+.brand-mark { width: 42px; height: 42px; display: block; flex: none; background: center / contain no-repeat url("/icon.svg"); }
 .brand > span:last-child { min-width: 0; }
 .brand strong, .brand small { display: block; }
 .brand strong { font-size: 15px; letter-spacing: .02em; white-space: nowrap; }
@@ -287,7 +287,7 @@ button { color: inherit; }
 .sync-code-connect input:focus { border-color: var(--orange); box-shadow: 0 0 0 3px var(--orange-soft); }
 button.signout { padding: 0; border: 0; background: transparent; cursor: pointer; }
 .loading-shell { min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 14px; background: var(--paper); }
-.loading-shell .brand-mark { width: 58px; height: 58px; font-size: 32px; }
+.loading-shell .brand-mark { width: 58px; height: 58px; }
 .loading-shell p { color: var(--muted); font-size: 12px; }
 
 @media (min-width: 620px) {
@@ -391,7 +391,7 @@ button.signout { padding: 0; border: 0; background: transparent; cursor: pointer
 @media (max-width: 420px) {
   .topbar { padding-inline: 15px; }
   .brand { gap: 8px; }
-  .brand-mark { width: 38px; height: 38px; font-size: 22px; }
+  .brand-mark { width: 38px; height: 38px; }
   .brand strong { font-size: 12px; }
   .brand small { font-size: 9px; }
   .offline-pill { padding: 6px 8px; font-size: 10px; }

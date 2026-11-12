@@ -1,15 +1,18 @@
 import json
 import random
 import sqlite3
+from datetime import datetime
 from unittest.mock import Mock
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QDialogButtonBox, QMessageBox
 
 from gre_vocab_app.controller import ApplicationController
 from gre_vocab_app.db.user import QueueState, UserRepository
 from gre_vocab_app.domain import BrowseOrder, SourceList, StudyMode, WordEntry
+from gre_vocab_app.progress_transfer import export_progress
+from gre_vocab_app.services import cloud_sync
 from gre_vocab_app.services.search import SearchService
 from gre_vocab_app.services.dictionary import LookupResult
 from gre_vocab_app.services.long_sentences import LongSentence, LongSentenceNote
@@ -343,6 +346,59 @@ def make_controller(
     return controller, window, content, user, speech
 
 
+def test_account_dialog_shows_server_sync_time_and_retains_it_on_failure(qtbot, tmp_path, monkeypatch):
+    code = cloud_sync.create_sync_code()
+    _, _, key = cloud_sync._sync_credentials(code)
+    account_path = tmp_path / "accounts" / "account-learner.db"
+    with UserRepository(account_path) as account:
+        account.save_setting("cloud_token", code)
+        progress = export_progress(account, FakeContent())
+
+    updated_at = "2026-07-22T01:00:10.123Z"
+    uploaded_at = "2026-07-22T02:04:32.456Z"
+    downloaded_at = "2026-07-22T03:08:54.789Z"
+    server = {"progress": cloud_sync._encrypt_payload(key, progress), "updated_at": updated_at}
+
+    def request(method, _url, _token, payload=None):
+        if method == "PUT":
+            server.update(progress=payload, updated_at=uploaded_at)
+            return {"updated_at": uploaded_at}
+        return {**server, "conditional_write": True}
+
+    def label_for(timestamp):
+        when = datetime.fromisoformat(timestamp).astimezone()
+        return f"云端更新于 {when.year}/{when.month}/{when.day} {when:%H:%M:%S}"
+
+    monkeypatch.setattr(cloud_sync, "_request", request)
+    with UserRepository(tmp_path / "user.db") as guest:
+        guest.save_setting("active_cloud_account", "learner")
+        controller, window, _, _, _ = make_controller(qtbot, user=guest)
+        label = window.account_dialog.cloud_updated_at
+        try:
+            qtbot.waitUntil(lambda: label.text() == label_for(updated_at))
+
+            window.account_dialog.cloud_upload_button.click()
+            qtbot.waitUntil(lambda: label.text() == label_for(uploaded_at))
+
+            progress["stars"] = {"1": 3}
+            server.update(progress=cloud_sync._encrypt_payload(key, progress), updated_at=downloaded_at)
+            window.account_dialog.cloud_download_button.click()
+            qtbot.waitUntil(lambda: label.text() == label_for(downloaded_at))
+            assert controller.user.star_rating(1) == 3
+
+            monkeypatch.setattr(cloud_sync, "_request", Mock(side_effect=cloud_sync.CloudSyncError("离线")))
+            window.account_dialog.cloud_download_button.click()
+            qtbot.waitUntil(lambda: "同步失败" in window.account_dialog.cloud_account_status.text())
+            assert label.text() == label_for(downloaded_at)
+            window.account_dialog.cloud_logout_button.click()
+            assert label.isHidden()
+        finally:
+            controller.shutdown()
+
+    with UserRepository(account_path) as account:
+        assert account.load_setting("cloud_updated_at") == downloaded_at
+
+
 def test_settings_restores_a_deleted_note_from_history(qtbot, tmp_path, monkeypatch):
     with UserRepository(tmp_path / "user.db") as user:
         user.set_word_note("word1", "词根\n联想")
@@ -364,6 +420,46 @@ def test_settings_restores_a_deleted_note_from_history(qtbot, tmp_path, monkeypa
         monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.Yes)
         window.settings_dialog.history_button.click()
         assert user.word_note("word1") == "词根\n联想"
+
+
+def test_note_editor_saves_and_restores_versions_inside_the_active_window(qtbot, tmp_path):
+    with UserRepository(tmp_path / "user.db") as user:
+        user.set_word_note("word1", "旧备注")
+        user.set_word_note("word1", "当前备注")
+        _controller, window, _, _, _ = make_controller(qtbot, user=user)
+        window.show()
+        window.word_list_action.trigger()
+        page = window.word_list_page
+        page.words_table.setCurrentCell(0, 0)
+        page.note_button.click()
+        panel = page.word_note.edit_panel
+        assert panel.isVisible() and panel.window() is window
+        panel.history.setCurrentIndex(1)
+        panel.restore_button.click()
+        assert panel.editor.toPlainText() == "旧备注"
+        panel.buttons.button(QDialogButtonBox.Save).click()
+        assert panel.isHidden()
+        assert user.word_note("word1") == "旧备注"
+        assert page.words_table.currentRow() == 0
+
+        page.open_button.click()
+        detail_note = window.study_page.word_detail.word_note
+        detail_note.button.click()
+        detail_note.edit_button.click()
+        assert detail_note.edit_panel.window() is window
+        detail_note.edit_panel.editor.setPlainText("未保存")
+        detail_note.edit_panel.buttons.button(QDialogButtonBox.Cancel).click()
+        assert detail_note.preview.text() == "旧备注"
+
+        lookup = window.lookup_dialog
+        lookup.show_result(LookupResult("word1", "word1", "word", "词库", "word1"))
+        lookup.word_note.button.click()
+        lookup.word_note.edit_button.click()
+        assert lookup.word_note.edit_panel.window() is lookup
+        lookup.word_note.edit_panel.editor.clear()
+        lookup.word_note.edit_panel.buttons.button(QDialogButtonBox.Save).click()
+        assert user.word_note("word1") == ""
+        assert detail_note.button.text() == "添加备注"
         assert user.star_rating(2) == 0
         window.close()
 

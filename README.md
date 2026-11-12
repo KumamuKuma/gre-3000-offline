@@ -19,7 +19,9 @@
 
 ![GRE 3000 Vocabulary Trainer Windows 离线版首页](docs/images/windows-home.png)
 
-<p align="center"><sub>Windows v1.1.2：账号入口、单词记录历史、最近标记 100 词</sub></p>
+<p align="center"><sub>Windows v1.1.3：原窗口编辑备注、显示云端更新时间、统一应用图标</sub></p>
+
+v1.1.3 可在学习页、完整词表和点词词典中直接编辑备注与载入历史版本。「账号 → 进度同步」按本机时区显示云端更新时间，精确到秒。Windows 与网页版使用相同的翻书图标。
 
 v1.1.2 将登录和云同步放到独立的「账号」入口，Windows 与网页版的最近标记均可保留 100 个词。Windows 会保存被替换的备注、星级和累计标记，可在「设置 → 本地数据 → 单词记录历史」查阅和恢复。
 

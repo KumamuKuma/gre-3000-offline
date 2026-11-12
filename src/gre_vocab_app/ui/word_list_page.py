@@ -24,6 +24,7 @@ from .controls import ToggleSwitch
 from gre_vocab_app.domain import WordEntry
 from .theme import WARNING_COLOR
 from .word_marks import WordMarks
+from .word_note import WordNote
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,7 +45,6 @@ class WordListPage(QWidget):
     starRatingRequested = Signal(int, int)
     searchRequested = Signal(str)
     machine7FilterChanged = Signal(bool)
-    noteRequested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -120,7 +120,13 @@ class WordListPage(QWidget):
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.words_table.itemActivated.connect(self._emit_selected_item)
         self.words_table.currentCellChanged.connect(self._on_current_changed)
-        root.addWidget(self.words_table, 1)
+        table_row = QHBoxLayout()
+        table_row.addWidget(self.words_table, 1)
+        self.word_note = WordNote(edit_only=True)
+        self.word_note.setMinimumWidth(270)
+        self.word_note.setMaximumWidth(360)
+        table_row.addWidget(self.word_note, 0, Qt.AlignTop)
+        root.addLayout(table_row, 1)
 
         actions_bar = QFrame(objectName="navigationBar")
         actions = QHBoxLayout(actions_bar)
@@ -139,7 +145,7 @@ class WordListPage(QWidget):
         self.note_button = QPushButton("单词备注")
         self.note_button.setObjectName("outlineButton")
         self.note_button.setMinimumHeight(40)
-        self.note_button.clicked.connect(self._edit_note)
+        self.note_button.clicked.connect(self.word_note.begin_edit)
         actions.addWidget(self.note_button)
         root.addWidget(actions_bar)
         self._update_actions()
@@ -330,11 +336,7 @@ class WordListPage(QWidget):
         self.star_button.setEnabled(enabled)
         self.note_button.setEnabled(enabled)
         self.word_marks.set_word(current.word.headword if current else "")
-
-    def _edit_note(self) -> None:
-        row = self._current_row_data()
-        if row is not None:
-            self.noteRequested.emit(row.word.headword)
+        self.word_note.set_word(current.word.headword if current else "")
 
     def _emit_selected_item(self, item: QTableWidgetItem) -> None:
         row = self._row_data(item.row())

@@ -281,9 +281,18 @@ def upload_progress(endpoint: str, token_or_code: str, payload: object) -> str:
 
 
 def download_progress(endpoint: str, token_or_code: str) -> object | None:
+    progress, _ = download_progress_with_timestamp(endpoint, token_or_code)
+    return progress
+
+
+def download_progress_with_timestamp(endpoint: str, token_or_code: str) -> tuple[object | None, str | None]:
     if str(token_or_code).strip().startswith(SYNC_CODE_PREFIX):
         url, token, key = _code_credentials(endpoint, token_or_code)
-        encrypted = _request("GET", url, token).get("progress")
-        return None if encrypted is None else _decrypt_payload(key, encrypted)
-    url, token = _device_credentials(endpoint, token_or_code)
-    return _request("GET", url, token).get("progress")
+        result = _request("GET", url, token)
+        encrypted = result.get("progress")
+        progress = None if encrypted is None else _decrypt_payload(key, encrypted)
+    else:
+        url, token = _device_credentials(endpoint, token_or_code)
+        result = _request("GET", url, token)
+        progress = result.get("progress")
+    return progress, result.get("updated_at")

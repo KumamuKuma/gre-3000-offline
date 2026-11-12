@@ -75,6 +75,7 @@ class SyncResult:
     status: str
     nonce: str | None = None
     progress: object = None
+    updated_at: str | None = None
 
 
 def synchronize_account(code: str, local: dict, baseline: dict, choice: str = "") -> SyncResult:
@@ -87,24 +88,25 @@ def synchronize_account(code: str, local: dict, baseline: dict, choice: str = ""
     if remote is not None and not isinstance(remote, dict):
         raise cloud.CloudSyncError("云端进度格式无效。")
     nonce = encrypted["nonce"] if encrypted is not None else None
+    updated_at = result.get("updated_at")
     signature = progress_signature(local)
     if choice == "download":
-        return SyncResult("download" if remote is not None else "empty", nonce, remote)
+        return SyncResult("download" if remote is not None else "empty", nonce, remote, updated_at=updated_at)
     if choice != "upload":
         if remote is not None and (signature == progress_signature(remote) or
                                     (baseline.get("nonce") == nonce and baseline.get("signature") == signature)):
-            return SyncResult("match", nonce)
+            return SyncResult("match", nonce, updated_at=updated_at)
         if remote is not None and (baseline.get("signature") == signature or (not baseline and not has_learning(local))):
-            return SyncResult("download", nonce, remote)
+            return SyncResult("download", nonce, remote, updated_at=updated_at)
         if baseline.get("nonce") != nonce:
             return SyncResult("conflict", nonce)
         if remote is None and not has_learning(local):
             return SyncResult("empty")
     payload = cloud._encrypt_payload(key, local)
     try:
-        cloud._request("PUT", url, token, {**payload, "expected_nonce": nonce})
+        saved = cloud._request("PUT", url, token, {**payload, "expected_nonce": nonce})
     except cloud.CloudSyncHTTPError as error:
         if error.status == 409:
             return SyncResult("conflict", nonce)
         raise
-    return SyncResult("upload", payload["nonce"])
+    return SyncResult("upload", payload["nonce"], updated_at=saved.get("updated_at"))

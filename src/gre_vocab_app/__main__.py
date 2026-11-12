@@ -4,10 +4,11 @@ import logging
 import sys
 from collections.abc import Sequence
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from gre_vocab_app.bootstrap import bootstrap
-from gre_vocab_app.paths import AppPaths
+from gre_vocab_app.paths import PACKAGE_ROOT, AppPaths
 from gre_vocab_app.ui.theme import apply_theme
 
 
@@ -25,6 +26,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     # QStandardPaths data directory after the product-facing rename.
     application.setApplicationName("GRE 3000 词离线版")
     application.setApplicationDisplayName("GRE 3000 Vocabulary Trainer")
+    icon_path = PACKAGE_ROOT / "data" / "app.ico"
+    if not icon_path.is_file():
+        icon_path = PACKAGE_ROOT.parents[1] / "resources" / "app.ico"
+    application.setWindowIcon(QIcon(str(icon_path)))
     apply_theme(application)
 
     paths: AppPaths | None = None
